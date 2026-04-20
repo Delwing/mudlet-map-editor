@@ -1,0 +1,958 @@
+import type { MapRenderer, Settings } from 'mudlet-map-renderer';
+import { clientToMap, snap } from './coords';
+import { pushCommand, buildDeleteNeighborEdits } from './commands';
+import { exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, roomAtCell } from './hitTest';
+import {
+  createDefaultRoom,
+  getExit,
+  inferDirection,
+  nextRoomId,
+  OPPOSITE,
+  is2DCardinal,
+} from './mapHelpers';
+import { store } from './store';
+import { CARDINAL_DIRECTIONS } from './types';
+import type { Direction, HoverTarget, ToolId } from './types';
+import type { SceneHandle } from './scene';
+
+export interface ToolContext {
+  renderer: MapRenderer;
+  container: HTMLElement;
+  settings: Settings;
+  refresh: () => void;
+  scene: SceneHandle;
+}
+
+export interface Tool {
+  id: ToolId;
+  cursor?: string;
+  onPointerDown?(ev: PointerEvent, ctx: ToolContext): boolean;
+  onPointerMove?(ev: PointerEvent, ctx: ToolContext): boolean | void;
+  onPointerUp?(ev: PointerEvent, ctx: ToolContext): boolean | void;
+  onContextMenu?(ev: MouseEvent, ctx: ToolContext): boolean | void;
+  onCancel?(ctx: ToolContext): void;
+}
+
+type PickSpecialExitCb = (roomId: number) => void;
+let specialExitPickCb: PickSpecialExitCb | null = null;
+
+export function registerSpecialExitPickCb(cb: PickSpecialExitCb | null): void {
+  specialExitPickCb = cb;
+}
+
+/** Map coord in RENDER space (what renderer & culling use; y grows down). */
+function mapCoord(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
+  return clientToMap(ctx.renderer, ctx.container, ev.clientX, ev.clientY);
+}
+
+function snappedCoord(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
+  const c = mapCoord(ctx, ev);
+  const s = store.getState();
+  if (!s.snapToGrid) return c;
+  return { x: snap(c.x, s.gridStep), y: snap(c.y, s.gridStep) };
+}
+
+function activeContext() {
+  const s = store.getState();
+  if (!s.map || s.currentAreaId == null) return null;
+  return { map: s.map, areaId: s.currentAreaId, z: s.currentZ, state: s };
+}
+
+/** Hit-test using the renderer's own spatial index. Returns render-space room or null. */
+function roomUnder(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
+  if (!activeContext()) return null;
+  const rect = ctx.container.getBoundingClientRect();
+  const pt = ctx.renderer.backend.viewport.clientToMapPoint(ev.clientX, ev.clientY, {
+    left: rect.left,
+    top: rect.top,
+  });
+  if (!pt) return null;
+  const hit = (ctx.renderer.backend as any).culling?.findRoomAtMapPoint?.(pt.x, pt.y) as
+    | { id: number }
+    | null
+    | undefined;
+  if (!hit) return null;
+  return ctx.scene.getRenderRoom(hit.id) ?? null;
+}
+
+/** Minimum render-space travel before an empty-space drag becomes a marquee (not a click). */
+const MARQUEE_THRESHOLD = 0.15;
+
+/**
+ * Combo tool: click a room to select it, drag to move it, click empty to clear selection.
+ * Drag vs click is detected naturally — a drag only "moves" when the snapped cursor cell
+ * differs from the room's current cell, so micro-jitter on a click doesn't trigger a move.
+ */
+export const selectTool: Tool = {
+  id: 'select',
+  cursor: 'default',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const s = store.getState();
+    if (s.contextMenu) store.setState({ contextMenu: null });
+
+    if (s.pending?.kind === 'pickExit') {
+      const target = roomUnder(ctx, ev);
+      if (target && s.map) {
+        const { fromId, dir } = s.pending;
+        const rawFrom = s.map.rooms[fromId];
+        if (rawFrom) {
+          const previous = getExit(rawFrom, dir);
+          pushCommand({ kind: 'addExit', fromId, dir, toId: target.id, previous, reverse: null }, ctx.scene);
+          ctx.refresh();
+          store.bumpData();
+          store.setState({ pending: null, selection: { kind: 'room', ids: [fromId] }, status: `Exit ${dir} → room ${target.id} added.` });
+        }
+      }
+      return true;
+    }
+
+    if (s.pending?.kind === 'pickSpecialExit') {
+      const target = roomUnder(ctx, ev);
+      const fromId = s.pending.fromId;
+      if (target && specialExitPickCb) specialExitPickCb(target.id);
+      store.setState({ pending: null, selection: { kind: 'room', ids: [fromId] } });
+      return true;
+    }
+
+    const c = mapCoord(ctx, ev);
+    const ac = activeContext();
+
+    // If a custom line is selected, check for waypoint handle hit first.
+    if (s.selection?.kind === 'customLine' && ac) {
+      const ptIdx = customLinePointAt(
+        ctx.renderer, s.selection.roomId, s.selection.exitName,
+        c.x, c.y, ctx.settings.roomSize,
+      );
+      if (ptIdx !== null) {
+        const rawRoom = s.map?.rooms[s.selection.roomId];
+        const originPoints = rawRoom?.customLines?.[s.selection.exitName]
+          ? [...rawRoom.customLines[s.selection.exitName]] as [number, number][]
+          : [];
+        store.setState({
+          selection: { kind: 'customLine', roomId: s.selection.roomId, exitName: s.selection.exitName, pointIndex: ptIdx },
+          pending: {
+            kind: 'customLinePoint',
+            roomId: s.selection.roomId,
+            exitName: s.selection.exitName,
+            pointIndex: ptIdx,
+            originPoints,
+          },
+        });
+        ctx.container.setPointerCapture(ev.pointerId);
+        return true;
+      }
+    }
+
+    const room = roomUnder(ctx, ev);
+    if (room) {
+      const raw = s.map?.rooms[room.id];
+      if (!raw) return true;
+
+      if (ev.ctrlKey || ev.metaKey) {
+        // Toggle this room in/out of the selection.
+        const currentIds = s.selection?.kind === 'room' ? s.selection.ids : [];
+        const idx = currentIds.indexOf(room.id);
+        const newIds = idx >= 0 ? currentIds.filter((id) => id !== room.id) : [...currentIds, room.id];
+        store.setState({ selection: newIds.length === 0 ? null : { kind: 'room', ids: newIds } });
+        return true;
+      }
+
+      // Regular click: if this room is already part of a multi-selection, keep
+      // the whole selection and prepare to drag all of them together. Otherwise
+      // reduce to single selection.
+      const currentSel = s.selection;
+      const isInMultiSel =
+        currentSel?.kind === 'room' && currentSel.ids.length > 1 && currentSel.ids.includes(room.id);
+
+      const multiOrigins = isInMultiSel
+        ? (currentSel as { kind: 'room'; ids: number[] }).ids
+            .filter((id) => id !== room.id)
+            .flatMap((id) => {
+              const r = s.map?.rooms[id];
+              return r ? [{ id, x: r.x, y: r.y }] : [];
+            })
+        : undefined;
+
+      store.setState({
+        selection: isInMultiSel ? (currentSel as NonNullable<typeof currentSel>) : { kind: 'room', ids: [room.id] },
+        pending: { kind: 'drag', roomId: room.id, originX: raw.x, originY: raw.y, multiOrigins },
+      });
+      ctx.container.setPointerCapture(ev.pointerId);
+      return true;
+    }
+    // No room — check custom lines then exits.
+    if (ac) {
+      const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (cl) {
+        store.setState({ selection: { kind: 'customLine', roomId: cl.roomId, exitName: cl.exitName } });
+        return true;
+      }
+      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (exit) {
+        store.setState({ selection: { kind: 'exit', fromId: exit.fromId, toId: exit.toId, dir: exit.dir } });
+        return true;
+      }
+    }
+    // Empty space: start a marquee drag. A tiny movement that stays under
+    // MARQUEE_THRESHOLD is treated as a click and clears the selection on up.
+    const mc = mapCoord(ctx, ev);
+    store.setState({
+      pending: {
+        kind: 'marquee',
+        startX: mc.x, startY: mc.y,
+        currentX: mc.x, currentY: mc.y,
+        ctrlHeld: ev.ctrlKey || ev.metaKey,
+        preExistingIds: s.selection?.kind === 'room' ? s.selection.ids : [],
+      },
+    });
+    ctx.container.setPointerCapture(ev.pointerId);
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    const s = store.getState();
+
+    if (s.pending?.kind === 'customLinePoint') {
+      const c = snappedCoord(ctx, ev);
+      ctx.scene.reader.setCustomLinePoint(s.pending.roomId, s.pending.exitName, s.pending.pointIndex, c.x, c.y);
+      ctx.refresh();
+      store.bumpData();
+      return true;
+    }
+
+    if (s.pending?.kind === 'marquee') {
+      const c = mapCoord(ctx, ev);
+      const p = { ...s.pending, currentX: c.x, currentY: c.y };
+      const minX = Math.min(p.startX, c.x);
+      const maxX = Math.max(p.startX, c.x);
+      const minY = Math.min(p.startY, c.y);
+      const maxY = Math.max(p.startY, c.y);
+      const hit = roomsInRect(minX, maxX, minY, maxY);
+      let newIds: number[];
+      if (p.ctrlHeld) {
+        const pre = new Set(p.preExistingIds);
+        for (const id of hit) { if (pre.has(id)) pre.delete(id); else pre.add(id); }
+        newIds = [...pre];
+      } else {
+        newIds = hit;
+      }
+      store.setState({
+        pending: p,
+        selection: newIds.length === 0 ? null : { kind: 'room', ids: newIds },
+      });
+      return true;
+    }
+
+    if (s.pending?.kind !== 'drag') {
+      updateHover(ctx, ev);
+      return false;
+    }
+    const render = ctx.scene.getRenderRoom(s.pending.roomId);
+    if (!render) return true;
+    const target = snappedCoord(ctx, ev);
+    const dx = target.x - render.x;
+    const dy = target.y - render.y;
+    if (dx !== 0 || dy !== 0) {
+      ctx.scene.reader.moveRoom(s.pending.roomId, target.x, target.y, render.z);
+      if (s.pending.multiOrigins) {
+        for (const { id } of s.pending.multiOrigins) {
+          const r = ctx.scene.getRenderRoom(id);
+          if (r) ctx.scene.reader.moveRoom(id, r.x + dx, r.y + dy, r.z);
+        }
+      }
+      ctx.refresh();
+      store.bumpData();
+    }
+    return true;
+  },
+  onPointerUp(ev, ctx) {
+    const s = store.getState();
+    try { ctx.container.releasePointerCapture(ev.pointerId); } catch {}
+
+    if (s.pending?.kind === 'customLinePoint' && s.map) {
+      const pending = s.pending;
+      const rawRoom = s.map.rooms[pending.roomId];
+      const newPoints = rawRoom?.customLines?.[pending.exitName] ?? [];
+      const rawColor = rawRoom?.customLinesColor?.[pending.exitName]
+        ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+      const rawStyle = rawRoom?.customLinesStyle?.[pending.exitName] ?? 1;
+      const rawArrow = rawRoom?.customLinesArrow?.[pending.exitName] ?? false;
+      // A plain click (no drag) now sub-selects the waypoint — don't pollute the
+      // undo stack with a no-op. Compare against the captured origin points.
+      const moved = newPoints.length !== pending.originPoints.length
+        || newPoints.some((p, i) => p[0] !== pending.originPoints[i][0] || p[1] !== pending.originPoints[i][1]);
+      if (moved) {
+        store.setState((st) => ({
+          undo: [...st.undo, {
+            kind: 'setCustomLine' as const,
+            roomId: pending.roomId,
+            exitName: pending.exitName,
+            data: { points: newPoints, color: rawColor, style: rawStyle, arrow: rawArrow },
+            previous: { points: pending.originPoints, color: rawColor, style: rawStyle, arrow: rawArrow },
+          }],
+          redo: [],
+          pending: null,
+        }));
+      } else {
+        store.setState({ pending: null });
+      }
+      return true;
+    }
+
+    if (s.pending?.kind === 'marquee') {
+      try { ctx.container.releasePointerCapture(ev.pointerId); } catch {}
+      const p = s.pending;
+      const dx = Math.abs(p.currentX - p.startX);
+      const dy = Math.abs(p.currentY - p.startY);
+      // Selection is already live-updated by onPointerMove. For a bare click
+      // (no significant drag) without Ctrl, clear the selection.
+      if (dx <= MARQUEE_THRESHOLD && dy <= MARQUEE_THRESHOLD && !p.ctrlHeld) {
+        store.setState({ selection: null });
+      }
+      store.setState({ pending: null });
+      return true;
+    }
+
+    if (s.pending?.kind !== 'drag' || !s.map) return false;
+    const pending = s.pending;
+    const raw = s.map.rooms[pending.roomId];
+    if (raw && (raw.x !== pending.originX || raw.y !== pending.originY)) {
+      const cmds: import('./types').Command[] = [{
+        kind: 'moveRoom',
+        id: pending.roomId,
+        from: { x: pending.originX, y: pending.originY, z: raw.z },
+        to: { x: raw.x, y: raw.y, z: raw.z },
+      }];
+      if (pending.multiOrigins) {
+        for (const { id, x: fromX, y: fromY } of pending.multiOrigins) {
+          const r = s.map.rooms[id];
+          if (r && (r.x !== fromX || r.y !== fromY)) {
+            cmds.push({ kind: 'moveRoom', id, from: { x: fromX, y: fromY, z: r.z }, to: { x: r.x, y: r.y, z: r.z } });
+          }
+        }
+      }
+      const cmd = cmds.length === 1 ? cmds[0] : { kind: 'batch' as const, cmds };
+      store.setState((st) => ({ undo: [...st.undo, cmd], redo: [] }));
+      store.setState({
+        status: cmds.length > 1
+          ? `Moved ${cmds.length} rooms`
+          : `Moved room ${pending.roomId} → (${raw.x}, ${raw.y}, ${raw.z})`,
+      });
+    }
+    store.setState({ pending: null });
+    return true;
+  },
+  onContextMenu(ev, ctx) {
+    const s = store.getState();
+    if (!s.map) return false;
+
+    // Room under cursor → show room context menu.
+    const roomHit = roomUnder(ctx, ev);
+    if (roomHit) {
+      store.setState({
+        contextMenu: {
+          kind: 'room',
+          roomId: roomHit.id,
+          screenX: ev.clientX,
+          screenY: ev.clientY,
+        },
+      });
+      return true;
+    }
+
+    if (s.selection?.kind !== 'customLine') return false;
+    const c = mapCoord(ctx, ev);
+    const sel = s.selection;
+    const rawRoom = s.map.rooms[sel.roomId];
+    const points = rawRoom?.customLines?.[sel.exitName];
+    if (!rawRoom || !points) return false;
+
+    // Waypoint under cursor → show a context menu offering to delete it.
+    const ptIdx = customLinePointAt(ctx.renderer, sel.roomId, sel.exitName, c.x, c.y, ctx.settings.roomSize);
+    if (ptIdx !== null) {
+      store.setState({
+        selection: { kind: 'customLine', roomId: sel.roomId, exitName: sel.exitName, pointIndex: ptIdx },
+        contextMenu: {
+          kind: 'customLinePoint',
+          roomId: sel.roomId,
+          exitName: sel.exitName,
+          pointIndex: ptIdx,
+          screenX: ev.clientX,
+          screenY: ev.clientY,
+        },
+      });
+      return true;
+    }
+
+    // Line segment under cursor → insert a waypoint there.
+    const seg = customLineSegmentAt(ctx.renderer, sel.roomId, sel.exitName, c.x, c.y, ctx.settings.roomSize);
+    if (seg !== null) {
+      const sc = snappedCoord(ctx, ev);
+      insertCustomLinePoint(ctx, sel.roomId, sel.exitName, seg.insertIndex, sc.x, sc.y);
+      return true;
+    }
+    return false;
+  },
+  onCancel(ctx) {
+    const s = store.getState();
+    if (s.pending?.kind === 'marquee') {
+      store.setState({ pending: null });
+      return;
+    }
+    if (s.pending?.kind === 'customLinePoint' && s.map) {
+      // Restore original points
+      const rawRoom = s.map.rooms[s.pending.roomId];
+      if (rawRoom) {
+        rawRoom.customLines[s.pending.exitName] = s.pending.originPoints;
+        ctx.scene.reader.getArea(rawRoom.area)?.markDirty();
+        ctx.refresh();
+      }
+    } else if (s.pending?.kind === 'drag' && s.map) {
+      const raw = s.map.rooms[s.pending.roomId];
+      if (raw) {
+        ctx.scene.reader.moveRoom(s.pending.roomId, s.pending.originX, -s.pending.originY, raw.z);
+      }
+      if (s.pending.multiOrigins) {
+        for (const { id, x, y } of s.pending.multiOrigins) {
+          const r = s.map.rooms[id];
+          if (r) ctx.scene.reader.moveRoom(id, x, -y, r.z);
+        }
+      }
+      ctx.refresh();
+    }
+    store.setState({ pending: null });
+  },
+};
+
+/** Return IDs of rooms in the current area/z whose render-space centre falls within the given render-space rect. */
+function roomsInRect(minX: number, maxX: number, minY: number, maxY: number): number[] {
+  const s = store.getState();
+  if (!s.map || s.currentAreaId == null) return [];
+  const ids: number[] = [];
+  for (const [key, room] of Object.entries(s.map.rooms)) {
+    if (!room || room.area !== s.currentAreaId || room.z !== s.currentZ) continue;
+    // Raw storage: x same, y negated relative to render space.
+    const rx = room.x;
+    const ry = -room.y;
+    if (rx >= minX && rx <= maxX && ry >= minY && ry <= maxY) ids.push(Number(key));
+  }
+  return ids;
+}
+
+/**
+ * Insert a waypoint at raw index `insertIndex` on the given customLine.
+ * Render-space cursor coords are converted to raw (y-flipped) storage here.
+ */
+function insertCustomLinePoint(
+  ctx: ToolContext,
+  roomId: number,
+  exitName: string,
+  insertIndex: number,
+  renderX: number,
+  renderY: number,
+): void {
+  const s = store.getState();
+  if (!s.map) return;
+  const rawRoom = s.map.rooms[roomId];
+  const current = rawRoom?.customLines?.[exitName];
+  if (!rawRoom || !current) return;
+  const color = rawRoom.customLinesColor?.[exitName] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+  const style = rawRoom.customLinesStyle?.[exitName] ?? 1;
+  const arrow = rawRoom.customLinesArrow?.[exitName] ?? false;
+  // Raw indices run in the same order as drawn segments: drawn segment i
+  // spans drawn[i]→drawn[i+1], so inserting at raw index `i` (with i=0 meaning
+  // before the existing first waypoint) puts the new point inside segment i.
+  const clamped = Math.max(0, Math.min(insertIndex, current.length));
+  const newPoints: [number, number][] = [...current];
+  newPoints.splice(clamped, 0, [renderX, -renderY]);
+  const previous = { points: [...current] as [number, number][], color, style, arrow };
+  const data = { points: newPoints, color, style, arrow };
+  pushCommand({ kind: 'setCustomLine', roomId, exitName, data, previous }, ctx.scene);
+  ctx.refresh();
+  store.bumpData();
+  store.setState({
+    selection: { kind: 'customLine', roomId, exitName, pointIndex: clamped },
+    status: `Added waypoint to '${exitName}' on room ${roomId}`,
+  });
+}
+
+/**
+ * Connect is a drag interaction. Pointer-down on a room picks the source; if
+ * the cursor is near one of the 8 handle positions (corners + midpoints) the
+ * source direction is fixed explicitly. Otherwise the direction is inferred
+ * from the target on drop.
+ */
+export const connectTool: Tool = {
+  id: 'connect',
+  cursor: 'crosshair',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const room = roomUnder(ctx, ev);
+    if (!room) {
+      const s = store.getState();
+      if (s.pending?.kind === 'connect') {
+        store.setState({ pending: null, status: 'Connect cancelled.' });
+      }
+      return true;
+    }
+    const c = mapCoord(ctx, ev);
+    const sourceDir = handleDirFor(c, { x: room.x, y: room.y }, ctx.settings.roomSize);
+    store.setState({
+      pending: {
+        kind: 'connect',
+        sourceId: room.id,
+        sourceDir,
+        cursorMap: c,
+        hoverTargetId: null,
+        targetDir: null,
+      },
+      selection: { kind: 'room', ids: [room.id] },
+      status: sourceDir
+        ? `Connect ${room.id} ${sourceDir.toUpperCase()} → drop on target · Shift = one-way`
+        : `Connect ${room.id} → drop on target (direction inferred) · Shift = one-way`,
+    });
+    try { ctx.container.setPointerCapture(ev.pointerId); } catch {}
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    const s = store.getState();
+    const c = mapCoord(ctx, ev);
+    const room = roomUnder(ctx, ev);
+    const hoverTargetId = room ? room.id : null;
+    if (s.pending?.kind === 'connect') {
+      // If hovering a room other than the source, try to lock onto a handle.
+      let targetDir: import('./types').Direction | null = null;
+      if (room && room.id !== s.pending.sourceId) {
+        targetDir = handleDirFor(c, { x: room.x, y: room.y }, ctx.settings.roomSize);
+      }
+      store.setState({
+        pending: { ...s.pending, cursorMap: c, hoverTargetId, targetDir },
+      });
+      return true;
+    }
+    updateHover(ctx, ev);
+    return false;
+  },
+  onPointerUp(ev, ctx) {
+    const s = store.getState();
+    if (s.pending?.kind !== 'connect') return false;
+    const pending = s.pending;
+    try { ctx.container.releasePointerCapture(ev.pointerId); } catch {}
+    if (pending.hoverTargetId != null && pending.hoverTargetId !== pending.sourceId) {
+      createConnection(ctx, pending.sourceId, pending.hoverTargetId, pending.sourceDir, pending.targetDir, ev.shiftKey);
+    } else {
+      store.setState({ status: 'Connect cancelled.' });
+    }
+    store.setState({ pending: null });
+    return true;
+  },
+  onCancel() {
+    store.setState({ pending: null });
+  },
+};
+
+function createConnection(
+  ctx: ToolContext,
+  sourceId: number,
+  targetId: number,
+  explicitSourceDir: import('./types').Direction | null,
+  explicitTargetDir: import('./types').Direction | null,
+  oneWay: boolean,
+) {
+  const source = ctx.scene.getRenderRoom(sourceId);
+  const target = ctx.scene.getRenderRoom(targetId);
+  if (!source || !target) return;
+  const dir = explicitSourceDir ?? inferDirection(source.x, source.y, target.x, target.y);
+  if (!is2DCardinal(dir)) return;
+  const rawSource = store.getState().map?.rooms[sourceId];
+  const rawTarget = store.getState().map?.rooms[targetId];
+  if (!rawSource || !rawTarget) return;
+  const previous = getExit(rawSource, dir);
+  // Target direction: explicit handle if provided, else the strict opposite.
+  const reverseDir = explicitTargetDir ?? OPPOSITE[dir];
+  const isValidReverse = is2DCardinal(reverseDir);
+  const reverseExisting = isValidReverse ? getExit(rawTarget, reverseDir) : -1;
+  const reverse = oneWay || !isValidReverse
+    ? null
+    : reverseExisting === -1 || reverseExisting === sourceId
+      ? { fromId: targetId, dir: reverseDir, previous: reverseExisting }
+      : null;
+  pushCommand({
+    kind: 'addExit',
+    fromId: sourceId,
+    dir,
+    toId: targetId,
+    previous,
+    reverse,
+  }, ctx.scene);
+  ctx.refresh();
+  store.bumpData();
+  const msg = reverse
+    ? `Connected ${sourceId}.${dir} ↔ ${targetId}.${reverseDir}`
+    : `Connected ${sourceId}.${dir} → ${targetId}`;
+  store.setState({ status: msg });
+}
+
+export const unlinkTool: Tool = {
+  id: 'unlink',
+  cursor: 'crosshair',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const ac = activeContext();
+    if (!ac) return false;
+    const c = mapCoord(ctx, ev);
+
+    // If the cursor is squarely inside a room's visual rect, treat it as a
+    // room-body click → remove all exits. Otherwise prefer per-line hits so
+    // exit lines that extend close to a neighbouring room remain selectable.
+    const room = roomUnder(ctx, ev);
+    const halfBody = ctx.settings.roomSize / 2;
+    const onRoomBody = !!room
+      && Math.abs(c.x - room.x) <= halfBody
+      && Math.abs(c.y - room.y) <= halfBody;
+
+    if (!onRoomBody) {
+      // Custom line under cursor → remove just that one.
+      const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (cl) {
+        const raw = ac.map.rooms[cl.roomId];
+        const points = raw?.customLines?.[cl.exitName] ?? [];
+        const color = raw?.customLinesColor?.[cl.exitName]
+          ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+        const style = raw?.customLinesStyle?.[cl.exitName] ?? 1;
+        const arrow = raw?.customLinesArrow?.[cl.exitName] ?? false;
+        pushCommand({
+          kind: 'removeCustomLine',
+          roomId: cl.roomId,
+          exitName: cl.exitName,
+          snapshot: { points, color, style, arrow },
+        }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'customLine' && s.selection.roomId === cl.roomId && s.selection.exitName === cl.exitName) {
+          store.setState({ selection: null });
+        }
+        store.setState({ status: `Removed custom line '${cl.exitName}' from room ${cl.roomId}` });
+        return true;
+      }
+
+      // Cardinal exit line under cursor → remove just that exit (plus reverse if bidirectional).
+      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (exit) {
+        const fromRoom = ac.map.rooms[exit.fromId];
+        if (!fromRoom) return true;
+        const opposite = OPPOSITE[exit.dir];
+        const toRoom = ac.map.rooms[exit.toId];
+        const reverse = toRoom && is2DCardinal(opposite) && getExit(toRoom, opposite) === exit.fromId
+          ? { fromId: exit.toId, dir: opposite, was: exit.fromId }
+          : null;
+        pushCommand({
+          kind: 'removeExit',
+          fromId: exit.fromId,
+          dir: exit.dir,
+          was: exit.toId,
+          reverse,
+        }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'exit' && s.selection.fromId === exit.fromId && s.selection.dir === exit.dir) {
+          store.setState({ selection: null });
+        }
+        store.setState({
+          status: reverse
+            ? `Removed exit ${exit.fromId}.${exit.dir} ↔ ${exit.toId}.${opposite}`
+            : `Removed exit ${exit.fromId}.${exit.dir} → ${exit.toId}`,
+        });
+        return true;
+      }
+    }
+
+    // No line hit (or click was on a room body) → remove all exits from the room under cursor.
+    if (!room) {
+      store.setState({ status: 'No exit, custom line, or room under cursor.' });
+      return true;
+    }
+    const raw = ac.map.rooms[room.id];
+    if (!raw) return true;
+    const exits: Array<{ dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }> = [];
+    for (const dir of CARDINAL_DIRECTIONS) {
+      const was = getExit(raw, dir);
+      if (was === -1) continue;
+      const toRoom = ac.map.rooms[was];
+      const opposite = OPPOSITE[dir];
+      const reverse = toRoom && getExit(toRoom, opposite) === room.id
+        ? { fromId: was, dir: opposite, was: room.id }
+        : null;
+      exits.push({ dir, was, reverse });
+    }
+    const specialExits = Object.entries(raw.mSpecialExits).map(([name, toId]) => ({ name, toId: toId as number }));
+    if (exits.length === 0 && specialExits.length === 0) {
+      store.setState({ status: `Room ${room.id} has no exits.` });
+      return true;
+    }
+    pushCommand({ kind: 'removeAllExits', roomId: room.id, exits, specialExits }, ctx.scene);
+    ctx.refresh();
+    store.bumpData();
+    store.setState({ status: `Removed all exits from room ${room.id}` });
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    updateHover(ctx, ev);
+  },
+};
+
+export const addRoomTool: Tool = {
+  id: 'addRoom',
+  cursor: 'crosshair',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const ac = activeContext();
+    if (!ac) return false;
+    const { x: rx, y: ry } = snappedCoord(ctx, ev);
+    // RENDER→raw flip for storage.
+    const rawX = rx;
+    const rawY = -ry;
+    if (roomAtCell(ac.map, ac.areaId, rawX, rawY, ac.z)) {
+      store.setState({ status: 'Cell is already occupied.' });
+      return true;
+    }
+    const id = nextRoomId(ac.map);
+    const room = createDefaultRoom(id, ac.areaId, rawX, rawY, ac.z);
+    pushCommand({ kind: 'addRoom', id, room, areaId: ac.areaId }, ctx.scene);
+    ctx.refresh();
+    store.bumpStructure();
+    store.setState({
+      selection: { kind: 'room', ids: [id] },
+      status: `Added room ${id} at (${rawX}, ${rawY}, ${ac.z})`,
+    });
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    const c = snappedCoord(ctx, ev);
+    store.setState({ snapCursor: c });
+    updateHover(ctx, ev);
+  },
+};
+
+export const deleteTool: Tool = {
+  id: 'delete',
+  cursor: 'not-allowed',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const ac = activeContext();
+    if (!ac) return false;
+    const room = roomUnder(ctx, ev);
+    if (!room) return true;
+    const raw = ac.map.rooms[room.id];
+    if (!raw) return true;
+    const snapshot = { ...raw };
+    const neighborEdits = buildDeleteNeighborEdits(ac.map, room.id);
+    pushCommand({
+      kind: 'deleteRoom',
+      id: room.id,
+      room: snapshot,
+      areaId: ac.areaId,
+      neighborEdits,
+    }, ctx.scene);
+    ctx.refresh();
+    store.bumpStructure();
+    const s = store.getState();
+    if (s.selection?.kind === 'room' && s.selection.ids.includes(room.id)) {
+      store.setState({ selection: null });
+    }
+    store.setState({ status: `Deleted room ${room.id}` });
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    updateHover(ctx, ev);
+  },
+};
+
+export const panTool: Tool = {
+  id: 'pan',
+  cursor: 'grab',
+};
+
+export const customLineTool: Tool = {
+  id: 'customLine',
+  cursor: 'crosshair',
+  onPointerDown(ev, ctx) {
+    const s = store.getState();
+    if (!s.pending || s.pending.kind !== 'customLine') return false;
+
+    if (ev.button === 2) {
+      finishCustomLine(s.pending, ctx);
+      return true;
+    }
+    if (ev.button !== 0) return false;
+
+    const c = snappedCoord(ctx, ev);
+    const nextPoints: [number, number][] = [...s.pending.points, [c.x, c.y]];
+    commitPendingCustomLine(s.pending, nextPoints, ctx);
+    store.setState({ pending: { ...s.pending, points: nextPoints, cursor: c } });
+    store.bumpData();
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    const s = store.getState();
+    const c = snappedCoord(ctx, ev);
+    if (s.pending?.kind === 'customLine') {
+      store.setState({ pending: { ...s.pending, cursor: c } });
+      return true;
+    }
+    updateHover(ctx, ev);
+    return false;
+  },
+  onPointerUp() { return false; },
+  onCancel(ctx) {
+    const s = store.getState();
+    if (s.pending?.kind === 'customLine' && ctx) {
+      restorePendingCustomLine(s.pending, ctx.scene);
+    }
+    store.setState({ pending: null, status: 'Custom line cancelled.' });
+    store.bumpData();
+  },
+};
+
+/** Write the in-progress custom line (waypoints after the room centre) to raw and refresh. */
+function commitPendingCustomLine(
+  pending: import('./types').PendingCustomLine,
+  points: [number, number][],
+  ctx: ToolContext,
+): void {
+  // points[0] is the room centre (preview-only); skip it, y-flip the rest.
+  const rawPoints: [number, number][] = points.slice(1).map(([x, y]) => [x, -y]);
+  ctx.scene.reader.setCustomLine(
+    pending.roomId,
+    pending.exitName,
+    rawPoints,
+    pending.color,
+    pending.style,
+    pending.arrow,
+  );
+  ctx.refresh();
+}
+
+/**
+ * Revert any raw mutations made during the in-progress draw. Safe to call even
+ * when no raw write happened yet (restores / removes based on previousSnapshot).
+ */
+export function restorePendingCustomLine(
+  pending: import('./types').PendingCustomLine,
+  scene: SceneHandle,
+): void {
+  if (pending.previousSnapshot) {
+    const p = pending.previousSnapshot;
+    scene.reader.setCustomLine(pending.roomId, pending.exitName, p.points, p.color, p.style, p.arrow);
+  } else {
+    scene.reader.removeCustomLine(pending.roomId, pending.exitName);
+  }
+  if (pending.companion) {
+    const c = pending.companion;
+    if (c.previousSnapshot) {
+      const p = c.previousSnapshot;
+      scene.reader.setCustomLine(c.roomId, c.exitName, p.points, p.color, p.style, p.arrow);
+    } else {
+      scene.reader.removeCustomLine(c.roomId, c.exitName);
+    }
+  }
+  scene.refresh();
+}
+
+export function finishCustomLine(pending: import('./types').PendingCustomLine, ctx?: ToolContext): void {
+  if (!store.getState().map) return;
+
+  // No waypoints placed → treat as cancel.
+  if (pending.points.length < 2) {
+    if (ctx) restorePendingCustomLine(pending, ctx.scene);
+    store.setState({ pending: null, activeTool: 'select', status: 'Need at least 1 waypoint — cancelled.' });
+    store.bumpData();
+    return;
+  }
+
+  // Raw already holds the committed points (written live during drawing).
+  // pending.points[0] is the room centre; skip it, y-flip the rest.
+  const rawPoints: [number, number][] = pending.points.slice(1).map(([x, y]) => [x, -y]);
+
+  const emptyStub = {
+    points: [] as [number, number][],
+    color: pending.color, style: pending.style, arrow: false,
+  };
+
+  // Push undo-only entry: raw was mutated as we drew, so no re-apply needed here.
+  store.setState((st) => ({
+    undo: [...st.undo, {
+      kind: 'setCustomLine' as const,
+      roomId: pending.roomId,
+      exitName: pending.exitName,
+      data: { points: rawPoints, color: pending.color, style: pending.style, arrow: pending.arrow },
+      previous: pending.previousSnapshot,
+      companion: pending.companion
+        ? {
+            roomId: pending.companion.roomId,
+            exitName: pending.companion.exitName,
+            data: emptyStub,
+            previous: pending.companion.previousSnapshot,
+          }
+        : undefined,
+    }],
+    redo: [],
+  }));
+
+  store.bumpData();
+  store.setState({
+    pending: null,
+    activeTool: 'select',
+    status: `Custom line '${pending.exitName}' saved on room ${pending.roomId}`,
+  });
+}
+
+export const TOOLS: Record<ToolId, Tool> = {
+  select: selectTool,
+  connect: connectTool,
+  unlink: unlinkTool,
+  addRoom: addRoomTool,
+  delete: deleteTool,
+  pan: panTool,
+  customLine: customLineTool,
+};
+
+function updateHover(ctx: ToolContext, ev: PointerEvent) {
+  const ac = activeContext();
+  if (!ac) return;
+  const room = roomUnder(ctx, ev);
+  let target: HoverTarget = null;
+  if (room) {
+    const c = mapCoord(ctx, ev);
+    const handleDir = handleDirFor(c, { x: room.x, y: room.y }, ctx.settings.roomSize);
+    target = { kind: 'room', id: room.id, handleDir };
+  } else {
+    const c = mapCoord(ctx, ev);
+    // Custom lines take priority over cardinal exits for hover (they're on top visually).
+    const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+    if (cl) {
+      target = { kind: 'customLine', roomId: cl.roomId, exitName: cl.exitName };
+    } else {
+      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (exit) target = { kind: 'exit', ...exit };
+    }
+  }
+  const current = store.getState().hover;
+  if (!hoverEquals(current, target)) {
+    store.setState({ hover: target });
+  }
+}
+
+function hoverEquals(a: HoverTarget, b: HoverTarget): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'room' && b.kind === 'room') return a.id === b.id && a.handleDir === b.handleDir;
+  if (a.kind === 'exit' && b.kind === 'exit')
+    return a.fromId === b.fromId && a.toId === b.toId && a.dir === b.dir;
+  if (a.kind === 'customLine' && b.kind === 'customLine')
+    return a.roomId === b.roomId && a.exitName === b.exitName;
+  return false;
+}
