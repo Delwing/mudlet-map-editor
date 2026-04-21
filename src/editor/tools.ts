@@ -1123,9 +1123,41 @@ export const deleteTool: Tool = {
   },
 };
 
+let panDragging = false;
+
 export const panTool: Tool = {
   id: 'pan',
   cursor: 'grab',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0 || ev.pointerType !== 'mouse') return false;
+    ctx.renderer.backend.viewport.startDrag(ev.clientX, ev.clientY);
+    panDragging = true;
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    if (ev.pointerType !== 'mouse') return;
+    if (!panDragging) {
+      // Space was held mid-drag from another tool — lazy-start if a button is held.
+      if (ev.buttons === 0) return;
+      ctx.renderer.backend.viewport.startDrag(ev.clientX, ev.clientY);
+      panDragging = true;
+    }
+    ctx.renderer.backend.viewport.updateDrag(ev.clientX, ev.clientY);
+    ctx.refresh();
+    return true;
+  },
+  onPointerUp(_ev, ctx) {
+    if (!panDragging) return false;
+    ctx.renderer.backend.viewport.endDrag();
+    panDragging = false;
+    return true;
+  },
+  onCancel(ctx) {
+    if (panDragging) {
+      ctx.renderer.backend.viewport.endDrag();
+      panDragging = false;
+    }
+  },
 };
 
 export const customLineTool: Tool = {

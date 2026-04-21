@@ -5,6 +5,7 @@ import type { ToolId } from './types';
 export function attachPointerController(ctx: ToolContext): () => void {
   const { container } = ctx;
   let consumingPointer: number | null = null;
+  let middleDragPointer: number | null = null;
 
   const stopAll = (e: Event) => {
     e.stopPropagation();
@@ -23,6 +24,14 @@ export function attachPointerController(ctx: ToolContext): () => void {
   };
 
   const onPointerDown = (ev: PointerEvent) => {
+    if (ev.button === 1) {
+      const rect = container.getBoundingClientRect();
+      ctx.renderer.backend.viewport.startDrag(ev.clientX - rect.left, ev.clientY - rect.top);
+      middleDragPointer = ev.pointerId;
+      container.setPointerCapture(ev.pointerId);
+      stopAll(ev);
+      return;
+    }
     const s = store.getState();
     const pendingKind = s.pending?.kind;
     const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit')
@@ -38,12 +47,26 @@ export function attachPointerController(ctx: ToolContext): () => void {
   };
 
   const onPointerMove = (ev: PointerEvent) => {
+    if (middleDragPointer === ev.pointerId) {
+      const rect = container.getBoundingClientRect();
+      ctx.renderer.backend.viewport.updateDrag(ev.clientX - rect.left, ev.clientY - rect.top);
+      ctx.refresh();
+      stopAll(ev);
+      return;
+    }
     const tool = TOOLS[effectiveTool()];
     const consumed = tool.onPointerMove?.(ev, ctx);
     if (consumed || consumingPointer === ev.pointerId) stopAll(ev);
   };
 
   const onPointerUp = (ev: PointerEvent) => {
+    if (middleDragPointer === ev.pointerId) {
+      ctx.renderer.backend.viewport.endDrag();
+      try { container.releasePointerCapture(ev.pointerId); } catch {}
+      middleDragPointer = null;
+      stopAll(ev);
+      return;
+    }
     const tool = TOOLS[effectiveTool()];
     const consumed = tool.onPointerUp?.(ev, ctx);
     const wasCapturing = consumingPointer === ev.pointerId;
@@ -52,6 +75,11 @@ export function attachPointerController(ctx: ToolContext): () => void {
   };
 
   const onPointerCancel = (ev: PointerEvent) => {
+    if (middleDragPointer === ev.pointerId) {
+      ctx.renderer.backend.viewport.endDrag();
+      middleDragPointer = null;
+      return;
+    }
     const tool = TOOLS[effectiveTool()];
     tool.onCancel?.(ctx);
     if (consumingPointer === ev.pointerId) {
@@ -67,9 +95,11 @@ export function attachPointerController(ctx: ToolContext): () => void {
   // Mirror events — the renderer's click/hover handlers are wired on mouse* events.
   // We stop them on the same phases so they don't fire while we're consuming.
   const onMouseDown = (ev: MouseEvent) => {
+    if (ev.button === 1) { ev.preventDefault(); return; }
     if ((ev.button === 0 || ev.button === 2) && effectiveTool() !== 'pan') stopAll(ev);
   };
   const onMouseUp = (ev: MouseEvent) => {
+    if (ev.button === 1) return;
     if ((ev.button === 0 || ev.button === 2) && effectiveTool() !== 'pan') stopAll(ev);
   };
   const onContextMenu = (ev: MouseEvent) => {

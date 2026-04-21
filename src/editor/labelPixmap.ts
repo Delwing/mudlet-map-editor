@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import type { LabelSnapshot } from './types';
 
 const PX_PER_UNIT = 64;
@@ -79,14 +80,8 @@ export function generateLabelPixmap(label: LabelSnapshot): string {
   return canvas.toDataURL('image/png');
 }
 
-// Buffer is injected at runtime by vite-plugin-node-polyfills.
-const Buf = (globalThis as any).Buffer as {
-  from(data: string, encoding: string): Uint8Array;
-  alloc(size: number): Uint8Array;
-};
-
 /** Convert a PNG data URL to a Buffer for storage in the binary map. */
 export function dataUrlToBuffer(dataUrl: string): Uint8Array {
   const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-  return base64 ? Buf.from(base64, 'base64') : Buf.alloc(0);
+  return base64 ? Buffer.from(base64, 'base64') : Buffer.alloc(0);
 }
