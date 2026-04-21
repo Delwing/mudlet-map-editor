@@ -1,65 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { store } from '../editor/store';
-import { readMapFromBytes } from '../mapIO';
+import { loadUrlIntoStore } from '../editor/loadFile';
 
-export function UrlLoadModal({ onClose }: { onClose: () => void }) {
-  const [urlInput, setUrlInput] = useState('');
+export function UrlLoadModal({ onClose, initialUrl }: { onClose: () => void; initialUrl?: string }) {
+  const [urlInput, setUrlInput] = useState(initialUrl ?? '');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
 
-  const handleLoad = async () => {
-    const url = urlInput.trim();
+  const handleLoad = async (url = urlInput.trim()) => {
     if (!url) return;
+    setUrlInput(url);
     setLoading(true);
     setProgress(0);
-    try {
-      store.setState({ status: 'Fetching…' });
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        store.setState({ status: `Failed to load URL: HTTP ${resp.status} ${resp.statusText}` });
-        return;
-      }
-      const total = Number(resp.headers.get('content-length')) || 0;
-      const reader = resp.body!.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        setProgress(total > 0 ? Math.round((received / total) * 100) : null);
-      }
-      const merged = new Uint8Array(received);
-      let offset = 0;
-      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
-      const fileName = url.split('/').pop()?.split('?')[0] || 'map.dat';
-      const map = readMapFromBytes(merged.buffer);
-      const firstAreaId = Number(Object.keys(map.areaNames)[0] ?? -1);
-      const resolvedArea = Number.isNaN(firstAreaId) ? null : firstAreaId;
-      store.setState({
-        map,
-        loaded: { fileName },
-        currentAreaId: resolvedArea,
-        currentZ: 0,
-        selection: null,
-        hover: null,
-        pending: null,
-        undo: [],
-        redo: [],
-        savedUndoLength: 0,
-        status: `Loaded ${fileName} · ${Object.keys(map.rooms).length} rooms · ${Object.keys(map.areaNames).length} areas`,
-        sessionId: null,
-      });
-      store.bumpStructure();
-      onClose();
-    } catch (err) {
-      store.setState({ status: `Failed to load URL: ${(err as Error).message}` });
-    } finally {
-      setLoading(false);
-      setProgress(null);
-    }
+    await loadUrlIntoStore(url, setProgress);
+    setLoading(false);
+    setProgress(null);
+    if (store.getState().map) onClose();
   };
+
+  // Auto-start when opened with a pre-filled URL.
+  useEffect(() => {
+    if (initialUrl) handleLoad(initialUrl);
+  }, []);
 
   return (
     <div
@@ -78,14 +40,14 @@ export function UrlLoadModal({ onClose }: { onClose: () => void }) {
               placeholder="https://example.com/map.dat"
               value={urlInput}
               disabled={loading}
-              autoFocus
+              autoFocus={!initialUrl}
               onChange={(e) => setUrlInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleLoad();
                 if (e.key === 'Escape' && !loading) onClose();
               }}
             />
-            <button type="button" disabled={loading || !urlInput.trim()} onClick={handleLoad}>
+            <button type="button" disabled={loading || !urlInput.trim()} onClick={() => handleLoad()}>
               {loading ? 'Loading…' : 'Load'}
             </button>
           </div>

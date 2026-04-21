@@ -53,6 +53,10 @@ export default function App() {
   const dataVersion = useEditorState((s) => s.dataVersion);
   const [showHelp, setShowHelp] = useState(false);
   const [showUrlLoad, setShowUrlLoad] = useState(false);
+  const [autoLoadUrl, setAutoLoadUrl] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('map');
+  });
 
   // Scene lifecycle: keyed on the raw map reference, so a file load (new MudletMap
   // identity) tears down and recreates the scene, while in-place mutations
@@ -441,7 +445,12 @@ export default function App() {
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-      {showUrlLoad && <UrlLoadModal onClose={() => setShowUrlLoad(false)} />}
+      {(showUrlLoad || autoLoadUrl) && (
+        <UrlLoadModal
+          initialUrl={autoLoadUrl ?? undefined}
+          onClose={() => { setShowUrlLoad(false); setAutoLoadUrl(null); }}
+        />
+      )}
     </div>
   );
 }
