@@ -6,6 +6,18 @@ export function attachPointerController(ctx: ToolContext): () => void {
   const { container } = ctx;
   let consumingPointer: number | null = null;
   let middleDragPointer: number | null = null;
+  let prevSpaceHeld = store.getState().spaceHeld;
+
+  const unsubscribe = store.subscribe((s) => {
+    if (!prevSpaceHeld && s.spaceHeld && consumingPointer !== null) {
+      // Space pressed while a gesture is in flight — cancel it cleanly.
+      const tool = TOOLS[s.activeTool];
+      tool.onCancel?.(ctx);
+      try { container.releasePointerCapture(consumingPointer); } catch {}
+      consumingPointer = null;
+    }
+    prevSpaceHeld = s.spaceHeld;
+  });
 
   const stopAll = (e: Event) => {
     e.stopPropagation();
@@ -120,6 +132,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
   container.addEventListener('contextmenu', onContextMenu);
 
   return () => {
+    unsubscribe();
     container.removeEventListener('pointerdown', onPointerDown, opts);
     container.removeEventListener('pointermove', onPointerMove, opts);
     container.removeEventListener('pointerup', onPointerUp, opts);
