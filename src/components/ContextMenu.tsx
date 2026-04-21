@@ -93,6 +93,8 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
   const s = store.getState();
   const raw = s.map?.rooms[menu.roomId];
   const areaNames = s.map?.areaNames ?? {};
+  const sel = s.selection;
+  const multiIds = sel?.kind === 'room' && sel.ids.length > 1 && sel.ids.includes(menu.roomId) ? sel.ids : null;
 
   const openMoveTo = () => {
     if (!raw) return;
@@ -136,29 +138,61 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
 
     const cmds = [];
 
-    if (moveToDialog.areaId !== raw.area) {
-      cmds.push({
-        kind: 'moveRoomsToArea' as const,
-        roomIds: [menu.roomId],
-        fromAreaId: raw.area,
-        toAreaId: moveToDialog.areaId,
-      });
-    }
-
-    if (newX !== raw.x || newY !== raw.y || newZ !== raw.z) {
-      cmds.push({
-        kind: 'moveRoom' as const,
-        id: menu.roomId,
-        from: { x: raw.x, y: raw.y, z: raw.z },
-        to: { x: newX, y: newY, z: newZ },
-      });
+    if (multiIds) {
+      const dx = newX - raw.x;
+      const dy = newY - raw.y;
+      const dz = newZ - raw.z;
+      if (moveToDialog.areaId !== raw.area) {
+        cmds.push({
+          kind: 'moveRoomsToArea' as const,
+          roomIds: multiIds,
+          fromAreaId: raw.area,
+          toAreaId: moveToDialog.areaId,
+        });
+      }
+      for (const id of multiIds) {
+        const room = s.map.rooms[id];
+        if (!room) continue;
+        const toX = room.x + dx;
+        const toY = room.y + dy;
+        const toZ = room.z + dz;
+        if (toX !== room.x || toY !== room.y || toZ !== room.z) {
+          cmds.push({
+            kind: 'moveRoom' as const,
+            id,
+            from: { x: room.x, y: room.y, z: room.z },
+            to: { x: toX, y: toY, z: toZ },
+          });
+        }
+      }
+    } else {
+      if (moveToDialog.areaId !== raw.area) {
+        cmds.push({
+          kind: 'moveRoomsToArea' as const,
+          roomIds: [menu.roomId],
+          fromAreaId: raw.area,
+          toAreaId: moveToDialog.areaId,
+        });
+      }
+      if (newX !== raw.x || newY !== raw.y || newZ !== raw.z) {
+        cmds.push({
+          kind: 'moveRoom' as const,
+          id: menu.roomId,
+          from: { x: raw.x, y: raw.y, z: raw.z },
+          to: { x: newX, y: newY, z: newZ },
+        });
+      }
     }
 
     if (cmds.length > 0) {
       pushBatch(cmds, sceneRef.current);
       sceneRef.current?.refresh();
       store.bumpStructure();
-      store.setState({ status: `Moved room ${menu.roomId} to area ${moveToDialog.areaId} (${newX}, ${newY}, ${newZ})` });
+      store.setState({
+        status: multiIds
+          ? `Moved ${multiIds.length} rooms to area ${moveToDialog.areaId} (${newX}, ${newY}, ${newZ})`
+          : `Moved room ${menu.roomId} to area ${moveToDialog.areaId} (${newX}, ${newY}, ${newZ})`,
+      });
     }
 
     const areaChanged = moveToDialog.areaId !== (s.currentAreaId ?? raw.area);
@@ -167,7 +201,6 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       contextMenu: null,
       currentAreaId: moveToDialog.areaId,
       currentZ: newZ,
-      // If area or z changed, pan to the room without resetting zoom.
       navigateTo: (areaChanged || zChanged) ? { mapX: newX, mapY: -newY } : null,
     });
   };
@@ -184,7 +217,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         style={{ left: menu.screenX, top: menu.screenY }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className="context-menu-title">Move room {menu.roomId} to</div>
+        <div className="context-menu-title">{multiIds ? `Move ${multiIds.length} rooms to` : `Move room ${menu.roomId} to`}</div>
         <div className="context-menu-field">
           <label>Area</label>
           <select
