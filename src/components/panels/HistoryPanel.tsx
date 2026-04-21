@@ -45,8 +45,24 @@ export function commandLabel(cmd: Command): string {
     case 'setLabelNoScaling': return `${cmd.to ? 'Disable' : 'Enable'} zoom scaling on label #${cmd.id}`;
     case 'setLabelShowOnTop': return `Set label #${cmd.id} ${cmd.to ? 'foreground' : 'background'}`;
     case 'resizeLabel': return `Resize label #${cmd.id}`;
-    case 'batch': return `${cmd.cmds.length} batched op${cmd.cmds.length === 1 ? '' : 's'}`;
+    case 'batch': return commandLabel(cmd.cmds[0]);
   }
+}
+
+function HistoryEntry({ cmd, className, onClick, title }: {
+  cmd: Command;
+  className: string;
+  onClick: () => void;
+  title: string;
+}) {
+  return (
+    <button type="button" className={className} onClick={onClick} title={title}>
+      <span className="history-label">{commandLabel(cmd)}</span>
+      {cmd.kind === 'batch' && cmd.cmds.slice(1).map((sub, i) => (
+        <span key={i} className="history-sub">{commandLabel(sub)}</span>
+      ))}
+    </button>
+  );
 }
 
 export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | null } }) {
@@ -83,15 +99,13 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
           <span className="history-label">Current state</span>
         </div>
         {undoReversed.map((cmd, i) => (
-          <button
+          <HistoryEntry
             key={i}
-            type="button"
+            cmd={cmd}
             className="history-item history-done"
             onClick={() => jumpTo(i + 1, 0)}
             title={`Undo ${i + 1} step${i === 0 ? '' : 's'}`}
-          >
-            <span className="history-label">{commandLabel(cmd)}</span>
-          </button>
+          />
         ))}
         {undo.length === 0 && redo.length === 0 && (
           <p className="hint" style={{ marginTop: 8 }}>No history yet.</p>
@@ -100,15 +114,13 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
           <>
             <div className="history-sep">— undone —</div>
             {redoReversed.map((cmd, i) => (
-              <button
+              <HistoryEntry
                 key={i}
-                type="button"
+                cmd={cmd}
                 className="history-item history-undone"
                 onClick={() => jumpTo(0, i + 1)}
                 title={`Redo ${i + 1} step${i === 0 ? '' : 's'}`}
-              >
-                <span className="history-label">{commandLabel(cmd)}</span>
-              </button>
+              />
             ))}
           </>
         )}

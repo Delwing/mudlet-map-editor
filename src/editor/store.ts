@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { MudletMap } from '../mapIO';
-import type { Command, HoverTarget, LoadedMap, Pending, Selection, ToolId } from './types';
+import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, ToolId } from './types';
 
 export interface EditorState {
   map: MudletMap | null;
@@ -30,6 +30,10 @@ export interface EditorState {
   savedUndoLength: number;
   /** When set, the next area/z navigation pans to this map-space point instead of fitting. Consumed and cleared by App. */
   navigateTo: { mapX: number; mapY: number } | null;
+  /** Tracks the last Alt+click position (integer cell) and cycle index for overlapping-element cycling. */
+  hitCycle: { x: number; y: number; index: number } | null;
+  /** When true, label resize preserves the aspect ratio at the start of the drag. */
+  labelAspectRatioLocked: boolean;
 }
 
 export type ContextMenuState =
@@ -44,6 +48,12 @@ export type ContextMenuState =
   | {
       kind: 'room';
       roomId: number;
+      screenX: number;
+      screenY: number;
+    }
+  | {
+      kind: 'disambiguate';
+      hits: HitItem[];
       screenX: number;
       screenY: number;
     }
@@ -72,6 +82,8 @@ const initial: EditorState = {
   contextMenu: null,
   savedUndoLength: 0,
   navigateTo: null,
+  hitCycle: null,
+  labelAspectRatioLocked: false,
 };
 
 type Listener = (state: EditorState) => void;

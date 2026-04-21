@@ -159,7 +159,7 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
               <div className="modal-list-actions">
                 <button type="button" onClick={() => { setEditingId(id); setEditDraft(name); }}>Rename</button>
                 <button type="button" onClick={() => setExpandedUd(expandedUd === id ? null : id)} title="Edit user data">UD</button>
-                <button type="button" className="danger" onClick={() => requestDelete(id, name)}>Delete</button>
+                <button type="button" className="danger icon-btn" title="Delete area" onClick={() => requestDelete(id, name)}>✕</button>
               </div>
             </div>
 

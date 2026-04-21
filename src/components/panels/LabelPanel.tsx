@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { pushCommand } from '../../editor/commands';
+import React, { useEffect, useRef, useState } from 'react';
+import { pushBatch, pushCommand } from '../../editor/commands';
 import { store, useEditorState } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor } from '../../mapIO';
-import type { LabelFont, LabelSnapshot } from '../../editor/types';
+import type { Command, LabelFont, LabelSnapshot } from '../../editor/types';
 import { generateLabelPixmap } from '../../editor/labelPixmap';
 import { CheckboxField, Field, mudletColorToHex, hexToMudletColor } from '../panelShared';
 
@@ -18,13 +18,27 @@ interface LabelPanelProps {
   sceneRef: { current: SceneHandle | null };
 }
 
+const colorEq = (a: MudletColor, b: MudletColor) =>
+  a.r === b.r && a.g === b.g && a.b === b.b && a.alpha === b.alpha;
+
+const outlineEq = (a: MudletColor | undefined, b: MudletColor | undefined) => {
+  if (a === undefined && b === undefined) return true;
+  if (a === undefined || b === undefined) return false;
+  return colorEq(a, b);
+};
+
+const PX_PER_UNIT = 64;
+
 export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const dataVersion = useEditorState((s) => s.dataVersion);
+  const aspectRatioLocked = useEditorState((s) => s.labelAspectRatioLocked);
   const snap = sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id);
 
   const [textDraft, setTextDraft] = useState(snap?.text ?? '');
   const [widthDraft, setWidthDraft] = useState(String(snap?.size[0] ?? 4));
   const [heightDraft, setHeightDraft] = useState(String(snap?.size[1] ?? 1));
+  const [bgAlphaDraft, setBgAlphaDraft] = useState(snap?.bgColor.alpha ?? 255);
+  const [outlineAlphaDraft, setOutlineAlphaDraft] = useState(snap?.outlineColor?.alpha ?? 0);
   const [availableFonts, setAvailableFonts] = useState<string[]>(COMMON_FONTS);
 
   useEffect(() => {
@@ -46,21 +60,25 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const heightDraftRef = useRef(heightDraft);
   heightDraftRef.current = heightDraft;
 
-  // Sync drafts when snapshot changes externally (undo, resize handle drag).
-  // Skip focused fields to avoid clobbering mid-edit.
+  // Captures color state at the start of a drag session so we push a single undo entry.
+  const colorSessionRef = useRef<{ fg: MudletColor; bg: MudletColor } | null>(null);
+  const outlineSessionRef = useRef<{ color: MudletColor | undefined } | null>(null);
+
   useEffect(() => {
     const s = sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!textFocused.current) setTextDraft(s?.text ?? '');
     if (!widthFocused.current) setWidthDraft(String(s?.size[0] ?? 4));
     if (!heightFocused.current) setHeightDraft(String(s?.size[1] ?? 1));
+    setBgAlphaDraft(s?.bgColor.alpha ?? 255);
+    setOutlineAlphaDraft(s?.outlineColor?.alpha ?? 0);
   }, [selection.id, selection.areaId, dataVersion]);
 
   if (!snap) return <div className="panel-content"><p className="hint">Label not found.</p></div>;
 
-  const regeneratePixmap = (label: LabelSnapshot, scene: SceneHandle, previousPixMap: string) => {
-    const dataUrl = generateLabelPixmap(label);
-    if (dataUrl === previousPixMap) return;
-    pushCommand({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: previousPixMap, to: dataUrl }, scene);
+  const pixmapCmd = (label: LabelSnapshot): Command[] => {
+    const to = generateLabelPixmap(label);
+    if (to === label.pixMap) return [];
+    return [{ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: label.pixMap, to }];
   };
 
   const commitText = () => {
@@ -68,8 +86,8 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     if (!scene) return;
     const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!current || textDraftRef.current === current.text) return;
-    pushCommand({ kind: 'setLabelText', areaId: selection.areaId, id: selection.id, from: current.text, to: textDraftRef.current }, scene);
-    regeneratePixmap({ ...current, text: textDraftRef.current }, scene, current.pixMap);
+    const next = { ...current, text: textDraftRef.current };
+    pushBatch([{ kind: 'setLabelText', areaId: selection.areaId, id: selection.id, from: current.text, to: next.text }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
@@ -83,27 +101,27 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     const h = parseFloat(heightDraftRef.current);
     if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) return;
     if (w === current.size[0] && h === current.size[1]) return;
-    pushCommand({ kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: current.size, to: [w, h] }, scene);
-    regeneratePixmap({ ...current, size: [w, h] }, scene, current.pixMap);
+    const next = { ...current, size: [w, h] as [number, number] };
+    pushBatch([{ kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: current.size, to: next.size }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
 
+  const startColorSession = () => {
+    if (colorSessionRef.current) return;
+    colorSessionRef.current = { fg: snap.fgColor, bg: snap.bgColor };
+  };
+
   const commitColors = (newFg: MudletColor, newBg: MudletColor) => {
     const scene = sceneRef.current;
+    const from = colorSessionRef.current ?? { fg: snap.fgColor, bg: snap.bgColor };
+    colorSessionRef.current = null;
     if (!scene) return;
+    if (colorEq(from.fg, newFg) && colorEq(from.bg, newBg)) return;
     const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!current) return;
-    pushCommand({
-      kind: 'setLabelColors',
-      areaId: selection.areaId,
-      id: selection.id,
-      fromFg: current.fgColor,
-      toFg: newFg,
-      fromBg: current.bgColor,
-      toBg: newBg,
-    }, scene);
-    regeneratePixmap({ ...current, fgColor: newFg, bgColor: newBg }, scene, current.pixMap);
+    const next = { ...current, fgColor: newFg, bgColor: newBg };
+    pushBatch([{ kind: 'setLabelColors', areaId: selection.areaId, id: selection.id, fromFg: from.fg, toFg: newFg, fromBg: from.bg, toBg: newBg }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
@@ -134,21 +152,60 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!current) return;
     const next: LabelFont = { ...current.font, ...patch };
-    pushCommand({ kind: 'setLabelFont', areaId: selection.areaId, id: selection.id, from: current.font, to: next }, scene);
-    regeneratePixmap({ ...current, font: next }, scene, current.pixMap);
+    pushBatch([{ kind: 'setLabelFont', areaId: selection.areaId, id: selection.id, from: current.font, to: next }, ...pixmapCmd({ ...current, font: next })], scene);
     scene.refresh();
     store.bumpData();
   };
 
-  const commitOutlineColor = (color: MudletColor | undefined) => {
+  const startOutlineSession = () => {
+    if (outlineSessionRef.current) return;
+    outlineSessionRef.current = { color: snap.outlineColor };
+  };
+
+  const commitOutlineColor = (newColor: MudletColor | undefined) => {
+    const scene = sceneRef.current;
+    const from = outlineSessionRef.current ?? { color: snap.outlineColor };
+    outlineSessionRef.current = null;
+    if (!scene) return;
+    if (outlineEq(from.color, newColor)) return;
+    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
+    if (!current) return;
+    const next = { ...current, outlineColor: newColor };
+    pushBatch([{ kind: 'setLabelOutlineColor', areaId: selection.areaId, id: selection.id, from: from.color, to: newColor }, ...pixmapCmd(next)], scene);
+    scene.refresh();
+    store.bumpData();
+  };
+
+  const handleFitFontSize = () => {
     const scene = sceneRef.current;
     if (!scene) return;
     const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
-    pushCommand({ kind: 'setLabelOutlineColor', areaId: selection.areaId, id: selection.id, from: current.outlineColor, to: color }, scene);
-    regeneratePixmap({ ...current, outlineColor: color }, scene, current.pixMap);
-    scene.refresh();
-    store.bumpData();
+    if (!current || !current.text) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const PADDING = 8;
+    const pw = Math.max(1, Math.round(current.size[0] * PX_PER_UNIT));
+    const ph = Math.max(1, Math.round(current.size[1] * PX_PER_UNIT));
+    const availW = pw - PADDING * 2;
+    const availH = ph - PADDING * 2;
+    if (availW <= 0 || availH <= 0) return;
+
+    const lines = current.text.split('\n');
+    const { font } = current;
+    const maxFromHeight = Math.floor(availH / (lines.length * 1.25));
+    let lo = 1, hi = maxFromHeight, result = 1;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      ctx.font = [font.italic ? 'italic' : '', font.bold ? 'bold' : '', `${mid}px`, `"${font.family}", sans-serif`].filter(Boolean).join(' ');
+      const maxLineW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      if (maxLineW <= availW) { result = mid; lo = mid + 1; } else { hi = mid - 1; }
+    }
+
+    if (result === current.font.size) return;
+    commitFont({ size: result });
   };
 
   const handleRegeneratePixmap = () => {
@@ -156,10 +213,75 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     if (!scene) return;
     const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!current) return;
-    regeneratePixmap(current, scene, current.pixMap);
+    const to = generateLabelPixmap(current);
+    if (to === current.pixMap) return;
+    pushCommand({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: current.pixMap, to }, scene);
     scene.refresh();
     store.bumpData();
   };
+
+  const handleSetImage = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const scene = sceneRef.current;
+          if (!scene) return;
+          const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
+          if (!current) return;
+          const w = Math.max(0.1, Math.round((img.naturalWidth / PX_PER_UNIT) * 100) / 100);
+          const h = Math.max(0.1, Math.round((img.naturalHeight / PX_PER_UNIT) * 100) / 100);
+          const cmds: Command[] = [
+            { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: current.imageSrc, to: dataUrl },
+            { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: current.pixMap, to: dataUrl },
+            { kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: current.size, to: [w, h] },
+          ];
+          pushBatch(cmds, scene);
+          scene.refresh();
+          store.setState({ labelAspectRatioLocked: true });
+          store.bumpData();
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  const handleClearImage = () => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
+    if (!current || !current.imageSrc) return;
+    const regenerated = generateLabelPixmap(current);
+    const cmds: Command[] = [
+      { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: current.imageSrc, to: undefined },
+      { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: current.pixMap, to: regenerated },
+    ];
+    pushBatch(cmds, scene);
+    scene.refresh();
+    store.setState({ labelAspectRatioLocked: false });
+    store.bumpData();
+  };
+
+  const isImageMode = !!snap.imageSrc;
+  const fgHex = mudletColorToHex(snap.fgColor);
+  const bgHex = mudletColorToHex(snap.bgColor);
+  const outlineBase = snap.outlineColor ?? { spec: 1, r: 0, g: 0, b: 0, alpha: 0, pad: 0 };
+  const outlineHex = mudletColorToHex(outlineBase);
+
+  const modeBtnStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, padding: '4px 0', fontSize: 12, cursor: 'pointer', border: 'none',
+    background: active ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
+    color: active ? '#000' : 'inherit',
+  });
 
   return (
     <div className="panel-content">
@@ -168,17 +290,18 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         Position: ({snap.pos[0]}, {snap.pos[1]}, {snap.pos[2]}) · Drag to move
       </p>
 
-      <Field label="Text">
-        <input
-          value={textDraft}
-          onChange={(e) => setTextDraft(e.target.value)}
-          onFocus={() => { textFocused.current = true; }}
-          onBlur={() => { textFocused.current = false; commitText(); }}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        />
-      </Field>
+      {/* Mode switch */}
+      <div style={{ display: 'flex', marginBottom: 10, border: '1px solid var(--border, #444)', borderRadius: 4, overflow: 'hidden' }}>
+        <button style={modeBtnStyle(!isImageMode)} onClick={() => { if (isImageMode) handleClearImage(); }}>
+          Text
+        </button>
+        <button style={{ ...modeBtnStyle(isImageMode), borderLeft: '1px solid var(--border, #444)' }} onClick={() => { if (!isImageMode) handleSetImage(); }}>
+          Image
+        </button>
+      </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      {/* Size + AR lock (always visible) */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
         <Field label="Width">
           <input
             type="number"
@@ -205,132 +328,28 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
             style={{ width: 70 }}
           />
         </Field>
+        <button
+          title={aspectRatioLocked ? 'Aspect ratio locked — click to unlock' : 'Lock aspect ratio for resize'}
+          onClick={() => store.setState({ labelAspectRatioLocked: !aspectRatioLocked })}
+          style={{
+            height: 24, padding: '0 6px', fontSize: 12, marginBottom: 8,
+            border: '1px solid var(--border, #444)', borderRadius: 3, cursor: 'pointer',
+            background: aspectRatioLocked ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
+            color: aspectRatioLocked ? '#000' : 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {aspectRatioLocked ? 'AR locked' : 'AR free'}
+        </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Field label="Text color">
-          <input
-            type="color"
-            value={mudletColorToHex(snap.fgColor)}
-            onChange={(e) => commitColors(hexToMudletColor(e.target.value), snap.bgColor)}
-          />
-        </Field>
-        <Field label="BG color">
-          <input
-            type="color"
-            value={mudletColorToHex(snap.bgColor)}
-            onChange={(e) => commitColors(snap.fgColor, { ...hexToMudletColor(e.target.value), alpha: snap.bgColor.alpha })}
-          />
-        </Field>
-      </div>
-
-      <Field label="BG alpha">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-          <input
-            type="range"
-            min={0}
-            max={255}
-            step={1}
-            value={snap.bgColor.alpha}
-            style={{ flex: 1 }}
-            onChange={(e) => commitColors(snap.fgColor, { ...snap.bgColor, alpha: parseInt(e.target.value, 10) })}
-          />
-          <span style={{ minWidth: 28, textAlign: 'right', fontSize: 12, opacity: 0.7 }}>
-            {snap.bgColor.alpha}
-          </span>
-        </div>
-      </Field>
-
-      <Field label="Font">
-        <input
-          list="label-font-list"
-          defaultValue={snap.font.family}
-          key={`font-family-${selection.id}`}
-          onBlur={(e) => { const v = e.target.value.trim(); if (v) commitFont({ family: v }); }}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          style={{ flex: 1 }}
-        />
-        <datalist id="label-font-list">
-          {availableFonts.map((f) => <option key={f} value={f} />)}
-        </datalist>
-      </Field>
-
-      <Field label="Size">
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            type="number"
-            min={1}
-            max={256}
-            step={1}
-            defaultValue={snap.font.size}
-            key={`font-size-${selection.id}`}
-            onBlur={(e) => { const v = parseInt(e.target.value, 10); if (v > 0) commitFont({ size: v }); }}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            style={{ width: 60 }}
-          />
-          <div style={{ display: 'flex', gap: 4 }}>
-            {([
-              ['B', 'bold',      { fontWeight: 'bold' }],
-              ['I', 'italic',    { fontStyle: 'italic' }],
-              ['U', 'underline', { textDecoration: 'underline' }],
-              ['S', 'strikeout', { textDecoration: 'line-through' }],
-            ] as const).map(([label, key, style]) => (
-              <button
-                key={key}
-                title={key}
-                onClick={() => commitFont({ [key]: !snap.font[key] })}
-                style={{
-                  width: 24, height: 24, padding: 0, fontSize: 12,
-                  background: snap.font[key] ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
-                  color: snap.font[key] ? '#000' : 'inherit',
-                  border: '1px solid var(--border, #444)',
-                  borderRadius: 3, cursor: 'pointer',
-                  ...style,
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </Field>
-
-      <Field label="Outline color">
-        <input
-          type="color"
-          value={mudletColorToHex(snap.outlineColor ?? { spec: 1, r: 0, g: 0, b: 0, alpha: 255, pad: 0 })}
-          onChange={(e) => commitOutlineColor({ ...(snap.outlineColor ?? { spec: 1, r: 0, g: 0, b: 0, alpha: 255, pad: 0 }), ...hexToMudletColor(e.target.value) })}
-        />
-      </Field>
-
-      <Field label="Outline alpha">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-          <input
-            type="range"
-            min={0}
-            max={255}
-            step={1}
-            value={snap.outlineColor?.alpha ?? 0}
-            style={{ flex: 1 }}
-            onChange={(e) => {
-              const alpha = parseInt(e.target.value, 10);
-              const base = snap.outlineColor ?? { spec: 1, r: 0, g: 0, b: 0, alpha: 0, pad: 0 };
-              commitOutlineColor(alpha === 0 ? undefined : { ...base, alpha });
-            }}
-          />
-          <span style={{ minWidth: 28, textAlign: 'right', fontSize: 12, opacity: 0.7 }}>
-            {snap.outlineColor?.alpha ?? 0}
-          </span>
-        </div>
-      </Field>
-
+      {/* Display options (always visible) */}
       <CheckboxField
         label="Position"
         checked={snap.showOnTop}
         onChange={commitShowOnTop}
         description="Show on top (foreground)"
       />
-
       <CheckboxField
         label="Zoom scaling"
         checked={!snap.noScaling}
@@ -338,22 +357,189 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         description="Scale with zoom"
       />
 
-      <Field label="Pixmap">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-          {snap.pixMap ? (
+      {/* IMAGE MODE */}
+      {isImageMode && (
+        <Field label="Image">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
             <img
-              src={snap.pixMap}
-              alt="label pixmap"
+              src={snap.imageSrc}
+              alt="label image"
               style={{ maxWidth: '100%', border: '1px solid var(--border, #444)', borderRadius: 3 }}
             />
-          ) : (
-            <span className="hint">No pixmap stored</span>
-          )}
-          <button onClick={handleRegeneratePixmap} style={{ alignSelf: 'flex-start' }}>
-            Regenerate pixmap
-          </button>
+            <button onClick={handleSetImage} style={{ alignSelf: 'flex-start' }}>
+              Replace image...
+            </button>
+          </div>
+        </Field>
+      )}
+
+      {/* TEXT MODE */}
+      {!isImageMode && <>
+        <Field label="Text">
+          <textarea
+            value={textDraft}
+            rows={3}
+            onChange={(e) => setTextDraft(e.target.value)}
+            onFocus={() => { textFocused.current = true; }}
+            onBlur={() => { textFocused.current = false; commitText(); }}
+            style={{ resize: 'vertical' }}
+          />
+        </Field>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Field label="Text color">
+            <input
+              type="color"
+              key={`fg-${selection.id}-${fgHex}`}
+              defaultValue={fgHex}
+              onMouseDown={startColorSession}
+              onBlur={(e) => commitColors(hexToMudletColor(e.target.value), snap.bgColor)}
+            />
+          </Field>
+          <Field label="BG color">
+            <input
+              type="color"
+              key={`bg-${selection.id}-${bgHex}`}
+              defaultValue={bgHex}
+              onMouseDown={startColorSession}
+              onBlur={(e) => commitColors(snap.fgColor, { ...hexToMudletColor(e.target.value), alpha: snap.bgColor.alpha })}
+            />
+          </Field>
         </div>
-      </Field>
+
+        <Field label="BG alpha">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={255}
+              step={1}
+              value={bgAlphaDraft}
+              style={{ flex: 1 }}
+              onPointerDown={startColorSession}
+              onChange={(e) => setBgAlphaDraft(parseInt(e.target.value, 10))}
+              onPointerUp={(e) => commitColors(snap.fgColor, { ...snap.bgColor, alpha: parseInt((e.target as HTMLInputElement).value, 10) })}
+              onBlur={(e) => commitColors(snap.fgColor, { ...snap.bgColor, alpha: parseInt(e.target.value, 10) })}
+            />
+            <span style={{ minWidth: 28, textAlign: 'right', fontSize: 12, opacity: 0.7 }}>
+              {bgAlphaDraft}
+            </span>
+          </div>
+        </Field>
+
+        <Field label="Font">
+          <input
+            list="label-font-list"
+            defaultValue={snap.font.family}
+            key={`font-family-${selection.id}`}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v) commitFont({ family: v }); }}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            style={{ flex: 1 }}
+          />
+          <datalist id="label-font-list">
+            {availableFonts.map((f) => <option key={f} value={f} />)}
+          </datalist>
+        </Field>
+
+        <Field label="Size">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              defaultValue={snap.font.size}
+              key={`font-size-${selection.id}-${snap.font.size}`}
+              onBlur={(e) => { const v = parseInt(e.target.value, 10); if (v > 0) commitFont({ size: v }); }}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              style={{ width: 60 }}
+            />
+            <button
+              title="Auto-fit font size to fill label area"
+              onClick={handleFitFontSize}
+              style={{ height: 24, padding: '0 6px', fontSize: 12, border: '1px solid var(--border, #444)', borderRadius: 3, cursor: 'pointer', background: 'var(--bg2, #2a2a2a)', whiteSpace: 'nowrap' }}
+            >
+              Auto-fit
+            </button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {([
+                ['B', 'bold',      { fontWeight: 'bold' }],
+                ['I', 'italic',    { fontStyle: 'italic' }],
+                ['U', 'underline', { textDecoration: 'underline' }],
+                ['S', 'strikeout', { textDecoration: 'line-through' }],
+              ] as const).map(([label, key, style]) => (
+                <button
+                  key={key}
+                  title={key}
+                  onClick={() => commitFont({ [key]: !snap.font[key] })}
+                  style={{
+                    width: 24, height: 24, padding: 0, fontSize: 12,
+                    background: snap.font[key] ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
+                    color: snap.font[key] ? '#000' : 'inherit',
+                    border: '1px solid var(--border, #444)',
+                    borderRadius: 3, cursor: 'pointer',
+                    ...style,
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Field>
+
+        <Field label="Outline color">
+          <input
+            type="color"
+            key={`outline-${selection.id}-${outlineHex}`}
+            defaultValue={outlineHex}
+            onMouseDown={startOutlineSession}
+            onBlur={(e) => commitOutlineColor({ ...outlineBase, ...hexToMudletColor(e.target.value) })}
+          />
+        </Field>
+
+        <Field label="Outline alpha">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <input
+              type="range"
+              min={0}
+              max={255}
+              step={1}
+              value={outlineAlphaDraft}
+              style={{ flex: 1 }}
+              onPointerDown={startOutlineSession}
+              onChange={(e) => setOutlineAlphaDraft(parseInt(e.target.value, 10))}
+              onPointerUp={(e) => {
+                const alpha = parseInt((e.target as HTMLInputElement).value, 10);
+                commitOutlineColor(alpha === 0 ? undefined : { ...outlineBase, alpha });
+              }}
+              onBlur={(e) => {
+                const alpha = parseInt(e.target.value, 10);
+                commitOutlineColor(alpha === 0 ? undefined : { ...outlineBase, alpha });
+              }}
+            />
+            <span style={{ minWidth: 28, textAlign: 'right', fontSize: 12, opacity: 0.7 }}>
+              {outlineAlphaDraft}
+            </span>
+          </div>
+        </Field>
+
+        <Field label="Pixmap">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+            {snap.pixMap ? (
+              <img
+                src={snap.pixMap}
+                alt="label pixmap"
+                style={{ maxWidth: '100%', border: '1px solid var(--border, #444)', borderRadius: 3 }}
+              />
+            ) : (
+              <span className="hint">No pixmap stored</span>
+            )}
+            <button onClick={handleRegeneratePixmap} style={{ alignSelf: 'flex-start' }}>
+              Regenerate pixmap
+            </button>
+          </div>
+        </Field>
+      </>}
     </div>
   );
 }

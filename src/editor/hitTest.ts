@@ -1,6 +1,6 @@
 import type { MapRenderer } from 'mudlet-map-renderer';
 import type { MudletMap } from '../mapIO';
-import type { Direction, LabelResizeHandle } from './types';
+import type { Direction, HitItem, LabelResizeHandle } from './types';
 import type { EditorMapReader } from './reader/EditorMapReader';
 
 /**
@@ -29,6 +29,86 @@ export function labelAt(
     }
   }
   return hit;
+}
+
+/**
+ * Like labelAt but returns ALL labels whose rect contains (mapX, mapY), in
+ * draw order (topmost — last in the list — is last in the returned array).
+ */
+export function allLabelsAt(
+  areaId: number,
+  z: number,
+  mapX: number,
+  mapY: number,
+  reader: EditorMapReader,
+): { id: number; areaId: number }[] {
+  const area = reader.getArea(areaId);
+  if (!area) return [];
+  const plane = area.getPlane(z);
+  if (!plane) return [];
+  const labels = plane.getLabels();
+  const hits: { id: number; areaId: number }[] = [];
+  for (const label of labels) {
+    const rx = label.X;
+    const ry = -label.Y;
+    if (mapX >= rx && mapX <= rx + label.Width && mapY >= ry && mapY <= ry + label.Height) {
+      hits.push({ id: label.labelId ?? label.id, areaId });
+    }
+  }
+  return hits;
+}
+
+/**
+ * Returns ALL elements under (mapX, mapY) in visual-priority order:
+ *   1. All rooms occupying the same grid cell (stacked rooms)
+ *   2. All overlapping labels (topmost first)
+ *   3. Custom line (if any)
+ *   4. Exit (if any)
+ * Used for Alt+click cycling and the right-click disambiguate menu.
+ */
+export function allHitsAt(
+  renderer: MapRenderer,
+  map: MudletMap,
+  areaId: number,
+  z: number,
+  mapX: number,
+  mapY: number,
+  roomSize: number,
+  reader: EditorMapReader,
+): HitItem[] {
+  const hits: HitItem[] = [];
+
+  // Rooms: find the primary hit via the renderer spatial index, then collect
+  // every room in the area/z that shares the same raw grid cell.
+  const primaryHit = (renderer.backend as any).culling?.findRoomAtMapPoint?.(mapX, mapY) as
+    | { id: number }
+    | null
+    | undefined;
+  if (primaryHit) {
+    const primary = map.rooms[primaryHit.id];
+    if (primary && primary.area === areaId && primary.z === z) {
+      for (const [idStr, room] of Object.entries(map.rooms)) {
+        if (room && room.area === areaId && room.z === z && room.x === primary.x && room.y === primary.y) {
+          hits.push({ kind: 'room', id: Number(idStr) });
+        }
+      }
+    }
+  }
+
+  // Labels: topmost first (reverse draw order).
+  const lblHits = allLabelsAt(areaId, z, mapX, mapY, reader);
+  for (let i = lblHits.length - 1; i >= 0; i--) {
+    hits.push({ kind: 'label', id: lblHits[i].id, areaId: lblHits[i].areaId });
+  }
+
+  // Custom lines, then exits.
+  const cl = customLineAt(renderer, mapX, mapY, roomSize);
+  if (cl) hits.push({ kind: 'customLine', roomId: cl.roomId, exitName: cl.exitName });
+
+  const exit = exitAt(renderer, mapX, mapY, roomSize);
+  if (exit) hits.push({ kind: 'exit', fromId: exit.fromId, toId: exit.toId, dir: exit.dir });
+
+  return hits;
 }
 
 /**

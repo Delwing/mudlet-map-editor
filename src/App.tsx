@@ -4,7 +4,7 @@ import { SidePanel } from './components/SidePanel';
 import { ContextMenu } from './components/ContextMenu';
 import { store, useEditorState } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
-import { buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
+import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import type { Command, ToolId } from './editor/types';
 
@@ -209,16 +209,23 @@ export default function App() {
         e.preventDefault();
         const step = (e.shiftKey ? 5 : 1) * s.gridStep;
         const nudge = NUDGE[e.key];
+        const dx = nudge.dx * step;
+        const dy = nudge.dy * step;
         const from = { x: room.x, y: room.y, z: room.z };
-        const nextX = room.x + nudge.dx * step;
-        const nextY = room.y + nudge.dy * step;
-        // reader.moveRoom expects render coords (Y-flipped); pass -nextY.
-        sceneRef.current?.reader.moveRoom(selId, nextX, -nextY, room.z);
+        // Build custom line commands before moving (captures current positions as 'previous')
+        const clCmds = buildCustomLineMoveCommands(s.map, selId, dx, dy);
+        // reader.moveRoom expects render coords (Y-flipped); pass -(room.y + dy).
+        sceneRef.current?.reader.moveRoom(selId, room.x + dx, -(room.y + dy), room.z);
         const to = { x: room.x, y: room.y, z: room.z };
-        store.setState((st) => ({
-          undo: [...st.undo, { kind: 'moveRoom', id: selId, from, to }],
-          redo: [],
-        }));
+        // Apply custom line translations
+        for (const cmd of clCmds) {
+          if (cmd.kind === 'setCustomLine') {
+            sceneRef.current?.reader.setCustomLine(cmd.roomId, cmd.exitName, cmd.data.points, cmd.data.color, cmd.data.style, cmd.data.arrow);
+          }
+        }
+        const moveCmd: Command = { kind: 'moveRoom', id: selId, from, to };
+        const undoCmd: Command = clCmds.length > 0 ? { kind: 'batch', cmds: [moveCmd, ...clCmds] } : moveCmd;
+        store.setState((st) => ({ undo: [...st.undo, undoCmd], redo: [] }));
         sceneRef.current?.refresh();
         store.bumpData();
         store.setState({ status: `Moved room ${selId} → (${room.x}, ${room.y}, ${room.z})` });

@@ -32,6 +32,8 @@ export type LabelSnapshot = {
   outlineColor?: MudletColor;
   /** Base64 PNG data URL, or empty string if no pixmap. */
   pixMap: string;
+  /** Original image data URL set by the user (editor-only, not persisted to .dat). */
+  imageSrc?: string;
 };
 
 export type ToolId = 'select' | 'connect' | 'addRoom' | 'delete' | 'pan' | 'customLine' | 'addLabel';
@@ -91,6 +93,12 @@ export function normalizeCustomLineKey(name: string): string {
   return trimmed;
 }
 
+export type HitItem =
+  | { kind: 'room'; id: number }
+  | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
+  | { kind: 'customLine'; roomId: number; exitName: string }
+  | { kind: 'label'; id: number; areaId: number };
+
 export type Selection =
   | { kind: 'room'; ids: number[] }
   | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
@@ -114,6 +122,8 @@ export type PendingDrag = {
   /** Render-space offset from room centre to click point, to avoid jump on drag start. */
   offsetX: number;
   offsetY: number;
+  /** Custom line waypoints at drag start for all dragged rooms, for live translation, cancel restore, and undo. */
+  customLineSnapshots?: ({ roomId: number; exitName: string } & CustomLineSnapshot)[];
 };
 
 export type PendingConnect = {
@@ -289,6 +299,7 @@ export type Command =
   | { kind: 'setLabelFont'; areaId: number; id: number; from: LabelFont; to: LabelFont }
   | { kind: 'setLabelOutlineColor'; areaId: number; id: number; from: MudletColor | undefined; to: MudletColor | undefined }
   | { kind: 'setLabelPixmap'; areaId: number; id: number; from: string; to: string }
+  | { kind: 'setLabelImageSrc'; areaId: number; id: number; from: string | undefined; to: string | undefined }
   | { kind: 'resizeLabel'; areaId: number; id: number; fromPos: [number, number, number]; toPos: [number, number, number]; fromSize: [number, number]; toSize: [number, number] }
   | { kind: 'batch'; cmds: Command[] };
 

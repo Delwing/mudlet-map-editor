@@ -299,6 +299,11 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pixMap = cmd.to; }
       return { structural: false };
     }
+    case 'setLabelImageSrc': {
+      if (reader) reader.setLabelImageSrc(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.imageSrc = cmd.to; }
+      return { structural: false };
+    }
     case 'resizeLabel': {
       if (reader) {
         reader.moveLabel(cmd.areaId, cmd.id, cmd.toPos[0], -cmd.toPos[1]);
@@ -621,6 +626,11 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pixMap = cmd.from; }
       return { structural: false };
     }
+    case 'setLabelImageSrc': {
+      if (reader) reader.setLabelImageSrc(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.imageSrc = cmd.from; }
+      return { structural: false };
+    }
     case 'resizeLabel': {
       if (reader) {
         reader.moveLabel(cmd.areaId, cmd.id, cmd.fromPos[0], -cmd.fromPos[1]);
@@ -684,6 +694,29 @@ export function redoOnce(scene?: SceneHandle | null): { changed: boolean; struct
     redo: s.redo.slice(0, -1),
   }));
   return { changed: true, structural };
+}
+
+/** Build setCustomLine commands that translate all waypoints of a room's custom lines by (dx, dy) in raw Mudlet space (y-up). */
+export function buildCustomLineMoveCommands(map: MudletMap, roomId: number, dx: number, dy: number): Command[] {
+  if (dx === 0 && dy === 0) return [];
+  const room = map.rooms[roomId];
+  if (!room) return [];
+  const cmds: Command[] = [];
+  for (const exitName of Object.keys(room.customLines)) {
+    const points = room.customLines[exitName];
+    if (!points || points.length === 0) continue;
+    const color = room.customLinesColor?.[exitName] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+    const style = room.customLinesStyle?.[exitName] ?? 1;
+    const arrow = room.customLinesArrow?.[exitName] ?? false;
+    cmds.push({
+      kind: 'setCustomLine',
+      roomId,
+      exitName,
+      data: { points: points.map(([px, py]) => [px + dx, py + dy]) as [number, number][], color, style, arrow },
+      previous: { points: [...points] as [number, number][], color, style, arrow },
+    });
+  }
+  return cmds;
 }
 
 export function buildDeleteNeighborEdits(map: MudletMap, roomId: number): NeighborEdit[] {

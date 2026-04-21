@@ -282,6 +282,7 @@ function snapshotFromRawLabel(raw: any): LabelSnapshot {
     font: raw.font ? { ...raw.font } : { ...DEFAULT_LABEL_FONT },
     outlineColor: raw.outlineColor ? { ...raw.outlineColor } : undefined,
     pixMap: raw.pixMapBase64 ? `data:image/png;base64,${raw.pixMapBase64}` : '',
+    imageSrc: raw.imageSrc,
   };
 }
 
@@ -844,6 +845,13 @@ export class EditorMapReader {
     raw.pixMap = dataUrlToBuffer(dataUrl);
     raw.pixMapBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
     this.syncRendererLabels(areaId);
+  }
+
+  setLabelImageSrc(areaId: number, labelId: number, imageSrc: string | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.imageSrc = imageSrc;
+    // No renderer sync needed — imageSrc is editor-only metadata.
   }
 
   setLabelFont(areaId: number, labelId: number, font: LabelFont): void {

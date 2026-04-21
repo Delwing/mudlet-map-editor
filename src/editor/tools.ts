@@ -1,7 +1,7 @@
 import type { MapRenderer, Settings } from 'mudlet-map-renderer';
 import { clientToMap, snap } from './coords';
 import { pushCommand, buildDeleteNeighborEdits } from './commands';
-import { exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, labelAt, labelResizeHandleAt, roomAtCell } from './hitTest';
+import { allHitsAt, exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, labelAt, labelResizeHandleAt, roomAtCell } from './hitTest';
 import {
   createDefaultRoom,
   getExit,
@@ -12,7 +12,7 @@ import {
 } from './mapHelpers';
 import { store } from './store';
 import { DEFAULT_LABEL_FONT } from './types';
-import type { HoverTarget, ToolId } from './types';
+import type { HitItem, HoverTarget, Selection, ToolId } from './types';
 import type { SceneHandle } from './scene';
 
 export interface ToolContext {
@@ -118,6 +118,28 @@ export const selectTool: Tool = {
     const c = mapCoord(ctx, ev);
     const ac = activeContext();
 
+    // Alt+click: cycle through all overlapping elements at this cell.
+    if (ev.altKey) {
+      const hits = ac ? allHitsAt(ctx.renderer, ac.map, ac.areaId, ac.z, c.x, c.y, ctx.settings.roomSize, ctx.scene.reader) : [];
+      if (hits.length > 0) {
+        const cellX = Math.round(c.x);
+        const cellY = Math.round(c.y);
+        const cycle = s.hitCycle;
+        const sameCell = cycle && cycle.x === cellX && cycle.y === cellY;
+        const newIndex = sameCell ? (cycle.index + 1) % hits.length : 0;
+        const hit = hits[newIndex];
+        store.setState({
+          hitCycle: { x: cellX, y: cellY, index: newIndex },
+          selection: hitToSelection(hit),
+          sidebarTab: 'selection',
+          status: `Selected ${hitStatusLabel(hit)} (${newIndex + 1}/${hits.length})`,
+        });
+      }
+      return true;
+    }
+    // Any normal click resets the cycle.
+    store.setState({ hitCycle: null });
+
     // If a custom line is selected, check for waypoint handle hit first.
     if (s.selection?.kind === 'customLine' && ac) {
       const ptIdx = customLinePointAt(
@@ -196,7 +218,17 @@ export const selectTool: Tool = {
       }
     }
 
-    const room = roomUnder(ctx, ev);
+    let room = roomUnder(ctx, ev);
+    // When rooms are stacked at the same cell, prefer any selected room at that cell
+    // so Alt+click-then-drag (single) and multi-drag both operate on the chosen rooms.
+    if (room && s.selection?.kind === 'room') {
+      const hit = room;
+      const selId = s.selection.ids.find(id => {
+        const r = ctx.scene.getRenderRoom(id);
+        return r && r.x === hit.x && r.y === hit.y;
+      });
+      if (selId != null) room = ctx.scene.getRenderRoom(selId) ?? room;
+    }
     if (room) {
       const raw = s.map?.rooms[room.id];
       if (!raw) return true;
@@ -226,9 +258,27 @@ export const selectTool: Tool = {
             })
         : undefined;
 
+      const allDragIds = [room.id, ...(multiOrigins?.map(o => o.id) ?? [])];
+      const customLineSnapshots: NonNullable<import('./types').PendingDrag['customLineSnapshots']> = [];
+      for (const id of allDragIds) {
+        const r = s.map?.rooms[id];
+        if (!r) continue;
+        for (const exitName of Object.keys(r.customLines ?? {})) {
+          const pts = r.customLines[exitName];
+          if (!pts || pts.length === 0) continue;
+          customLineSnapshots.push({
+            roomId: id,
+            exitName,
+            points: pts.map(p => [p[0], p[1]]) as [number, number][],
+            color: r.customLinesColor?.[exitName] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 },
+            style: r.customLinesStyle?.[exitName] ?? 1,
+            arrow: r.customLinesArrow?.[exitName] ?? false,
+          });
+        }
+      }
       store.setState({
         selection: isInMultiSel ? (currentSel as NonNullable<typeof currentSel>) : { kind: 'room', ids: [room.id] },
-        pending: { kind: 'drag', roomId: room.id, originX: raw.x, originY: raw.y, multiOrigins, offsetX: c.x - room.x, offsetY: c.y - room.y },
+        pending: { kind: 'drag', roomId: room.id, originX: raw.x, originY: raw.y, multiOrigins, offsetX: c.x - room.x, offsetY: c.y - room.y, ...(customLineSnapshots.length ? { customLineSnapshots } : {}) },
       });
       ctx.container.setPointerCapture(ev.pointerId);
       return true;
@@ -313,15 +363,15 @@ export const selectTool: Tool = {
     if (s.pending?.kind === 'labelResize') {
       const c = mapCoord(ctx, ev);
       const p = s.pending;
-      const nb = computeResizeBounds(p.handle, p.originPos[0], -p.originPos[1], p.originSize[0], p.originSize[1], c.x, c.y);
+      const lockedRatio = s.labelAspectRatioLocked && p.originSize[1] > 0 ? p.originSize[0] / p.originSize[1] : undefined;
+      const nb = computeResizeBounds(p.handle, p.originPos[0], -p.originPos[1], p.originSize[0], p.originSize[1], c.x, c.y, lockedRatio);
       const current = ctx.scene.reader.getLabelSnapshot(p.areaId, p.labelId);
       const changed = !current || nb.x !== current.pos[0] || nb.y !== -current.pos[1]
         || nb.w !== current.size[0] || nb.h !== current.size[1];
       if (changed) {
         ctx.scene.reader.moveLabel(p.areaId, p.labelId, nb.x, nb.y);
         ctx.scene.reader.setLabelSize(p.areaId, p.labelId, nb.w, nb.h);
-        ctx.refresh();
-        store.bumpData();
+        ctx.scene.refresh();
       }
       return true;
     }
@@ -345,6 +395,15 @@ export const selectTool: Tool = {
         for (const { id } of s.pending.multiOrigins) {
           const r = ctx.scene.getRenderRoom(id);
           if (r) ctx.scene.reader.moveRoom(id, r.x + dx, r.y + dy, r.z);
+        }
+      }
+      if (s.pending.customLineSnapshots?.length) {
+        // Total raw-space delta from origin (render x = raw x; render y = -raw y)
+        const dxRaw = target.x - s.pending.originX;
+        const dyRaw = -target.y - s.pending.originY;
+        for (const snap of s.pending.customLineSnapshots) {
+          const newPts = snap.points.map(([px, py]) => [px + dxRaw, py + dyRaw] as [number, number]);
+          ctx.scene.reader.setCustomLine(snap.roomId, snap.exitName, newPts, snap.color, snap.style, snap.arrow);
         }
       }
       ctx.refresh();
@@ -447,6 +506,7 @@ export const selectTool: Tool = {
           redo: [],
           status: `Resized label ${pending.labelId}`,
         }));
+        store.bumpData();
       }
       store.setState({ pending: null });
       return true;
@@ -470,11 +530,30 @@ export const selectTool: Tool = {
           }
         }
       }
+      if (pending.customLineSnapshots) {
+        for (const snap of pending.customLineSnapshots) {
+          const room = s.map.rooms[snap.roomId];
+          if (!room) continue;
+          const curPts = room.customLines[snap.exitName];
+          if (!curPts) continue;
+          const changed = curPts.length !== snap.points.length || curPts.some((p, i) => p[0] !== snap.points[i][0] || p[1] !== snap.points[i][1]);
+          if (changed) {
+            cmds.push({
+              kind: 'setCustomLine',
+              roomId: snap.roomId,
+              exitName: snap.exitName,
+              data: { points: [...curPts] as [number, number][], color: snap.color, style: snap.style, arrow: snap.arrow },
+              previous: { points: snap.points, color: snap.color, style: snap.style, arrow: snap.arrow },
+            });
+          }
+        }
+      }
+      const roomMoveCount = cmds.filter(c => c.kind === 'moveRoom').length;
       const cmd = cmds.length === 1 ? cmds[0] : { kind: 'batch' as const, cmds };
       store.setState((st) => ({ undo: [...st.undo, cmd], redo: [] }));
       store.setState({
-        status: cmds.length > 1
-          ? `Moved ${cmds.length} rooms`
+        status: roomMoveCount > 1
+          ? `Moved ${roomMoveCount} rooms`
           : `Moved room ${pending.roomId} → (${raw.x}, ${raw.y}, ${raw.z})`,
       });
     }
@@ -485,7 +564,24 @@ export const selectTool: Tool = {
     const s = store.getState();
     if (!s.map) return false;
 
-    // Room under cursor → show room context menu.
+    const c = mapCoord(ctx, ev);
+    const ac = activeContext();
+
+    // Multiple elements overlap → show disambiguate menu so the user can pick.
+    // Exits are excluded: they have no context menu, so a room+exit combo should
+    // just show the room menu directly.
+    if (ac) {
+      const hits = allHitsAt(ctx.renderer, ac.map, ac.areaId, ac.z, c.x, c.y, ctx.settings.roomSize, ctx.scene.reader)
+        .filter(h => h.kind !== 'exit');
+      if (hits.length > 1) {
+        store.setState({
+          contextMenu: { kind: 'disambiguate', hits, screenX: ev.clientX, screenY: ev.clientY },
+        });
+        return true;
+      }
+    }
+
+    // Single element: existing behavior.
     const roomHit = roomUnder(ctx, ev);
     if (roomHit) {
       store.setState({
@@ -500,7 +596,6 @@ export const selectTool: Tool = {
     }
 
     if (s.selection?.kind !== 'customLine') return false;
-    const c = mapCoord(ctx, ev);
     const sel = s.selection;
     const rawRoom = s.map.rooms[sel.roomId];
     const points = rawRoom?.customLines?.[sel.exitName];
@@ -562,6 +657,11 @@ export const selectTool: Tool = {
         for (const { id, x, y } of s.pending.multiOrigins) {
           const r = s.map.rooms[id];
           if (r) ctx.scene.reader.moveRoom(id, x, -y, r.z);
+        }
+      }
+      if (s.pending.customLineSnapshots) {
+        for (const snap of s.pending.customLineSnapshots) {
+          ctx.scene.reader.setCustomLine(snap.roomId, snap.exitName, snap.points, snap.color, snap.style, snap.arrow);
         }
       }
       ctx.refresh();
@@ -1032,6 +1132,7 @@ function computeResizeBounds(
   handle: import('./types').LabelResizeHandle,
   lx: number, ly: number, lw: number, lh: number,
   cx: number, cy: number,
+  lockedRatio?: number,
 ): { x: number; y: number; w: number; h: number } {
   let left = lx, right = lx + lw, top = ly, bottom = ly + lh;
   switch (handle) {
@@ -1044,10 +1145,48 @@ function computeResizeBounds(
     case 'sw': left = cx; bottom = cy; break;
     case 'w':  left = cx; break;
   }
-  const x = Math.min(left, right);
-  const y = Math.min(top, bottom);
-  const w = Math.max(0.1, Math.abs(right - left));
-  const h = Math.max(0.1, Math.abs(bottom - top));
+  let x = Math.min(left, right);
+  let y = Math.min(top, bottom);
+  let w = Math.max(0.1, Math.abs(right - left));
+  let h = Math.max(0.1, Math.abs(bottom - top));
+
+  if (lockedRatio && lockedRatio > 0) {
+    switch (handle) {
+      case 'e': case 'w':
+        h = w / lockedRatio;
+        break;
+      case 'n': case 's':
+        w = h * lockedRatio;
+        break;
+      case 'nw': {
+        const dw = Math.abs(w - lw), dh = Math.abs(h - lh);
+        if (dw >= dh) { h = w / lockedRatio; y = (ly + lh) - h; }
+        else { w = h * lockedRatio; x = (lx + lw) - w; }
+        break;
+      }
+      case 'ne': {
+        const dw = Math.abs(w - lw), dh = Math.abs(h - lh);
+        if (dw >= dh) { h = w / lockedRatio; y = (ly + lh) - h; }
+        else { w = h * lockedRatio; }
+        break;
+      }
+      case 'se': {
+        const dw = Math.abs(w - lw), dh = Math.abs(h - lh);
+        if (dw >= dh) { h = w / lockedRatio; }
+        else { w = h * lockedRatio; }
+        break;
+      }
+      case 'sw': {
+        const dw = Math.abs(w - lw), dh = Math.abs(h - lh);
+        if (dw >= dh) { h = w / lockedRatio; }
+        else { w = h * lockedRatio; x = (lx + lw) - w; }
+        break;
+      }
+    }
+    w = Math.max(0.1, w);
+    h = Math.max(0.1, h);
+  }
+
   return { x, y, w, h };
 }
 
@@ -1137,6 +1276,24 @@ export const TOOLS: Record<ToolId, Tool> = {
   customLine: customLineTool,
   addLabel: addLabelTool,
 };
+
+export function hitToSelection(hit: HitItem): Selection {
+  switch (hit.kind) {
+    case 'room': return { kind: 'room', ids: [hit.id] };
+    case 'label': return { kind: 'label', id: hit.id, areaId: hit.areaId };
+    case 'customLine': return { kind: 'customLine', roomId: hit.roomId, exitName: hit.exitName };
+    case 'exit': return { kind: 'exit', fromId: hit.fromId, toId: hit.toId, dir: hit.dir };
+  }
+}
+
+export function hitStatusLabel(hit: HitItem): string {
+  switch (hit.kind) {
+    case 'room': return `room ${hit.id}`;
+    case 'label': return `label ${hit.id}`;
+    case 'customLine': return `custom line '${hit.exitName}' on room ${hit.roomId}`;
+    case 'exit': return `exit ${hit.dir} (${hit.fromId}→${hit.toId})`;
+  }
+}
 
 function updateHover(ctx: ToolContext, ev: PointerEvent) {
   const ac = activeContext();

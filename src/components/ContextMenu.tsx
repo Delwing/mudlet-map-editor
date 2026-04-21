@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { store, useEditorState } from '../editor/store';
-import { pushCommand, buildDeleteNeighborEdits, pushBatch } from '../editor/commands';
+import { pushCommand, buildDeleteNeighborEdits, pushBatch, buildCustomLineMoveCommands } from '../editor/commands';
+import { hitToSelection, hitStatusLabel } from '../editor/tools';
+import type { HitItem } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 
 interface ContextMenuProps {
@@ -70,6 +72,61 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       status: `Removed waypoint from '${menu.exitName}' on room ${menu.roomId}`,
     });
   };
+
+  // ── Disambiguate menu ─────────────────────────────────────────────────────
+
+  if (menu.kind === 'disambiguate') {
+    const s = store.getState();
+    const selectHit = (hit: HitItem) => {
+      if (hit.kind === 'room') {
+        // Transition directly to the room context menu so the user can act on it.
+        store.setState({
+          selection: hitToSelection(hit),
+          contextMenu: { kind: 'room', roomId: hit.id, screenX: menu.screenX, screenY: menu.screenY },
+          sidebarTab: 'selection',
+        });
+      } else {
+        store.setState({
+          selection: hitToSelection(hit),
+          contextMenu: null,
+          sidebarTab: 'selection',
+          status: `Selected ${hitStatusLabel(hit)}`,
+        });
+      }
+    };
+    const displayLabel = (hit: HitItem): string => {
+      if (hit.kind === 'room') {
+        const name = s.map?.rooms[hit.id]?.name;
+        return name ? `Room ${hit.id}: ${name}` : `Room ${hit.id}`;
+      }
+      if (hit.kind === 'label') {
+        const snap = sceneRef.current?.reader.getLabelSnapshot(hit.areaId, hit.id);
+        const text = snap?.text?.trim();
+        return text ? `Label: "${text.length > 24 ? text.slice(0, 24) + '…' : text}"` : `Label ${hit.id}`;
+      }
+      return hitStatusLabel(hit);
+    };
+    return (
+      <div
+        ref={ref}
+        className="context-menu"
+        style={{ left: menu.screenX, top: menu.screenY }}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <div className="context-menu-title">Select</div>
+        {menu.hits.map((hit, i) => (
+          <button
+            key={i}
+            type="button"
+            className="context-menu-item"
+            onClick={() => selectHit(hit)}
+          >
+            {displayLabel(hit)}
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   if (menu.kind === 'customLinePoint') {
     return (
@@ -164,6 +221,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
             to: { x: toX, y: toY, z: toZ },
           });
         }
+        cmds.push(...buildCustomLineMoveCommands(s.map, id, dx, dy));
       }
     } else {
       if (moveToDialog.areaId !== raw.area) {
@@ -174,6 +232,8 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
           toAreaId: moveToDialog.areaId,
         });
       }
+      const dx = newX - raw.x;
+      const dy = newY - raw.y;
       if (newX !== raw.x || newY !== raw.y || newZ !== raw.z) {
         cmds.push({
           kind: 'moveRoom' as const,
@@ -182,6 +242,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
           to: { x: newX, y: newY, z: newZ },
         });
       }
+      cmds.push(...buildCustomLineMoveCommands(s.map, menu.roomId, dx, dy));
     }
 
     if (cmds.length > 0) {
