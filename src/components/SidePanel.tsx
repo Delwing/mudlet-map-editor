@@ -6,6 +6,7 @@ import { HistoryPanel } from './panels/HistoryPanel';
 import { MapPanel } from './panels/MapPanel';
 import { ExitPanel } from './panels/ExitPanel';
 import { CustomLineDrawPanel, CustomLineSelectPanel } from './panels/CustomLinePanel';
+import { LabelPanel } from './panels/LabelPanel';
 import { RoomPanel } from './RoomPanel';
 import { ToolHint } from './panelShared';
 
@@ -99,6 +100,15 @@ export function SidePanel({ sceneRef }: SidePanelProps) {
       <div className="side-panel">
         {tabBar}
         <MapPanel sceneRef={sceneRef} />
+      </div>
+    );
+  }
+
+  if (selection?.kind === 'label') {
+    return (
+      <div className="side-panel">
+        {tabBar}
+        <LabelPanel selection={selection} sceneRef={sceneRef} />
       </div>
     );
   }

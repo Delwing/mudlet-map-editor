@@ -1,6 +1,8 @@
 import type { MudletMap, MudletRoom, MudletColor } from '../../mapIO';
+import type { LabelSnapshot } from '../types';
 import { buildRendererInput } from '../../mapIO';
-import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, type Direction } from '../types';
+import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelFont } from '../types';
+import { generateLabelPixmap, dataUrlToBuffer } from '../labelPixmap';
 
 /** Editor-side Exit — mirrors the renderer's Exit type. */
 export interface EditorExit {
@@ -88,8 +90,8 @@ function makeLiveRoom(id: number, raw: MudletRoom): LiveRoom {
     get() {
       const out: Record<string, number> = {};
       for (const dir of CARDINAL_DIRECTIONS) {
-        const v = (raw as any)[dir] as number;
-        if (typeof v === 'number' && v !== -1) out[dir] = v;
+        const v = (raw as any)[dir] as number | undefined;
+        if (v !== undefined && v !== -1) out[dir] = v;
       }
       return out;
     },
@@ -187,6 +189,103 @@ function buildExitsFor(rooms: LiveRoom[]): Map<string, EditorExit> {
   return out;
 }
 
+/** Convert a Buffer pixMap to bare base64 (no data-URL prefix). */
+function bufferToBase64(buf: any): string {
+  if (!buf || buf.length === 0) return '';
+  // Already a string — strip any accidental data-URL prefix.
+  if (typeof buf === 'string') return buf.includes(',') ? buf.split(',')[1] : buf;
+  try { return buf.toString('base64'); } catch { return ''; }
+}
+
+/**
+ * Ensure a raw label has its pixMapBase64 field populated.
+ * Called once at load time and whenever the pixmap changes.
+ * pixMapBase64 is a bare base64 string (no data:image/png;base64, prefix).
+ * The renderer receives it directly; getLabelSnapshot prepends the prefix for <img>.
+ */
+function ensurePixMapBase64(l: any): void {
+  if (l.pixMapBase64 === undefined) {
+    l.pixMapBase64 = bufferToBase64(l.pixMap);
+  }
+}
+
+/**
+ * Mudlet can't store label font/outlineColor in the binary format yet, so it
+ * serializes them into area userData as:
+ *   system.labelFont_N      → "family|pointSize|weight|italic"
+ *   system.labelOutlineColor_N → "r|g|b|alpha"
+ * Read those entries and populate the raw label's font/outlineColor fields.
+ */
+function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string, string>): void {
+  const id = rawLabel.id;
+  if (!rawLabel.font) {
+    const fontValue = areaUserData[`system.labelFont_${id}`];
+    if (fontValue) {
+      const parts = fontValue.split('|');
+      if (parts.length >= 4) {
+        const pointSize = parseInt(parts[1], 10);
+        const weight = parseInt(parts[2], 10);
+        // Qt5 weight range 0–99 (bold≥63); Qt6 range 100–900 (bold≥600).
+        const bold = weight < 100 ? weight >= 63 : weight >= 600;
+        rawLabel.font = {
+          family: parts[0] || DEFAULT_LABEL_FONT.family,
+          size: isNaN(pointSize) || pointSize <= 0 ? DEFAULT_LABEL_FONT.size : pointSize,
+          bold,
+          italic: parts[3] === '1',
+          underline: false,
+          strikeout: false,
+        };
+      }
+    }
+  }
+  const outlineValue = areaUserData[`system.labelOutlineColor_${id}`];
+  if (outlineValue) {
+    const parts = outlineValue.split('|');
+    if (parts.length >= 4) {
+      rawLabel.outlineColor = {
+        r: parseInt(parts[0], 10),
+        g: parseInt(parts[1], 10),
+        b: parseInt(parts[2], 10),
+        alpha: parseInt(parts[3], 10),
+      };
+    }
+  }
+}
+
+/** Write label font/outlineColor back into area userData so the binary map round-trips correctly. */
+function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, string>): void {
+  const id = rawLabel.id;
+  const font = rawLabel.font as LabelFont | undefined;
+  if (font?.family) {
+    const weight = font.bold ? 75 : 50;
+    areaUserData[`system.labelFont_${id}`] = `${font.family}|${font.size}|${weight}|${font.italic ? 1 : 0}`;
+  }
+  if (rawLabel.outlineColor) {
+    const { r, g, b, alpha } = rawLabel.outlineColor;
+    areaUserData[`system.labelOutlineColor_${id}`] = `${r}|${g}|${b}|${alpha}`;
+  } else {
+    // Write default transparent outline so Mudlet always has the entry.
+    areaUserData[`system.labelOutlineColor_${id}`] = '0|0|0|0';
+  }
+}
+
+function snapshotFromRawLabel(raw: any): LabelSnapshot {
+  return {
+    id: raw.id,
+    pos: [...raw.pos] as [number, number, number],
+    size: [...raw.size] as [number, number],
+    text: raw.text ?? '',
+    fgColor: { ...raw.fgColor },
+    bgColor: { ...raw.bgColor },
+    noScaling: raw.noScaling ?? false,
+    showOnTop: raw.showOnTop ?? false,
+    font: raw.font ? { ...raw.font } : { ...DEFAULT_LABEL_FONT },
+    outlineColor: raw.outlineColor ? { ...raw.outlineColor } : undefined,
+    pixMap: raw.pixMapBase64 ? `data:image/png;base64,${raw.pixMapBase64}` : '',
+  };
+}
+
+
 export class EditorPlane {
   constructor(private rooms: LiveRoom[], private labels: any[]) {}
 
@@ -212,6 +311,7 @@ export class EditorPlane {
   }
 
   setRooms(rooms: LiveRoom[]) { this.rooms = rooms; }
+  setLabels(labels: any[]) { this.labels = labels; }
 }
 
 export class EditorArea {
@@ -258,6 +358,13 @@ export class EditorArea {
     return Array.from(this.exits.values()).filter(e => e.zIndex.includes(zIndex));
   }
 
+  setLabels(labels: any[]): void {
+    this.labels = labels;
+    this.rebuildPlanes();
+    this.markDirty();
+  }
+
+
   addRoomLive(room: LiveRoom): void {
     this.rooms.push(room);
     this.rebuildPlanes();
@@ -267,6 +374,13 @@ export class EditorArea {
 
   removeRoomById(id: number): void {
     this.rooms = this.rooms.filter(r => r.id !== id);
+    this.rebuildPlanes();
+    this.rebuildExits();
+    this.markDirty();
+  }
+
+  removeRoomsById(ids: Set<number>): void {
+    this.rooms = this.rooms.filter(r => !ids.has(r.id));
     this.rebuildPlanes();
     this.rebuildExits();
     this.markDirty();
@@ -327,7 +441,7 @@ export class EditorMapReader {
 
   constructor(private readonly raw: MudletMap) {
     // Reuse binary reader's color generation (pure, no room cloning).
-    const { colors: colorEntries, mapData } = buildRendererInput(raw);
+    const { colors: colorEntries } = buildRendererInput(raw);
     for (const c of colorEntries) {
       this.colors[c.envId] = {
         rgb: c.colors,
@@ -335,13 +449,6 @@ export class EditorMapReader {
         symbolColor: calculateLuminance(c.colors) > 0.41 ? [25, 25, 25] : [225, 255, 255],
         symbolColorValue: calculateLuminance(c.colors) > 0.41 ? 'rgb(25,25,25)' : 'rgb(225,255,255)',
       };
-    }
-
-    // Build live rooms + areas. Labels come from readerExport as MVP — they're
-    // not edited yet, so a one-shot conversion is fine.
-    const labelsByArea = new Map<number, any[]>();
-    for (const area of mapData) {
-      labelsByArea.set(Number(area.areaId), area.labels);
     }
 
     for (const [areaIdStr, areaData] of Object.entries(raw.areas)) {
@@ -354,13 +461,44 @@ export class EditorMapReader {
         this.rooms[roomId] = live;
         areaRooms.push(live);
       }
+      const rawLabels = (raw.labels?.[areaId] as any[]) ?? [];
+      const areaUserData: Record<string, string> = (raw.areas[areaId]?.userData as any) ?? {};
+      // One-time Buffer→base64 conversion and font/outlineColor hydration from area userData.
+      for (const l of rawLabels) {
+        ensurePixMapBase64(l);
+        hydrateLabelFromAreaUserData(l, areaUserData);
+      }
       this.areas[areaId] = new EditorArea(
         areaId,
         raw.areaNames[areaId] ?? `Area ${areaId}`,
         areaRooms,
-        labelsByArea.get(areaId) ?? [],
+        rawLabels.map(l => this.toRendererLabel(l, areaId)),
       );
     }
+  }
+
+  private toRendererLabel(l: any, areaId: number): any {
+    return {
+      id: l.id,
+      labelId: l.id,
+      areaId,
+      X: l.pos[0],
+      Y: l.pos[1],
+      Z: l.pos[2],
+      Width: l.size[0],
+      Height: l.size[1],
+      Text: l.text ?? '',
+      FgColor: { ...l.fgColor },
+      BgColor: { ...l.bgColor },
+      pixMap: l.pixMapBase64 ?? '',
+      noScaling: l.noScaling ?? false,
+      showOnTop: l.showOnTop ?? false,
+    };
+  }
+
+  private syncRendererLabels(areaId: number): void {
+    const converted = (this.raw.labels?.[areaId] as any[] ?? []).map(l => this.toRendererLabel(l, areaId));
+    this.areas[areaId]?.setLabels(converted);
   }
 
   // --- Read API (matches MapReader's surface) ---
@@ -634,6 +772,120 @@ export class EditorMapReader {
     if (color === null) delete this.colors[envId];
   }
 
+  getLabelSnapshot(areaId: number, labelId: number): LabelSnapshot | null {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    return raw ? snapshotFromRawLabel(raw) : null;
+  }
+
+  addLabel(areaId: number, snapshot: LabelSnapshot): void {
+    if (!this.raw.labels[areaId]) this.raw.labels[areaId] = [];
+    const dataUrl = snapshot.pixMap || generateLabelPixmap(snapshot);
+    const raw: any = {
+      id: snapshot.id,
+      labelId: snapshot.id,
+      areaId,
+      pos: [...snapshot.pos] as [number, number, number],
+      size: [...snapshot.size] as [number, number],
+      text: snapshot.text,
+      fgColor: { ...snapshot.fgColor },
+      bgColor: { ...snapshot.bgColor },
+      pixMap: dataUrlToBuffer(dataUrl),
+      pixMapBase64: dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl,
+      noScaling: snapshot.noScaling,
+      showOnTop: snapshot.showOnTop,
+      font: { ...snapshot.font },
+      outlineColor: snapshot.outlineColor ? { ...snapshot.outlineColor } : undefined,
+    };
+    this.raw.labels[areaId].push(raw);
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  removeLabel(areaId: number, labelId: number): void {
+    if (!this.raw.labels[areaId]) return;
+    this.raw.labels[areaId] = this.raw.labels[areaId].filter(l => l.id !== labelId);
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) {
+      delete areaUserData[`system.labelFont_${labelId}`];
+      delete areaUserData[`system.labelOutlineColor_${labelId}`];
+    }
+    this.syncRendererLabels(areaId);
+  }
+
+  /** Move a label. renderX/renderY are render-space (y-down); stored as raw Mudlet (y-up). */
+  moveLabel(areaId: number, labelId: number, renderX: number, renderY: number): void {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.pos[0] = renderX;
+    raw.pos[1] = -renderY;
+    this.syncRendererLabels(areaId);
+  }
+
+
+  setLabelText(areaId: number, labelId: number, text: string): void {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.text = text;
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelSize(areaId: number, labelId: number, width: number, height: number): void {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.size[0] = width;
+    raw.size[1] = height;
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelPixmap(areaId: number, labelId: number, dataUrl: string): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.pixMap = dataUrlToBuffer(dataUrl);
+    raw.pixMapBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelFont(areaId: number, labelId: number, font: LabelFont): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.font = { ...font };
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelOutlineColor(areaId: number, labelId: number, color: import('../../mapIO').MudletColor | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.outlineColor = color ? { ...color } : undefined;
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelNoScaling(areaId: number, labelId: number, noScaling: boolean): void {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.noScaling = noScaling;
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelShowOnTop(areaId: number, labelId: number, showOnTop: boolean): void {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.showOnTop = showOnTop;
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelColors(areaId: number, labelId: number, fg: MudletColor, bg: MudletColor): void {
+    const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.fgColor = { ...fg };
+    raw.bgColor = { ...bg };
+    this.syncRendererLabels(areaId);
+  }
+
   getAllEnvColors(): { envId: number; rgbValue: string }[] {
     return Object.entries(this.colors)
       .map(([id, c]) => ({ envId: Number(id), rgbValue: c.rgbValue }))
@@ -703,6 +955,28 @@ export class EditorMapReader {
       for (const otherArea of this.getAreas()) {
         if (otherArea !== area) otherArea.rebuildExits();
       }
+    }
+  }
+
+  /** Bulk-remove many rooms. Caller must have already severed neighbor exits in raw map.
+   *  Does one rebuildPlanes/rebuildExits per affected area instead of one per room. */
+  removeRooms(ids: number[]): void {
+    const deletedSet = new Set(ids);
+    const affectedAreaIds = new Set<number>();
+    for (const id of ids) {
+      const rawRoom = this.raw.rooms[id];
+      if (!rawRoom) continue;
+      affectedAreaIds.add(rawRoom.area);
+      delete this.raw.rooms[id];
+      delete this.rooms[id];
+    }
+    for (const areaId of affectedAreaIds) {
+      const rawArea = this.raw.areas[areaId];
+      if (rawArea) rawArea.rooms = rawArea.rooms.filter(r => !deletedSet.has(r));
+      this.areas[areaId]?.removeRoomsById(deletedSet);
+    }
+    for (const otherArea of this.getAreas()) {
+      if (!affectedAreaIds.has(otherArea.getAreaId())) otherArea.rebuildExits();
     }
   }
 }

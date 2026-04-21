@@ -25,6 +25,22 @@ export function Field({ label, children }: { label: string; children: React.Reac
   );
 }
 
+export function CheckboxField({ label, checked, onChange, description }: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  description: string;
+}) {
+  return (
+    <Field label={label}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <span>{description}</span>
+      </label>
+    </Field>
+  );
+}
+
 export function ToolHint({ activeTool }: { activeTool: string }) {
   const hints: Record<string, string> = {
     select: 'Click a room to select. Drag to move. Arrow keys nudge.',
@@ -34,6 +50,7 @@ export function ToolHint({ activeTool }: { activeTool: string }) {
     delete: 'Click a room to delete it.',
     pan: 'Drag to pan. Hold Space with any tool for temporary pan.',
     customLine: 'Click to add waypoints. Double-click or Enter to finish.',
+    label: 'Click a label to select and edit its properties.',
   };
   return <p className="hint-tool">{hints[activeTool] ?? ''}</p>;
 }

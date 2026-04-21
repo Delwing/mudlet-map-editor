@@ -4,7 +4,7 @@ import { SidePanel } from './components/SidePanel';
 import { ContextMenu } from './components/ContextMenu';
 import { store, useEditorState } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
-import { buildDeleteNeighborEdits, pushCommand, redoOnce, undoOnce } from './editor/commands';
+import { buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import type { Command, ToolId } from './editor/types';
 
@@ -14,8 +14,8 @@ const VIEW_INSETS = { top: 76, right: 464, bottom: 24, left: 24 };
 const TOOL_KEYS: Record<string, ToolId> = {
   '1': 'select',
   '2': 'connect',
-  '3': 'unlink',
-  '4': 'addRoom',
+  '3': 'addRoom',
+  '4': 'addLabel',
   '5': 'delete',
   '6': 'pan',
 };
@@ -93,11 +93,11 @@ export default function App() {
     const cursorByTool: Record<ToolId, string> = {
       select: 'default',
       connect: 'crosshair',
-      unlink: 'crosshair',
       addRoom: 'crosshair',
       delete: 'not-allowed',
       pan: 'grab',
       customLine: 'crosshair',  // activated from side panel, not toolbar
+      addLabel: 'crosshair',
     };
     el.style.cursor = cursorByTool[activeTool];
   }, [activeTool, spaceHeld, pending]);
@@ -243,6 +243,7 @@ export default function App() {
     if (sel.kind === 'room') {
       if (s.currentAreaId == null) return;
       if (sel.ids.length > 1) {
+        const neighborEditsMap = buildDeleteNeighborEditsForMany(s.map, sel.ids);
         const cmds: Command[] = [];
         for (const id of sel.ids) {
           const room = s.map.rooms[id];
@@ -252,7 +253,7 @@ export default function App() {
             id,
             room: { ...room },
             areaId: room.area,
-            neighborEdits: buildDeleteNeighborEdits(s.map, id),
+            neighborEdits: neighborEditsMap.get(id) ?? [],
           });
         }
         if (cmds.length === 0) return;
@@ -342,6 +343,16 @@ export default function App() {
       sceneRef.current?.refresh();
       store.bumpData();
       store.setState({ selection: null, status: `Removed custom line '${sel.exitName}'` });
+      return;
+    }
+
+    if (sel.kind === 'label') {
+      const snap = sceneRef.current?.reader.getLabelSnapshot(sel.areaId, sel.id);
+      if (!snap) return;
+      pushCommand({ kind: 'deleteLabel', areaId: sel.areaId, label: snap }, sceneRef.current);
+      sceneRef.current?.refresh();
+      store.bumpData();
+      store.setState({ selection: null, status: `Deleted label ${sel.id}` });
       return;
     }
   };

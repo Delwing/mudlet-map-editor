@@ -1,6 +1,72 @@
 import type { MapRenderer } from 'mudlet-map-renderer';
 import type { MudletMap } from '../mapIO';
-import type { Direction } from './types';
+import type { Direction, LabelResizeHandle } from './types';
+import type { EditorMapReader } from './reader/EditorMapReader';
+
+/**
+ * Hit-test map labels. Labels are axis-aligned rects. Returns the topmost label
+ * (last in the list, rendered on top) whose render-space rect contains (mapX, mapY).
+ * MapData.Label stores X/Y in Mudlet space; render position is (X, -Y).
+ */
+export function labelAt(
+  areaId: number,
+  z: number,
+  mapX: number,
+  mapY: number,
+  reader: EditorMapReader,
+): { id: number; areaId: number } | null {
+  const area = reader.getArea(areaId);
+  if (!area) return null;
+  const plane = area.getPlane(z);
+  if (!plane) return null;
+  const labels = plane.getLabels();
+  let hit: { id: number; areaId: number } | null = null;
+  for (const label of labels) {
+    const rx = label.X;
+    const ry = -label.Y;
+    if (mapX >= rx && mapX <= rx + label.Width && mapY >= ry && mapY <= ry + label.Height) {
+      hit = { id: label.labelId ?? label.id, areaId };
+    }
+  }
+  return hit;
+}
+
+/**
+ * 8 handle positions relative to a label's padded selection rect.
+ * Returns the handle under the cursor, or null.
+ * `hitRadius` is the capture radius in map units (typically 8px worth of units).
+ */
+export function labelResizeHandleAt(
+  bounds: { x: number; y: number; w: number; h: number },
+  mapX: number,
+  mapY: number,
+  hitRadius: number,
+): LabelResizeHandle | null {
+  const pad = 0.05;
+  const bx = bounds.x - pad;
+  const by = bounds.y - pad;
+  const bw = bounds.w + pad * 2;
+  const bh = bounds.h + pad * 2;
+  const r = Math.max(0.15, hitRadius);
+
+  const handles: [number, number, LabelResizeHandle][] = [
+    [bx,          by,          'nw'],
+    [bx + bw / 2, by,          'n'],
+    [bx + bw,     by,          'ne'],
+    [bx + bw,     by + bh / 2, 'e'],
+    [bx + bw,     by + bh,     'se'],
+    [bx + bw / 2, by + bh,     's'],
+    [bx,          by + bh,     'sw'],
+    [bx,          by + bh / 2, 'w'],
+  ];
+
+  let best: { handle: LabelResizeHandle; dist: number } | null = null;
+  for (const [hx, hy, id] of handles) {
+    const d = Math.hypot(mapX - hx, mapY - hy);
+    if (d <= r && (!best || d < best.dist)) best = { handle: id, dist: d };
+  }
+  return best?.handle ?? null;
+}
 
 /** Does any room occupy the exact raw grid cell (x, y, z) on the given area? */
 export function roomAtCell(

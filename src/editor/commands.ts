@@ -2,7 +2,7 @@ import type { MudletMap } from '../mapIO';
 import { store } from './store';
 import { findNeighborsPointingAt, getExit } from './mapHelpers';
 import type { Command, NeighborEdit } from './types';
-import { DIR_SHORT, DIR_INDEX } from './types';
+import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
 
 /**
@@ -241,7 +241,88 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       else { const r = map.rooms[cmd.roomId]; if (r) { if (cmd.to <= 1) delete r.exitWeights[cmd.name]; else r.exitWeights[cmd.name] = cmd.to; } }
       return { structural: false };
     }
+    case 'addLabel': {
+      if (reader) reader.addLabel(cmd.areaId, cmd.label);
+      else {
+        if (!map.labels[cmd.areaId]) map.labels[cmd.areaId] = [];
+        map.labels[cmd.areaId].push({ id: cmd.label.id, areaId: cmd.areaId, pos: [...cmd.label.pos], size: [...cmd.label.size], text: cmd.label.text, fgColor: { ...cmd.label.fgColor }, bgColor: { ...cmd.label.bgColor }, pixMap: '', noScaling: cmd.label.noScaling, showOnTop: cmd.label.showOnTop } as any);
+      }
+      return { structural: false };
+    }
+    case 'deleteLabel': {
+      if (reader) reader.removeLabel(cmd.areaId, cmd.label.id);
+      else { if (map.labels[cmd.areaId]) map.labels[cmd.areaId] = map.labels[cmd.areaId].filter((l: any) => l.id !== cmd.label.id); }
+      return { structural: false };
+    }
+    case 'moveLabel': {
+      if (reader) reader.moveLabel(cmd.areaId, cmd.id, cmd.to[0], -cmd.to[1]);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pos = [...cmd.to]; }
+      return { structural: false };
+    }
+    case 'setLabelText': {
+      if (reader) reader.setLabelText(cmd.areaId, cmd.id, cmd.to);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.text = cmd.to; }
+      return { structural: false };
+    }
+    case 'setLabelSize': {
+      if (reader) reader.setLabelSize(cmd.areaId, cmd.id, cmd.to[0], cmd.to[1]);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.size = [...cmd.to]; }
+      return { structural: false };
+    }
+    case 'setLabelColors': {
+      if (reader) reader.setLabelColors(cmd.areaId, cmd.id, cmd.toFg, cmd.toBg);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) { l.fgColor = { ...cmd.toFg }; l.bgColor = { ...cmd.toBg }; } }
+      return { structural: false };
+    }
+    case 'setLabelNoScaling': {
+      if (reader) reader.setLabelNoScaling(cmd.areaId, cmd.id, cmd.to);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.noScaling = cmd.to; }
+      return { structural: false };
+    }
+    case 'setLabelShowOnTop': {
+      if (reader) reader.setLabelShowOnTop(cmd.areaId, cmd.id, cmd.to);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.showOnTop = cmd.to; }
+      return { structural: false };
+    }
+    case 'setLabelFont': {
+      if (reader) reader.setLabelFont(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.font = { ...cmd.to }; }
+      return { structural: false };
+    }
+    case 'setLabelOutlineColor': {
+      if (reader) reader.setLabelOutlineColor(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.outlineColor = cmd.to ? { ...cmd.to } : undefined; }
+      return { structural: false };
+    }
+    case 'setLabelPixmap': {
+      if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pixMap = cmd.to; }
+      return { structural: false };
+    }
+    case 'resizeLabel': {
+      if (reader) {
+        reader.moveLabel(cmd.areaId, cmd.id, cmd.toPos[0], -cmd.toPos[1]);
+        reader.setLabelSize(cmd.areaId, cmd.id, cmd.toSize[0], cmd.toSize[1]);
+      } else {
+        const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id);
+        if (l) { l.pos = [...cmd.toPos]; l.size = [...cmd.toSize]; }
+      }
+      return { structural: false };
+    }
     case 'batch': {
+      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'deleteRoom')) {
+        // Fast path: sever neighbor exits in raw map first, then bulk-remove from renderer once.
+        for (const c of cmd.cmds) {
+          if (c.kind !== 'deleteRoom') continue;
+          for (const edit of c.neighborEdits) {
+            const neighbor = map.rooms[edit.roomId];
+            if (neighbor) (neighbor as any)[edit.dir] = -1;
+          }
+        }
+        const ids = (cmd.cmds as Extract<Command, { kind: 'deleteRoom' }>[]).map(c => c.id);
+        scene.reader.removeRooms(ids);
+        return { structural: true };
+      }
       let structural = false;
       for (const c of cmd.cmds) { if (applyCommand(map, c, scene).structural) structural = true; }
       return { structural };
@@ -482,6 +563,74 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       else { const r = map.rooms[cmd.roomId]; if (r) { if (cmd.from <= 1) delete r.exitWeights[cmd.name]; else r.exitWeights[cmd.name] = cmd.from; } }
       return { structural: false };
     }
+    case 'addLabel': {
+      if (reader) reader.removeLabel(cmd.areaId, cmd.label.id);
+      else { if (map.labels[cmd.areaId]) map.labels[cmd.areaId] = map.labels[cmd.areaId].filter((l: any) => l.id !== cmd.label.id); }
+      return { structural: false };
+    }
+    case 'deleteLabel': {
+      if (reader) reader.addLabel(cmd.areaId, cmd.label);
+      else {
+        if (!map.labels[cmd.areaId]) map.labels[cmd.areaId] = [];
+        map.labels[cmd.areaId].push({ id: cmd.label.id, areaId: cmd.areaId, pos: [...cmd.label.pos], size: [...cmd.label.size], text: cmd.label.text, fgColor: { ...cmd.label.fgColor }, bgColor: { ...cmd.label.bgColor }, pixMap: '', noScaling: cmd.label.noScaling, showOnTop: cmd.label.showOnTop } as any);
+      }
+      return { structural: false };
+    }
+    case 'moveLabel': {
+      if (reader) reader.moveLabel(cmd.areaId, cmd.id, cmd.from[0], -cmd.from[1]);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pos = [...cmd.from]; }
+      return { structural: false };
+    }
+    case 'setLabelText': {
+      if (reader) reader.setLabelText(cmd.areaId, cmd.id, cmd.from);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.text = cmd.from; }
+      return { structural: false };
+    }
+    case 'setLabelSize': {
+      if (reader) reader.setLabelSize(cmd.areaId, cmd.id, cmd.from[0], cmd.from[1]);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.size = [...cmd.from]; }
+      return { structural: false };
+    }
+    case 'setLabelColors': {
+      if (reader) reader.setLabelColors(cmd.areaId, cmd.id, cmd.fromFg, cmd.fromBg);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) { l.fgColor = { ...cmd.fromFg }; l.bgColor = { ...cmd.fromBg }; } }
+      return { structural: false };
+    }
+    case 'setLabelNoScaling': {
+      if (reader) reader.setLabelNoScaling(cmd.areaId, cmd.id, cmd.from);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.noScaling = cmd.from; }
+      return { structural: false };
+    }
+    case 'setLabelShowOnTop': {
+      if (reader) reader.setLabelShowOnTop(cmd.areaId, cmd.id, cmd.from);
+      else { const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.showOnTop = cmd.from; }
+      return { structural: false };
+    }
+    case 'setLabelFont': {
+      if (reader) reader.setLabelFont(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.font = { ...cmd.from }; }
+      return { structural: false };
+    }
+    case 'setLabelOutlineColor': {
+      if (reader) reader.setLabelOutlineColor(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.outlineColor = cmd.from ? { ...cmd.from } : undefined; }
+      return { structural: false };
+    }
+    case 'setLabelPixmap': {
+      if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pixMap = cmd.from; }
+      return { structural: false };
+    }
+    case 'resizeLabel': {
+      if (reader) {
+        reader.moveLabel(cmd.areaId, cmd.id, cmd.fromPos[0], -cmd.fromPos[1]);
+        reader.setLabelSize(cmd.areaId, cmd.id, cmd.fromSize[0], cmd.fromSize[1]);
+      } else {
+        const l = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id);
+        if (l) { l.pos = [...cmd.fromPos]; l.size = [...cmd.fromSize]; }
+      }
+      return { structural: false };
+    }
     case 'batch': {
       let structural = false;
       for (const c of [...cmd.cmds].reverse()) { if (revertCommand(map, c, scene).structural) structural = true; }
@@ -543,4 +692,25 @@ export function buildDeleteNeighborEdits(map: MudletMap, roomId: number): Neighb
     dir: n.dir,
     was: getExit(map.rooms[n.roomId], n.dir),
   }));
+}
+
+/** O(n) version for batch deletion: one pass over all rooms, results for each deleted id. */
+export function buildDeleteNeighborEditsForMany(
+  map: MudletMap,
+  ids: number[],
+): Map<number, NeighborEdit[]> {
+  const deletedSet = new Set(ids);
+  const result = new Map<number, NeighborEdit[]>(ids.map(id => [id, []]));
+  for (const idStr of Object.keys(map.rooms)) {
+    const roomId = Number(idStr);
+    if (deletedSet.has(roomId)) continue;
+    const room = map.rooms[roomId];
+    for (const dir of CARDINAL_DIRECTIONS) {
+      const target = getExit(room, dir);
+      if (deletedSet.has(target)) {
+        result.get(target)!.push({ roomId, dir, was: target });
+      }
+    }
+  }
+  return result;
 }

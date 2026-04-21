@@ -10,6 +10,7 @@ import { CustomLinePreviewEffect } from './effects/CustomLinePreviewEffect';
 import { SelectedLinkEffect } from './effects/SelectedLinkEffect';
 import { GridOverlayEffect } from './effects/GridOverlayEffect';
 import { MarqueeEffect } from './effects/MarqueeEffect';
+import { LabelHaloEffect } from './effects/LabelHaloEffect';
 import { attachPointerController } from './pointerController';
 import { store } from './store';
 
@@ -32,6 +33,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   settings.gridEnabled = true;
   settings.highlightCurrentRoom = false;
   settings.areaName = false;
+  settings.labelRenderMode = 'image'
 
   container.dataset.editorCursor = 'true';
 
@@ -48,6 +50,8 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   const connectHandles = new ConnectHandlesEffect(settings.roomSize, sceneRef);
   const customLinePreview = new CustomLinePreviewEffect();
   const selectedLink = new SelectedLinkEffect(sceneRef, settings.roomSize);
+  const labelHalo = new LabelHaloEffect(sceneRef);
+
   const gridOverlay = new GridOverlayEffect(
     settings.gridColor,
     settings.gridLineWidth,
@@ -70,6 +74,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   renderer.addLiveEffect('editor.connectHandles', connectHandles);
   renderer.addLiveEffect('editor.customLinePreview', customLinePreview);
   renderer.addLiveEffect('editor.selectedLink', selectedLink);
+  renderer.addLiveEffect('editor.labelHalo', labelHalo);
   renderer.addLiveEffect('editor.gridOverlay', gridOverlay);
 
   const handle: SceneHandle = {
@@ -95,7 +100,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       renderer.backend.viewport.panToMapPoint(mapX, mapY);
       gridOverlay.syncVisibility();
     },
-    refresh() { renderer.refresh(); },
+    refresh() { renderer.refresh(); selectionHalo.syncPositions(); labelHalo.syncPositions(); },
     destroy() {
       delete container.dataset.editorCursor;
       detach();
@@ -115,6 +120,8 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       renderer.removeLiveEffect('editor.customLinePreview');
       selectedLink.destroy();
       renderer.removeLiveEffect('editor.selectedLink');
+      labelHalo.destroy();
+      renderer.removeLiveEffect('editor.labelHalo');
       gridOverlay.destroy();
       renderer.removeLiveEffect('editor.gridOverlay');
       renderer.destroy();

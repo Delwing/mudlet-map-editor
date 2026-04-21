@@ -30,6 +30,35 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
 input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
 
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(143, 184, 255, 0.2);
+  outline: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00e5ff;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: #00e5ff;
+  cursor: pointer;
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;

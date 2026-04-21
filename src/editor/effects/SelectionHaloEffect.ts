@@ -28,6 +28,10 @@ export class SelectionHaloEffect implements LiveEffect {
     this.layer?.batchDraw();
   }
 
+  syncPositions(): void {
+    this.sync(store.getState());
+  }
+
   destroy(): void {
     this.unsubscribe?.();
     this.rects.forEach((r) => r.destroy());

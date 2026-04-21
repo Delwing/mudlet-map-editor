@@ -7,9 +7,9 @@ import { DropdownSelect } from './DropdownSelect';
 const TOOL_BUTTONS: { id: ToolId; label: string; hint: string; key: string }[] = [
   { id: 'select',     label: 'Select',      hint: 'Click a room to select. Drag to move (snaps to grid). Arrow keys nudge.', key: '1' },
   { id: 'connect',    label: 'Connect',     hint: 'Click source, then target. Shift = one-way.',                              key: '2' },
-  { id: 'unlink',     label: 'Unlink',      hint: 'Click an exit line to remove.',                                            key: '3' },
-  { id: 'addRoom',    label: 'Add Room',    hint: 'Click empty cell to create a room.',                                       key: '4' },
-  { id: 'delete',     label: 'Delete',      hint: 'Click a room to delete it.',                                               key: '5' },
+  { id: 'addRoom',    label: 'Add Room',    hint: 'Click empty cell to create a room.',                                       key: '3' },
+  { id: 'addLabel',   label: 'Add Label',   hint: 'Click to place a text label. Select to move/edit, Delete to remove.',     key: '4' },
+  { id: 'delete',     label: 'Delete',      hint: 'Click a room to delete it, or an exit/custom line/label to remove it.',   key: '5' },
   { id: 'pan',        label: 'Pan',         hint: 'Drag background to pan. Hold Space with any tool for temporary pan.',      key: '6' },
 ];
 

@@ -33,6 +33,18 @@ export function commandLabel(cmd: Command): string {
 
     case 'setSpecialExitDoor': return `Set door on special exit "${cmd.name}"`;
     case 'setSpecialExitWeight': return `Set weight on special exit "${cmd.name}"`;
+    case 'addLabel': return `Add label #${cmd.label.id}`;
+    case 'deleteLabel': return `Delete label #${cmd.label.id}`;
+    case 'moveLabel': return `Move label #${cmd.id}`;
+    case 'setLabelText': return `Set label #${cmd.id} text`;
+    case 'setLabelSize': return `Resize label #${cmd.id}`;
+    case 'setLabelColors': return `Set label #${cmd.id} colors`;
+    case 'setLabelFont': return `Set font on label #${cmd.id}`;
+    case 'setLabelOutlineColor': return `Set outline color on label #${cmd.id}`;
+    case 'setLabelPixmap': return `Update pixmap on label #${cmd.id}`;
+    case 'setLabelNoScaling': return `${cmd.to ? 'Disable' : 'Enable'} zoom scaling on label #${cmd.id}`;
+    case 'setLabelShowOnTop': return `Set label #${cmd.id} ${cmd.to ? 'foreground' : 'background'}`;
+    case 'resizeLabel': return `Resize label #${cmd.id}`;
     case 'batch': return `${cmd.cmds.length} batched op${cmd.cmds.length === 1 ? '' : 's'}`;
   }
 }

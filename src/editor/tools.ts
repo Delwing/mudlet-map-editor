@@ -1,7 +1,7 @@
 import type { MapRenderer, Settings } from 'mudlet-map-renderer';
 import { clientToMap, snap } from './coords';
 import { pushCommand, buildDeleteNeighborEdits } from './commands';
-import { exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, roomAtCell } from './hitTest';
+import { exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, labelAt, labelResizeHandleAt, roomAtCell } from './hitTest';
 import {
   createDefaultRoom,
   getExit,
@@ -11,8 +11,8 @@ import {
   is2DCardinal,
 } from './mapHelpers';
 import { store } from './store';
-import { CARDINAL_DIRECTIONS } from './types';
-import type { Direction, HoverTarget, ToolId } from './types';
+import { DEFAULT_LABEL_FONT } from './types';
+import type { HoverTarget, ToolId } from './types';
 import type { SceneHandle } from './scene';
 
 export interface ToolContext {
@@ -144,6 +144,58 @@ export const selectTool: Tool = {
       }
     }
 
+    // Label hit test — resize handles first, then body, checked before rooms.
+    if (ac) {
+      // Check resize handles if this label is already selected.
+      if (s.selection?.kind === 'label') {
+        const sel = s.selection;
+        const rawLabel = ctx.scene.reader.getLabelSnapshot(sel.areaId, sel.id);
+        if (rawLabel) {
+          const bounds = { x: rawLabel.pos[0], y: -rawLabel.pos[1], w: rawLabel.size[0], h: rawLabel.size[1] };
+          const rect = ctx.container.getBoundingClientRect();
+          const pt0 = ctx.renderer.backend.viewport.clientToMapPoint(0, 0, { left: rect.left, top: rect.top });
+          const pt1 = ctx.renderer.backend.viewport.clientToMapPoint(8, 0, { left: rect.left, top: rect.top });
+          const hitRadius = (pt0 && pt1) ? Math.abs(pt1.x - pt0.x) : 0.25;
+          const handle = labelResizeHandleAt(bounds, c.x, c.y, hitRadius);
+          if (handle) {
+            store.setState({
+              pending: {
+                kind: 'labelResize',
+                labelId: sel.id,
+                areaId: sel.areaId,
+                handle,
+                originPos: [...rawLabel.pos] as [number, number, number],
+                originSize: [...rawLabel.size] as [number, number],
+              },
+            });
+            ctx.container.setPointerCapture(ev.pointerId);
+            return true;
+          }
+        }
+      }
+
+      const lbl = labelAt(ac.areaId, ac.z, c.x, c.y, ctx.scene.reader);
+      if (lbl) {
+        const rawLabel = ctx.scene.reader.getLabelSnapshot(lbl.areaId, lbl.id);
+        const labelRenderX = rawLabel ? rawLabel.pos[0] : 0;
+        const labelRenderY = rawLabel ? -rawLabel.pos[1] : 0;
+        store.setState({
+          selection: { kind: 'label', id: lbl.id, areaId: lbl.areaId },
+          pending: rawLabel ? {
+            kind: 'labelDrag',
+            labelId: lbl.id,
+            areaId: lbl.areaId,
+            originPos: [...rawLabel.pos] as [number, number, number],
+            offsetX: c.x - labelRenderX,
+            offsetY: c.y - labelRenderY,
+          } : null,
+          sidebarTab: 'selection',
+        });
+        ctx.container.setPointerCapture(ev.pointerId);
+        return true;
+      }
+    }
+
     const room = roomUnder(ctx, ev);
     if (room) {
       const raw = s.map?.rooms[room.id];
@@ -176,7 +228,7 @@ export const selectTool: Tool = {
 
       store.setState({
         selection: isInMultiSel ? (currentSel as NonNullable<typeof currentSel>) : { kind: 'room', ids: [room.id] },
-        pending: { kind: 'drag', roomId: room.id, originX: raw.x, originY: raw.y, multiOrigins },
+        pending: { kind: 'drag', roomId: room.id, originX: raw.x, originY: raw.y, multiOrigins, offsetX: c.x - room.x, offsetY: c.y - room.y },
       });
       ctx.container.setPointerCapture(ev.pointerId);
       return true;
@@ -243,13 +295,48 @@ export const selectTool: Tool = {
       return true;
     }
 
+    if (s.pending?.kind === 'labelDrag') {
+      const raw = mapCoord(ctx, ev);
+      const rawPos = { x: raw.x - s.pending.offsetX, y: raw.y - s.pending.offsetY };
+      const pos = s.snapToGrid ? { x: snap(rawPos.x, s.gridStep), y: snap(rawPos.y, s.gridStep) } : rawPos;
+      const current = ctx.scene.reader.getLabelSnapshot(s.pending.areaId, s.pending.labelId);
+      const dx = current ? pos.x - current.pos[0] : 1;
+      const dy = current ? pos.y - (-current.pos[1]) : 1;
+      if (dx !== 0 || dy !== 0) {
+        ctx.scene.reader.moveLabel(s.pending.areaId, s.pending.labelId, pos.x, pos.y);
+        ctx.refresh();
+        store.bumpData();
+      }
+      return true;
+    }
+
+    if (s.pending?.kind === 'labelResize') {
+      const c = mapCoord(ctx, ev);
+      const p = s.pending;
+      const nb = computeResizeBounds(p.handle, p.originPos[0], -p.originPos[1], p.originSize[0], p.originSize[1], c.x, c.y);
+      const current = ctx.scene.reader.getLabelSnapshot(p.areaId, p.labelId);
+      const changed = !current || nb.x !== current.pos[0] || nb.y !== -current.pos[1]
+        || nb.w !== current.size[0] || nb.h !== current.size[1];
+      if (changed) {
+        ctx.scene.reader.moveLabel(p.areaId, p.labelId, nb.x, nb.y);
+        ctx.scene.reader.setLabelSize(p.areaId, p.labelId, nb.w, nb.h);
+        ctx.refresh();
+        store.bumpData();
+      }
+      return true;
+    }
+
     if (s.pending?.kind !== 'drag') {
       updateHover(ctx, ev);
       return false;
     }
     const render = ctx.scene.getRenderRoom(s.pending.roomId);
     if (!render) return true;
-    const target = snappedCoord(ctx, ev);
+    const raw = mapCoord(ctx, ev);
+    const centreRaw = { x: raw.x - s.pending.offsetX, y: raw.y - s.pending.offsetY };
+    const target = s.snapToGrid
+      ? { x: snap(centreRaw.x, s.gridStep), y: snap(centreRaw.y, s.gridStep) }
+      : centreRaw;
     const dx = target.x - render.x;
     const dy = target.y - render.y;
     if (dx !== 0 || dy !== 0) {
@@ -308,6 +395,58 @@ export const selectTool: Tool = {
       // (no significant drag) without Ctrl, clear the selection.
       if (dx <= MARQUEE_THRESHOLD && dy <= MARQUEE_THRESHOLD && !p.ctrlHeld) {
         store.setState({ selection: null });
+      }
+      store.setState({ pending: null });
+      return true;
+    }
+
+    if (s.pending?.kind === 'labelDrag' && s.map) {
+      const pending = s.pending;
+      const snap = ctx.scene.reader.getLabelSnapshot(pending.areaId, pending.labelId);
+      const moved = snap && (
+        snap.pos[0] !== pending.originPos[0] ||
+        snap.pos[1] !== pending.originPos[1]
+      );
+      if (moved && snap) {
+        store.setState((st) => ({
+          undo: [...st.undo, {
+            kind: 'moveLabel' as const,
+            areaId: pending.areaId,
+            id: pending.labelId,
+            from: pending.originPos,
+            to: [...snap.pos] as [number, number, number],
+          }],
+          redo: [],
+          status: `Moved label ${pending.labelId}`,
+        }));
+      }
+      store.setState({ pending: null });
+      return true;
+    }
+
+    if (s.pending?.kind === 'labelResize' && s.map) {
+      const pending = s.pending;
+      const snap = ctx.scene.reader.getLabelSnapshot(pending.areaId, pending.labelId);
+      const changed = snap && (
+        snap.pos[0] !== pending.originPos[0] ||
+        snap.pos[1] !== pending.originPos[1] ||
+        snap.size[0] !== pending.originSize[0] ||
+        snap.size[1] !== pending.originSize[1]
+      );
+      if (changed && snap) {
+        store.setState((st) => ({
+          undo: [...st.undo, {
+            kind: 'resizeLabel' as const,
+            areaId: pending.areaId,
+            id: pending.labelId,
+            fromPos: pending.originPos,
+            toPos: [...snap.pos] as [number, number, number],
+            fromSize: pending.originSize,
+            toSize: [...snap.size] as [number, number],
+          }],
+          redo: [],
+          status: `Resized label ${pending.labelId}`,
+        }));
       }
       store.setState({ pending: null });
       return true;
@@ -407,6 +546,13 @@ export const selectTool: Tool = {
         ctx.scene.reader.getArea(rawRoom.area)?.markDirty();
         ctx.refresh();
       }
+    } else if (s.pending?.kind === 'labelDrag') {
+      ctx.scene.reader.moveLabel(s.pending.areaId, s.pending.labelId, s.pending.originPos[0], -s.pending.originPos[1]);
+      ctx.refresh();
+    } else if (s.pending?.kind === 'labelResize') {
+      ctx.scene.reader.moveLabel(s.pending.areaId, s.pending.labelId, s.pending.originPos[0], -s.pending.originPos[1]);
+      ctx.scene.reader.setLabelSize(s.pending.areaId, s.pending.labelId, s.pending.originSize[0], s.pending.originSize[1]);
+      ctx.refresh();
     } else if (s.pending?.kind === 'drag' && s.map) {
       const raw = s.map.rooms[s.pending.roomId];
       if (raw) {
@@ -593,116 +739,6 @@ function createConnection(
   store.setState({ status: msg });
 }
 
-export const unlinkTool: Tool = {
-  id: 'unlink',
-  cursor: 'crosshair',
-  onPointerDown(ev, ctx) {
-    if (ev.button !== 0) return false;
-    const ac = activeContext();
-    if (!ac) return false;
-    const c = mapCoord(ctx, ev);
-
-    // If the cursor is squarely inside a room's visual rect, treat it as a
-    // room-body click → remove all exits. Otherwise prefer per-line hits so
-    // exit lines that extend close to a neighbouring room remain selectable.
-    const room = roomUnder(ctx, ev);
-    const halfBody = ctx.settings.roomSize / 2;
-    const onRoomBody = !!room
-      && Math.abs(c.x - room.x) <= halfBody
-      && Math.abs(c.y - room.y) <= halfBody;
-
-    if (!onRoomBody) {
-      // Custom line under cursor → remove just that one.
-      const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
-      if (cl) {
-        const raw = ac.map.rooms[cl.roomId];
-        const points = raw?.customLines?.[cl.exitName] ?? [];
-        const color = raw?.customLinesColor?.[cl.exitName]
-          ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
-        const style = raw?.customLinesStyle?.[cl.exitName] ?? 1;
-        const arrow = raw?.customLinesArrow?.[cl.exitName] ?? false;
-        pushCommand({
-          kind: 'removeCustomLine',
-          roomId: cl.roomId,
-          exitName: cl.exitName,
-          snapshot: { points, color, style, arrow },
-        }, ctx.scene);
-        ctx.refresh();
-        store.bumpData();
-        const s = store.getState();
-        if (s.selection?.kind === 'customLine' && s.selection.roomId === cl.roomId && s.selection.exitName === cl.exitName) {
-          store.setState({ selection: null });
-        }
-        store.setState({ status: `Removed custom line '${cl.exitName}' from room ${cl.roomId}` });
-        return true;
-      }
-
-      // Cardinal exit line under cursor → remove just that exit (plus reverse if bidirectional).
-      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
-      if (exit) {
-        const fromRoom = ac.map.rooms[exit.fromId];
-        if (!fromRoom) return true;
-        const opposite = OPPOSITE[exit.dir];
-        const toRoom = ac.map.rooms[exit.toId];
-        const reverse = toRoom && is2DCardinal(opposite) && getExit(toRoom, opposite) === exit.fromId
-          ? { fromId: exit.toId, dir: opposite, was: exit.fromId }
-          : null;
-        pushCommand({
-          kind: 'removeExit',
-          fromId: exit.fromId,
-          dir: exit.dir,
-          was: exit.toId,
-          reverse,
-        }, ctx.scene);
-        ctx.refresh();
-        store.bumpData();
-        const s = store.getState();
-        if (s.selection?.kind === 'exit' && s.selection.fromId === exit.fromId && s.selection.dir === exit.dir) {
-          store.setState({ selection: null });
-        }
-        store.setState({
-          status: reverse
-            ? `Removed exit ${exit.fromId}.${exit.dir} ↔ ${exit.toId}.${opposite}`
-            : `Removed exit ${exit.fromId}.${exit.dir} → ${exit.toId}`,
-        });
-        return true;
-      }
-    }
-
-    // No line hit (or click was on a room body) → remove all exits from the room under cursor.
-    if (!room) {
-      store.setState({ status: 'No exit, custom line, or room under cursor.' });
-      return true;
-    }
-    const raw = ac.map.rooms[room.id];
-    if (!raw) return true;
-    const exits: Array<{ dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }> = [];
-    for (const dir of CARDINAL_DIRECTIONS) {
-      const was = getExit(raw, dir);
-      if (was === -1) continue;
-      const toRoom = ac.map.rooms[was];
-      const opposite = OPPOSITE[dir];
-      const reverse = toRoom && getExit(toRoom, opposite) === room.id
-        ? { fromId: was, dir: opposite, was: room.id }
-        : null;
-      exits.push({ dir, was, reverse });
-    }
-    const specialExits = Object.entries(raw.mSpecialExits).map(([name, toId]) => ({ name, toId: toId as number }));
-    if (exits.length === 0 && specialExits.length === 0) {
-      store.setState({ status: `Room ${room.id} has no exits.` });
-      return true;
-    }
-    pushCommand({ kind: 'removeAllExits', roomId: room.id, exits, specialExits }, ctx.scene);
-    ctx.refresh();
-    store.bumpData();
-    store.setState({ status: `Removed all exits from room ${room.id}` });
-    return true;
-  },
-  onPointerMove(ev, ctx) {
-    updateHover(ctx, ev);
-  },
-};
-
 export const addRoomTool: Tool = {
   id: 'addRoom',
   cursor: 'crosshair',
@@ -743,8 +779,91 @@ export const deleteTool: Tool = {
     if (ev.button !== 0) return false;
     const ac = activeContext();
     if (!ac) return false;
+    const c = mapCoord(ctx, ev);
+
+    // Label hit test — checked first (labels are free-form, not tied to rooms).
+    const lbl = labelAt(ac.areaId, ac.z, c.x, c.y, ctx.scene.reader);
+    if (lbl) {
+      const snap = ctx.scene.reader.getLabelSnapshot(lbl.areaId, lbl.id);
+      if (snap) {
+        pushCommand({ kind: 'deleteLabel', areaId: lbl.areaId, label: snap }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'label' && s.selection.id === lbl.id) {
+          store.setState({ selection: null });
+        }
+        store.setState({ status: `Deleted label ${lbl.id}` });
+      }
+      return true;
+    }
+
     const room = roomUnder(ctx, ev);
-    if (!room) return true;
+    const halfBody = ctx.settings.roomSize / 2;
+    const onRoomBody = !!room
+      && Math.abs(c.x - room.x) <= halfBody
+      && Math.abs(c.y - room.y) <= halfBody;
+
+    if (!onRoomBody) {
+      const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (cl) {
+        const raw = ac.map.rooms[cl.roomId];
+        const points = raw?.customLines?.[cl.exitName] ?? [];
+        const color = raw?.customLinesColor?.[cl.exitName]
+          ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+        const style = raw?.customLinesStyle?.[cl.exitName] ?? 1;
+        const arrow = raw?.customLinesArrow?.[cl.exitName] ?? false;
+        pushCommand({
+          kind: 'removeCustomLine',
+          roomId: cl.roomId,
+          exitName: cl.exitName,
+          snapshot: { points, color, style, arrow },
+        }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'customLine' && s.selection.roomId === cl.roomId && s.selection.exitName === cl.exitName) {
+          store.setState({ selection: null });
+        }
+        store.setState({ status: `Removed custom line '${cl.exitName}' from room ${cl.roomId}` });
+        return true;
+      }
+
+      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (exit) {
+        const fromRoom = ac.map.rooms[exit.fromId];
+        if (!fromRoom) return true;
+        const opposite = OPPOSITE[exit.dir];
+        const toRoom = ac.map.rooms[exit.toId];
+        const reverse = toRoom && is2DCardinal(opposite) && getExit(toRoom, opposite) === exit.fromId
+          ? { fromId: exit.toId, dir: opposite, was: exit.fromId }
+          : null;
+        pushCommand({
+          kind: 'removeExit',
+          fromId: exit.fromId,
+          dir: exit.dir,
+          was: exit.toId,
+          reverse,
+        }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'exit' && s.selection.fromId === exit.fromId && s.selection.dir === exit.dir) {
+          store.setState({ selection: null });
+        }
+        store.setState({
+          status: reverse
+            ? `Removed exit ${exit.fromId}.${exit.dir} ↔ ${exit.toId}.${opposite}`
+            : `Removed exit ${exit.fromId}.${exit.dir} → ${exit.toId}`,
+        });
+        return true;
+      }
+    }
+
+    if (!room) {
+      store.setState({ status: 'No exit, custom line, or room under cursor.' });
+      return true;
+    }
     const raw = ac.map.rooms[room.id];
     if (!raw) return true;
     const snapshot = { ...raw };
@@ -909,34 +1028,138 @@ export function finishCustomLine(pending: import('./types').PendingCustomLine, c
   });
 }
 
+function computeResizeBounds(
+  handle: import('./types').LabelResizeHandle,
+  lx: number, ly: number, lw: number, lh: number,
+  cx: number, cy: number,
+): { x: number; y: number; w: number; h: number } {
+  let left = lx, right = lx + lw, top = ly, bottom = ly + lh;
+  switch (handle) {
+    case 'nw': left = cx; top = cy; break;
+    case 'n':  top = cy; break;
+    case 'ne': right = cx; top = cy; break;
+    case 'e':  right = cx; break;
+    case 'se': right = cx; bottom = cy; break;
+    case 's':  bottom = cy; break;
+    case 'sw': left = cx; bottom = cy; break;
+    case 'w':  left = cx; break;
+  }
+  const x = Math.min(left, right);
+  const y = Math.min(top, bottom);
+  const w = Math.max(0.1, Math.abs(right - left));
+  const h = Math.max(0.1, Math.abs(bottom - top));
+  return { x, y, w, h };
+}
+
+function nextLabelId(map: import('../mapIO').MudletMap): number {
+  let max = 0;
+  for (const arr of Object.values(map.labels ?? {})) {
+    for (const l of (arr as any[])) { if (l.id > max) max = l.id; }
+  }
+  return max + 1;
+}
+
+export const addLabelTool: Tool = {
+  id: 'addLabel',
+  cursor: 'crosshair',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const ac = activeContext();
+    if (!ac) return false;
+    const c = snappedCoord(ctx, ev);
+    store.setState({
+      pending: { kind: 'labelRect', areaId: ac.areaId, z: ac.z, startX: c.x, startY: c.y, currentX: c.x, currentY: c.y },
+    });
+    ctx.container.setPointerCapture(ev.pointerId);
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    const s = store.getState();
+    if (s.pending?.kind === 'labelRect') {
+      const c = mapCoord(ctx, ev);
+      store.setState({ pending: { ...s.pending, currentX: c.x, currentY: c.y } });
+      return true;
+    }
+    const c = snappedCoord(ctx, ev);
+    store.setState({ snapCursor: c });
+    updateHover(ctx, ev);
+  },
+  onPointerUp(ev, ctx) {
+    const s = store.getState();
+    if (s.pending?.kind !== 'labelRect') return false;
+    try { ctx.container.releasePointerCapture(ev.pointerId); } catch {}
+    const p = s.pending;
+    const ac = activeContext();
+    if (!ac) { store.setState({ pending: null }); return true; }
+
+    const dragW = Math.abs(p.currentX - p.startX);
+    const dragH = Math.abs(p.currentY - p.startY);
+    const w = dragW < 0.5 ? 4 : dragW;
+    const h = dragH < 0.5 ? 1 : dragH;
+    const x = dragW < 0.5 ? p.startX : Math.min(p.startX, p.currentX);
+    const y = dragH < 0.5 ? p.startY : Math.min(p.startY, p.currentY);
+
+    const id = nextLabelId(ac.map);
+    const label: import('./types').LabelSnapshot = {
+      id,
+      pos: [x, -y, p.z],
+      size: [w, h],
+      text: 'Label',
+      fgColor: { spec: 1, alpha: 255, r: 255, g: 255, b: 255 },
+      bgColor: { spec: 1, alpha: 128, r: 0, g: 0, b: 0 },
+      noScaling: false,
+      showOnTop: false,
+      font: { ...DEFAULT_LABEL_FONT },
+      pixMap: '',  // reader.addLabel generates the pixmap from text+font+colors
+    };
+    pushCommand({ kind: 'addLabel', areaId: p.areaId, label }, ctx.scene);
+    ctx.refresh();
+    store.bumpData();
+    store.setState({
+      pending: null,
+      selection: { kind: 'label', id, areaId: p.areaId },
+      sidebarTab: 'selection',
+      status: `Added label at (${x}, ${-y})`,
+    });
+    return true;
+  },
+  onCancel() {
+    store.setState({ pending: null });
+  },
+};
+
 export const TOOLS: Record<ToolId, Tool> = {
   select: selectTool,
   connect: connectTool,
-  unlink: unlinkTool,
   addRoom: addRoomTool,
   delete: deleteTool,
   pan: panTool,
   customLine: customLineTool,
+  addLabel: addLabelTool,
 };
 
 function updateHover(ctx: ToolContext, ev: PointerEvent) {
   const ac = activeContext();
   if (!ac) return;
+  const c = mapCoord(ctx, ev);
   const room = roomUnder(ctx, ev);
   let target: HoverTarget = null;
   if (room) {
-    const c = mapCoord(ctx, ev);
     const handleDir = handleDirFor(c, { x: room.x, y: room.y }, ctx.settings.roomSize);
     target = { kind: 'room', id: room.id, handleDir };
   } else {
-    const c = mapCoord(ctx, ev);
-    // Custom lines take priority over cardinal exits for hover (they're on top visually).
-    const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
-    if (cl) {
-      target = { kind: 'customLine', roomId: cl.roomId, exitName: cl.exitName };
+    const lbl = labelAt(ac.areaId, ac.z, c.x, c.y, ctx.scene.reader);
+    if (lbl) {
+      target = { kind: 'label', id: lbl.id, areaId: lbl.areaId };
     } else {
-      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
-      if (exit) target = { kind: 'exit', ...exit };
+      // Custom lines take priority over cardinal exits for hover (they're on top visually).
+      const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (cl) {
+        target = { kind: 'customLine', roomId: cl.roomId, exitName: cl.exitName };
+      } else {
+        const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+        if (exit) target = { kind: 'exit', ...exit };
+      }
     }
   }
   const current = store.getState().hover;
@@ -954,5 +1177,7 @@ function hoverEquals(a: HoverTarget, b: HoverTarget): boolean {
     return a.fromId === b.fromId && a.toId === b.toId && a.dir === b.dir;
   if (a.kind === 'customLine' && b.kind === 'customLine')
     return a.roomId === b.roomId && a.exitName === b.exitName;
+  if (a.kind === 'label' && b.kind === 'label')
+    return a.id === b.id && a.areaId === b.areaId;
   return false;
 }

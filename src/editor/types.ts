@@ -1,6 +1,40 @@
 import type { MudletColor, MudletRoom } from '../mapIO';
 
-export type ToolId = 'select' | 'connect' | 'unlink' | 'addRoom' | 'delete' | 'pan' | 'customLine';
+export type LabelFont = {
+  family: string;
+  size: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikeout: boolean;
+};
+
+export const DEFAULT_LABEL_FONT: LabelFont = {
+  family: 'Arial',
+  size: 30,
+  bold: false,
+  italic: false,
+  underline: false,
+  strikeout: false,
+};
+
+export type LabelSnapshot = {
+  id: number;
+  pos: [number, number, number];
+  size: [number, number];
+  text: string;
+  fgColor: MudletColor;
+  bgColor: MudletColor;
+  noScaling: boolean;
+  showOnTop: boolean;
+  font: LabelFont;
+  /** Text outline color loaded from area userData (system.labelOutlineColor_N). */
+  outlineColor?: MudletColor;
+  /** Base64 PNG data URL, or empty string if no pixmap. */
+  pixMap: string;
+};
+
+export type ToolId = 'select' | 'connect' | 'addRoom' | 'delete' | 'pan' | 'customLine' | 'addLabel';
 
 export type Direction =
   | 'north' | 'northeast' | 'east' | 'southeast'
@@ -61,11 +95,13 @@ export type Selection =
   | { kind: 'room'; ids: number[] }
   | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
   | { kind: 'customLine'; roomId: number; exitName: string; pointIndex?: number }
+  | { kind: 'label'; id: number; areaId: number }
   | null;
 export type HoverTarget =
   | { kind: 'room'; id: number; handleDir: Direction | null }
   | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
   | { kind: 'customLine'; roomId: number; exitName: string }
+  | { kind: 'label'; id: number; areaId: number }
   | null;
 
 export type PendingDrag = {
@@ -75,6 +111,9 @@ export type PendingDrag = {
   originY: number;
   /** Origins of other selected rooms for multi-drag; raw Mudlet-space coords. */
   multiOrigins?: { id: number; x: number; y: number }[];
+  /** Render-space offset from room centre to click point, to avoid jump on drag start. */
+  offsetX: number;
+  offsetY: number;
 };
 
 export type PendingConnect = {
@@ -138,6 +177,39 @@ export type PendingPickSpecialExit = {
   fromId: number;
 };
 
+export type LabelResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
+export type PendingLabelDrag = {
+  kind: 'labelDrag';
+  labelId: number;
+  areaId: number;
+  /** Raw Mudlet-space origin (before drag). */
+  originPos: [number, number, number];
+  /** Render-space offset from label top-left to click point, to avoid jump on drag start. */
+  offsetX: number;
+  offsetY: number;
+};
+
+export type PendingLabelRect = {
+  kind: 'labelRect';
+  areaId: number;
+  z: number;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+};
+
+export type PendingLabelResize = {
+  kind: 'labelResize';
+  labelId: number;
+  areaId: number;
+  handle: LabelResizeHandle;
+  /** LabelSnapshot.pos of origin (renderX, mudletY, z). */
+  originPos: [number, number, number];
+  originSize: [number, number];
+};
+
 export type PendingMarquee = {
   kind: 'marquee';
   /** Render-space start corner. */
@@ -151,7 +223,7 @@ export type PendingMarquee = {
   preExistingIds: number[];
 };
 
-export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingMarquee | null;
+export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | null;
 
 export type RoomSnapshot = MudletRoom;
 
@@ -206,6 +278,18 @@ export type Command =
   | { kind: 'setMapUserDataEntry'; key: string; from: string | null; to: string | null }
   | { kind: 'setSpecialExitDoor'; roomId: number; name: string; from: number; to: number }
   | { kind: 'setSpecialExitWeight'; roomId: number; name: string; from: number; to: number }
+  | { kind: 'addLabel'; areaId: number; label: LabelSnapshot }
+  | { kind: 'deleteLabel'; areaId: number; label: LabelSnapshot }
+  | { kind: 'moveLabel'; areaId: number; id: number; from: [number, number, number]; to: [number, number, number] }
+  | { kind: 'setLabelText'; areaId: number; id: number; from: string; to: string }
+  | { kind: 'setLabelSize'; areaId: number; id: number; from: [number, number]; to: [number, number] }
+  | { kind: 'setLabelColors'; areaId: number; id: number; fromFg: MudletColor; toFg: MudletColor; fromBg: MudletColor; toBg: MudletColor }
+  | { kind: 'setLabelNoScaling'; areaId: number; id: number; from: boolean; to: boolean }
+  | { kind: 'setLabelShowOnTop'; areaId: number; id: number; from: boolean; to: boolean }
+  | { kind: 'setLabelFont'; areaId: number; id: number; from: LabelFont; to: LabelFont }
+  | { kind: 'setLabelOutlineColor'; areaId: number; id: number; from: MudletColor | undefined; to: MudletColor | undefined }
+  | { kind: 'setLabelPixmap'; areaId: number; id: number; from: string; to: string }
+  | { kind: 'resizeLabel'; areaId: number; id: number; fromPos: [number, number, number]; toPos: [number, number, number]; fromSize: [number, number]; toSize: [number, number] }
   | { kind: 'batch'; cmds: Command[] };
 
 export type NeighborEdit = { roomId: number; dir: Direction; was: number };
