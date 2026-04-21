@@ -42,6 +42,7 @@ export function commandLabel(cmd: Command): string {
     case 'setLabelFont': return `Set font on label #${cmd.id}`;
     case 'setLabelOutlineColor': return `Set outline color on label #${cmd.id}`;
     case 'setLabelPixmap': return `Update pixmap on label #${cmd.id}`;
+    case 'setLabelImageSrc': return `Set image source on label #${cmd.id}`;
     case 'setLabelNoScaling': return `${cmd.to ? 'Disable' : 'Enable'} zoom scaling on label #${cmd.id}`;
     case 'setLabelShowOnTop': return `Set label #${cmd.id} ${cmd.to ? 'foreground' : 'background'}`;
     case 'resizeLabel': return `Resize label #${cmd.id}`;

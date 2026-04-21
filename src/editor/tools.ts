@@ -11,8 +11,8 @@ import {
   is2DCardinal,
 } from './mapHelpers';
 import { store } from './store';
-import { DEFAULT_LABEL_FONT } from './types';
-import type { HitItem, HoverTarget, Selection, ToolId } from './types';
+import { DEFAULT_LABEL_FONT, CARDINAL_DIRECTIONS } from './types';
+import type { Direction, HitItem, HoverTarget, Selection, ToolId } from './types';
 import type { SceneHandle } from './scene';
 
 export interface ToolContext {
@@ -112,6 +112,20 @@ export const selectTool: Tool = {
       const fromId = s.pending.fromId;
       if (target && specialExitPickCb) specialExitPickCb(target.id);
       store.setState({ pending: null, selection: { kind: 'room', ids: [fromId] } });
+      return true;
+    }
+
+    if (s.pending?.kind === 'pickSwatch') {
+      const target = roomUnder(ctx, ev);
+      if (target && s.map) {
+        const raw = s.map.rooms[target.id];
+        if (raw) {
+          window.dispatchEvent(new CustomEvent('editor:swatchRoomPicked', {
+            detail: { symbol: raw.symbol ?? '', environment: raw.environment ?? -1 },
+          }));
+        }
+      }
+      store.setState({ pending: null });
       return true;
     }
 
@@ -839,6 +853,109 @@ function createConnection(
   store.setState({ status: msg });
 }
 
+export const unlinkTool: Tool = {
+  id: 'unlink',
+  cursor: 'crosshair',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const ac = activeContext();
+    if (!ac) return false;
+    const c = mapCoord(ctx, ev);
+
+    const room = roomUnder(ctx, ev);
+    const halfBody = ctx.settings.roomSize / 2;
+    const onRoomBody = !!room
+      && Math.abs(c.x - room.x) <= halfBody
+      && Math.abs(c.y - room.y) <= halfBody;
+
+    if (!onRoomBody) {
+      const cl = customLineAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (cl) {
+        const raw = ac.map.rooms[cl.roomId];
+        const points = raw?.customLines?.[cl.exitName] ?? [];
+        const color = raw?.customLinesColor?.[cl.exitName] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+        const style = raw?.customLinesStyle?.[cl.exitName] ?? 1;
+        const arrow = raw?.customLinesArrow?.[cl.exitName] ?? false;
+        pushCommand({
+          kind: 'removeCustomLine',
+          roomId: cl.roomId,
+          exitName: cl.exitName,
+          snapshot: { points, color, style, arrow },
+        }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'customLine' && s.selection.roomId === cl.roomId && s.selection.exitName === cl.exitName) {
+          store.setState({ selection: null });
+        }
+        store.setState({ status: `Removed custom line '${cl.exitName}' from room ${cl.roomId}` });
+        return true;
+      }
+
+      const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (exit) {
+        const fromRoom = ac.map.rooms[exit.fromId];
+        if (!fromRoom) return true;
+        const opposite = OPPOSITE[exit.dir];
+        const toRoom = ac.map.rooms[exit.toId];
+        const reverse = toRoom && is2DCardinal(opposite) && getExit(toRoom, opposite) === exit.fromId
+          ? { fromId: exit.toId, dir: opposite, was: exit.fromId }
+          : null;
+        pushCommand({
+          kind: 'removeExit',
+          fromId: exit.fromId,
+          dir: exit.dir,
+          was: exit.toId,
+          reverse,
+        }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'exit' && s.selection.fromId === exit.fromId && s.selection.dir === exit.dir) {
+          store.setState({ selection: null });
+        }
+        store.setState({
+          status: reverse
+            ? `Removed exit ${exit.fromId}.${exit.dir} ↔ ${exit.toId}.${opposite}`
+            : `Removed exit ${exit.fromId}.${exit.dir} → ${exit.toId}`,
+        });
+        return true;
+      }
+    }
+
+    if (!room) {
+      store.setState({ status: 'No exit, custom line, or room under cursor.' });
+      return true;
+    }
+    const raw = ac.map.rooms[room.id];
+    if (!raw) return true;
+    const exits: Array<{ dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }> = [];
+    for (const dir of CARDINAL_DIRECTIONS) {
+      const was = getExit(raw, dir);
+      if (was === -1) continue;
+      const toRoom = ac.map.rooms[was];
+      const opposite = OPPOSITE[dir];
+      const reverse = toRoom && getExit(toRoom, opposite) === room.id
+        ? { fromId: was, dir: opposite, was: room.id }
+        : null;
+      exits.push({ dir, was, reverse });
+    }
+    const specialExits = Object.entries(raw.mSpecialExits).map(([name, toId]) => ({ name, toId: toId as number }));
+    if (exits.length === 0 && specialExits.length === 0) {
+      store.setState({ status: `Room ${room.id} has no exits.` });
+      return true;
+    }
+    pushCommand({ kind: 'removeAllExits', roomId: room.id, exits, specialExits }, ctx.scene);
+    ctx.refresh();
+    store.bumpData();
+    store.setState({ status: `Removed all exits from room ${room.id}` });
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    updateHover(ctx, ev);
+  },
+};
+
 export const addRoomTool: Tool = {
   id: 'addRoom',
   cursor: 'crosshair',
@@ -860,6 +977,7 @@ export const addRoomTool: Tool = {
     ctx.refresh();
     store.bumpStructure();
     store.setState({
+      activeTool: 'select',
       selection: { kind: 'room', ids: [id] },
       status: `Added room ${id} at (${rawX}, ${rawY}, ${ac.z})`,
     });
@@ -1000,11 +1118,6 @@ export const customLineTool: Tool = {
   onPointerDown(ev, ctx) {
     const s = store.getState();
     if (!s.pending || s.pending.kind !== 'customLine') return false;
-
-    if (ev.button === 2) {
-      finishCustomLine(s.pending, ctx);
-      return true;
-    }
     if (ev.button !== 0) return false;
 
     const c = snappedCoord(ctx, ev);
@@ -1012,6 +1125,12 @@ export const customLineTool: Tool = {
     commitPendingCustomLine(s.pending, nextPoints, ctx);
     store.setState({ pending: { ...s.pending, points: nextPoints, cursor: c } });
     store.bumpData();
+    return true;
+  },
+  onContextMenu(_ev, ctx) {
+    const s = store.getState();
+    if (s.pending?.kind !== 'customLine') return false;
+    finishCustomLine(s.pending, ctx);
     return true;
   },
   onPointerMove(ev, ctx) {
@@ -1255,6 +1374,7 @@ export const addLabelTool: Tool = {
     ctx.refresh();
     store.bumpData();
     store.setState({
+      activeTool: 'select',
       pending: null,
       selection: { kind: 'label', id, areaId: p.areaId },
       sidebarTab: 'selection',
@@ -1267,14 +1387,98 @@ export const addLabelTool: Tool = {
   },
 };
 
+export function getActiveSwatch(s: import('./store').EditorState): import('./types').Swatch | null {
+  if (!s.activeSwatchSetId || !s.activeSwatchId) return null;
+  const set = s.swatchSets.find(ss => ss.id === s.activeSwatchSetId);
+  return set?.swatches.find(sw => sw.id === s.activeSwatchId) ?? null;
+}
+
+function applySwatchAt(ctx: ToolContext, ev: PointerEvent, swatch: import('./types').Swatch): void {
+  const s = store.getState();
+  if (s.pending?.kind !== 'paint') return;
+  const room = roomUnder(ctx, ev);
+  if (!room) return;
+  if (s.pending.painted.some(p => p.id === room.id)) return;
+  const rawRoom = s.map?.rooms[room.id];
+  if (!rawRoom) return;
+  const prevSymbol = rawRoom.symbol ?? '';
+  const prevEnv = rawRoom.environment ?? -1;
+  ctx.scene.reader.setRoomField(room.id, 'symbol', swatch.symbol);
+  ctx.scene.reader.setRoomField(room.id, 'environment', swatch.environment);
+  ctx.refresh();
+  store.bumpData();
+  const painted = [...s.pending.painted, { id: room.id, prevSymbol, prevEnv }];
+  store.setState({ pending: { kind: 'paint', painted } });
+}
+
+export const paintTool: Tool = {
+  id: 'paint',
+  cursor: 'cell',
+  onPointerDown(ev, ctx) {
+    if (ev.button !== 0) return false;
+    const s = store.getState();
+    const swatch = getActiveSwatch(s);
+    if (!swatch) {
+      store.setState({ status: 'No swatch selected — open the Swatches palette first.' });
+      return true;
+    }
+    store.setState({ pending: { kind: 'paint', painted: [] } });
+    ctx.container.setPointerCapture(ev.pointerId);
+    applySwatchAt(ctx, ev, swatch);
+    return true;
+  },
+  onPointerMove(ev, ctx) {
+    const s = store.getState();
+    if (s.pending?.kind !== 'paint') { updateHover(ctx, ev); return false; }
+    const swatch = getActiveSwatch(s);
+    if (swatch) applySwatchAt(ctx, ev, swatch);
+    return true;
+  },
+  onPointerUp(ev, ctx) {
+    const s = store.getState();
+    if (s.pending?.kind !== 'paint') return false;
+    try { ctx.container.releasePointerCapture(ev.pointerId); } catch {}
+    const painted = s.pending.painted;
+    const swatch = getActiveSwatch(s);
+    if (painted.length > 0 && swatch) {
+      const cmds: import('./types').Command[] = [];
+      for (const { id, prevSymbol, prevEnv } of painted) {
+        if (prevSymbol !== swatch.symbol)
+          cmds.push({ kind: 'setRoomField', id, field: 'symbol', from: prevSymbol, to: swatch.symbol });
+        if (prevEnv !== swatch.environment)
+          cmds.push({ kind: 'setRoomField', id, field: 'environment', from: prevEnv, to: swatch.environment });
+      }
+      if (cmds.length > 0) {
+        const cmd = cmds.length === 1 ? cmds[0] : { kind: 'batch' as const, cmds };
+        store.setState((st) => ({ undo: [...st.undo, cmd], redo: [] }));
+      }
+      store.setState({ status: `Painted "${swatch.name}" on ${painted.length} room${painted.length > 1 ? 's' : ''}` });
+    }
+    store.setState({ pending: null });
+    return true;
+  },
+  onCancel(ctx) {
+    const s = store.getState();
+    if (s.pending?.kind !== 'paint') return;
+    for (const { id, prevSymbol, prevEnv } of s.pending.painted) {
+      ctx.scene.reader.setRoomField(id, 'symbol', prevSymbol);
+      ctx.scene.reader.setRoomField(id, 'environment', prevEnv);
+    }
+    if (s.pending.painted.length > 0) ctx.refresh();
+    store.setState({ pending: null });
+  },
+};
+
 export const TOOLS: Record<ToolId, Tool> = {
   select: selectTool,
   connect: connectTool,
+  unlink: unlinkTool,
   addRoom: addRoomTool,
   delete: deleteTool,
   pan: panTool,
   customLine: customLineTool,
   addLabel: addLabelTool,
+  paint: paintTool,
 };
 
 export function hitToSelection(hit: HitItem): Selection {

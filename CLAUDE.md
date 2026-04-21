@@ -34,7 +34,7 @@ Single centralized store with `store.setState()` and a `useEditorState()` React 
 All map mutations go through `applyCommand()`. Commands are plain objects pushed to an undo stack. `applyCommand` mutates the `MudletMap`, syncs the renderer via `EditorMapReader`, then calls `renderer.refresh()`.
 
 **Tool System** (`src/editor/tools.ts`, `src/editor/pointerController.ts`)  
-7 tools: `select`, `connect`, `unlink`, `addRoom`, `delete`, `pan`, `customLine`. Each implements `onPointerDown/Move/Up/Cancel`. The pointer controller routes events to the active tool; holding Space temporarily switches any tool to pan.
+9 tools: `select`, `connect`, `unlink`, `addRoom`, `addLabel`, `delete`, `pan`, `customLine`, `paint`. Each implements `onPointerDown/Move/Up/Cancel`. The pointer controller routes events to the active tool; holding Space temporarily switches any tool to pan.
 
 **EditorMapReader** (`src/editor/reader/EditorMapReader.ts`)  
 Adapter wrapping `MudletMap`. All getters/setters negate Y so the rest of the editor works in Mudlet convention (+Y = North), while the renderer uses canvas convention (+Y = down). **Never bypass this adapter when touching room coordinates.**
@@ -57,9 +57,12 @@ Use `clientToMap()` (`src/editor/coords.ts`) to convert pointer events to snappe
 - `src/editor/types.ts` — all shared types (ToolId, Direction, Command, Selection, Pending…)
 - `src/editor/hitTest.ts` — hit detection for rooms, exits, custom line waypoints
 - `src/editor/mapHelpers.ts` — direction inference, exit lookup utilities
+- `src/editor/session.ts` — IndexedDB persistence: save/load/list/clear sessions
 - `src/mapIO.ts` — thin wrapper around `mudlet-map-binary-reader` for file load/save
-- `src/App.tsx` — keyboard shortcut handlers and top-level layout
-- `docs/DESIGN.md` — detailed design doc: tool gestures, overlay architecture, milestones
+- `src/App.tsx` — keyboard shortcut handlers, top-level layout, auto-save to IndexedDB
+- `src/components/SessionsPanel.tsx` — UI for listing/restoring/deleting saved sessions
+- `src/components/SwatchPalette.tsx` — draggable palette for symbol+environment presets
+- `src/components/UrlLoadModal.tsx` — load a `.dat` file from a remote URL
 
 ### External Dependencies
 

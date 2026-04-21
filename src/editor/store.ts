@@ -1,6 +1,34 @@
 import { useSyncExternalStore } from 'react';
 import type { MudletMap } from '../mapIO';
-import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, ToolId } from './types';
+import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
+
+const SWATCH_SETS_KEY = 'mudlet-swatch-sets';
+const ACTIVE_SET_KEY = 'mudlet-active-swatch-set';
+const ACTIVE_SWATCH_KEY = 'mudlet-active-swatch';
+
+function loadSwatchState(): { swatchSets: SwatchSet[]; activeSwatchSetId: string | null; activeSwatchId: string | null } {
+  try {
+    const raw = localStorage.getItem(SWATCH_SETS_KEY);
+    const sets: SwatchSet[] = raw ? JSON.parse(raw) : [];
+    return {
+      swatchSets: sets,
+      activeSwatchSetId: localStorage.getItem(ACTIVE_SET_KEY),
+      activeSwatchId: localStorage.getItem(ACTIVE_SWATCH_KEY),
+    };
+  } catch {
+    return { swatchSets: [], activeSwatchSetId: null, activeSwatchId: null };
+  }
+}
+
+export function saveSwatchState(sets: SwatchSet[], activeSetId: string | null, activeSwatchId: string | null): void {
+  try {
+    localStorage.setItem(SWATCH_SETS_KEY, JSON.stringify(sets));
+    if (activeSetId != null) localStorage.setItem(ACTIVE_SET_KEY, activeSetId);
+    else localStorage.removeItem(ACTIVE_SET_KEY);
+    if (activeSwatchId != null) localStorage.setItem(ACTIVE_SWATCH_KEY, activeSwatchId);
+    else localStorage.removeItem(ACTIVE_SWATCH_KEY);
+  } catch {}
+}
 
 export interface EditorState {
   map: MudletMap | null;
@@ -34,6 +62,11 @@ export interface EditorState {
   hitCycle: { x: number; y: number; index: number } | null;
   /** When true, label resize preserves the aspect ratio at the start of the drag. */
   labelAspectRatioLocked: boolean;
+  swatchSets: SwatchSet[];
+  activeSwatchSetId: string | null;
+  activeSwatchId: string | null;
+  swatchPaletteOpen: boolean;
+  sessionId: string | null;
 }
 
 export type ContextMenuState =
@@ -59,6 +92,7 @@ export type ContextMenuState =
     }
   | null;
 
+const swatchInit = loadSwatchState();
 const initial: EditorState = {
   map: null,
   loaded: null,
@@ -84,6 +118,11 @@ const initial: EditorState = {
   navigateTo: null,
   hitCycle: null,
   labelAspectRatioLocked: false,
+  swatchSets: swatchInit.swatchSets,
+  activeSwatchSetId: swatchInit.activeSwatchSetId,
+  activeSwatchId: swatchInit.activeSwatchId,
+  swatchPaletteOpen: false,
+  sessionId: null,
 };
 
 type Listener = (state: EditorState) => void;

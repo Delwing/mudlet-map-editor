@@ -17,6 +17,15 @@ export default defineConfig({
   resolve: {
     alias: {
       fs: fsStub,
+      'vite-plugin-node-polyfills/shims/buffer': fileURLToPath(
+        new URL('./node_modules/vite-plugin-node-polyfills/shims/buffer/dist/index.js', import.meta.url)
+      ),
+      'vite-plugin-node-polyfills/shims/process': fileURLToPath(
+        new URL('./node_modules/vite-plugin-node-polyfills/shims/process/dist/index.js', import.meta.url)
+      ),
+      'vite-plugin-node-polyfills/shims/global': fileURLToPath(
+        new URL('./node_modules/vite-plugin-node-polyfills/shims/global/dist/index.js', import.meta.url)
+      ),
     },
     // Keep Konva singleton even when mudlet-map-renderer is `npm link`ed (so
     // the linked renderer and the editor both use the editor's copy rather

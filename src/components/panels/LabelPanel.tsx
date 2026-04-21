@@ -301,7 +301,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
       </div>
 
       {/* Size + AR lock (always visible) */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+      <div className="field-row">
         <Field label="Width">
           <input
             type="number"
@@ -332,11 +332,8 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           title={aspectRatioLocked ? 'Aspect ratio locked — click to unlock' : 'Lock aspect ratio for resize'}
           onClick={() => store.setState({ labelAspectRatioLocked: !aspectRatioLocked })}
           style={{
-            height: 24, padding: '0 6px', fontSize: 12, marginBottom: 8,
-            border: '1px solid var(--border, #444)', borderRadius: 3, cursor: 'pointer',
             background: aspectRatioLocked ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
             color: aspectRatioLocked ? '#000' : 'inherit',
-            whiteSpace: 'nowrap',
           }}
         >
           {aspectRatioLocked ? 'AR locked' : 'AR free'}
@@ -345,13 +342,11 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
 
       {/* Display options (always visible) */}
       <CheckboxField
-        label="Position"
         checked={snap.showOnTop}
         onChange={commitShowOnTop}
         description="Show on top (foreground)"
       />
       <CheckboxField
-        label="Zoom scaling"
         checked={!snap.noScaling}
         onChange={(v) => commitNoScaling(!v)}
         description="Scale with zoom"
@@ -387,7 +382,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         </Field>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <Field label="Text color">
+          <Field label="Text color" as="div">
             <input
               type="color"
               key={`fg-${selection.id}-${fgHex}`}
@@ -396,7 +391,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               onBlur={(e) => commitColors(hexToMudletColor(e.target.value), snap.bgColor)}
             />
           </Field>
-          <Field label="BG color">
+          <Field label="BG color" as="div">
             <input
               type="color"
               key={`bg-${selection.id}-${bgHex}`}
@@ -487,7 +482,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           </div>
         </Field>
 
-        <Field label="Outline color">
+        <Field label="Outline color" as="div">
           <input
             type="color"
             key={`outline-${selection.id}-${outlineHex}`}

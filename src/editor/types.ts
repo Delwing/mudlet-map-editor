@@ -36,7 +36,10 @@ export type LabelSnapshot = {
   imageSrc?: string;
 };
 
-export type ToolId = 'select' | 'connect' | 'addRoom' | 'delete' | 'pan' | 'customLine' | 'addLabel';
+export type ToolId = 'select' | 'connect' | 'unlink' | 'addRoom' | 'delete' | 'pan' | 'customLine' | 'addLabel' | 'paint';
+
+export type Swatch = { id: string; name: string; symbol: string; environment: number };
+export type SwatchSet = { id: string; name: string; swatches: Swatch[] };
 
 export type Direction =
   | 'north' | 'northeast' | 'east' | 'southeast'
@@ -143,7 +146,7 @@ export type PendingCustomLine = {
   /** Normalized storage key (short form for cardinals). */
   exitName: string;
   color: MudletColor;
-  style: number;   // 1=solid, 2=dash, 3=dot
+  style: number;   // 1=solid, 2=dash, 3=dot, 4=dash-dot, 5=dash-dot-dot
   arrow: boolean;
   /** Accumulated waypoints in render-space [x, y]. points[0] is the room centre. */
   points: [number, number][];
@@ -233,7 +236,14 @@ export type PendingMarquee = {
   preExistingIds: number[];
 };
 
-export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | null;
+export type PendingPaint = {
+  kind: 'paint';
+  painted: { id: number; prevSymbol: string; prevEnv: number }[];
+};
+
+export type PendingPickSwatch = { kind: 'pickSwatch' };
+
+export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | PendingPaint | PendingPickSwatch | null;
 
 export type RoomSnapshot = MudletRoom;
 

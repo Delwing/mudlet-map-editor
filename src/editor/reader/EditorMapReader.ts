@@ -43,6 +43,8 @@ const PEN_STYLES: Record<number, string> = {
   1: 'solid line',
   2: 'dash line',
   3: 'dot line',
+  4: 'dash dot line',
+  5: 'dash dot dot line',
 };
 
 function makeLiveRoom(id: number, raw: MudletRoom): LiveRoom {
@@ -775,6 +777,7 @@ export class EditorMapReader {
 
   getLabelSnapshot(areaId: number, labelId: number): LabelSnapshot | null {
     const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    console.log(raw)
     return raw ? snapshotFromRawLabel(raw) : null;
   }
 

@@ -49,6 +49,7 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
   const [nameDraft, setNameDraft] = useState(room.name ?? '');
   const [weightDraft, setWeightDraft] = useState(String(room.weight ?? 1));
   const [symbolDraft, setSymbolDraft] = useState(room.symbol ?? '');
+  const [symbolColor, setSymbolColor] = useState<string | null>(room.userData?.['system.fallback_symbol_color'] ?? null);
   const [envPickerOpen, setEnvPickerOpen] = useState(false);
   const [specialExitName, setSpecialExitName] = useState('');
   const [specialExitTarget, setSpecialExitTarget] = useState('');
@@ -103,6 +104,7 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
     setNameDraft(room.name ?? '');
     setWeightDraft(String(room.weight ?? 1));
     setSymbolDraft(room.symbol ?? '');
+    setSymbolColor(room.userData?.['system.fallback_symbol_color'] ?? null);
     setEnvPickerOpen(false);
     setSpecialExitName('');
     setSpecialExitTarget('');
@@ -134,6 +136,16 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ status: `Room ${selId} environment → ${envId}` });
+  };
+
+  const commitSymbolColor = (hex: string | null) => {
+    const key = 'system.fallback_symbol_color';
+    const from = room.userData?.[key] ?? null;
+    const to = hex;
+    if (from === to) return;
+    pushCommand({ kind: 'setUserDataEntry', roomId: selId, key, from, to }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpData();
   };
 
   const addExit = (dir: Direction, toId: number) => {
@@ -501,7 +513,7 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
       </Field>
 
       <div className="env-symbol-row">
-        <label className="field env-field">
+        <div className="field env-field">
           <span className="label">Environment</span>
           <div className="env-field-row">
             <button
@@ -522,14 +534,31 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
               />
             )}
           </div>
-        </label>
+        </div>
         <Field label="Symbol">
-          <input
-            value={symbolDraft}
-            maxLength={4}
-            onChange={(e) => setSymbolDraft(e.target.value)}
-            onBlur={() => commit('symbol', symbolDraft)}
-          />
+          <div className="symbol-row">
+            <input
+              value={symbolDraft}
+              maxLength={4}
+              onChange={(e) => setSymbolDraft(e.target.value)}
+              onBlur={() => commit('symbol', symbolDraft)}
+            />
+            <input
+              type="color"
+              className="symbol-color-input"
+              value={symbolColor ?? '#ffffff'}
+              title="Symbol color (stored in userData as system.fallback_symbol_color)"
+              onChange={(e) => setSymbolColor(e.target.value)}
+              onBlur={() => { if (symbolColor !== null) commitSymbolColor(symbolColor); }}
+            />
+            <button
+              type="button"
+              className="symbol-color-clear"
+              style={{ visibility: symbolColor !== null ? 'visible' : 'hidden' }}
+              title="Clear symbol color"
+              onClick={() => { setSymbolColor(null); commitSymbolColor(null); }}
+            >×</button>
+          </div>
         </Field>
       </div>
 

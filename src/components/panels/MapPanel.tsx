@@ -14,7 +14,7 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
     return (
       <div className="panel-content">
         <h3>No map loaded</h3>
-        <p className="hint">Open a .dat file to see map info.</p>
+        <p className="hint">Drag a .dat file in or load from toolbar.</p>
       </div>
     );
   }

@@ -1,19 +1,11 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { store, useEditorState } from '../editor/store';
-import type { ToolId } from '../editor/types';
-import { createEmptyMap, readMapFromBytes, writeMapToBytes } from '../mapIO';
+import { createEmptyMap, writeMapToBytes } from '../mapIO';
+import { loadFileIntoStore } from '../editor/loadFile';
 import { DropdownSelect } from './DropdownSelect';
+import { TOOL_BUTTONS } from './HelpModal';
 
-const TOOL_BUTTONS: { id: ToolId; label: string; hint: string; key: string }[] = [
-  { id: 'select',     label: 'Select',      hint: 'Click a room to select. Drag to move (snaps to grid). Arrow keys nudge.', key: '1' },
-  { id: 'connect',    label: 'Connect',     hint: 'Click source, then target. Shift = one-way.',                              key: '2' },
-  { id: 'addRoom',    label: 'Add Room',    hint: 'Click empty cell to create a room.',                                       key: '3' },
-  { id: 'addLabel',   label: 'Add Label',   hint: 'Click to place a text label. Select to move/edit, Delete to remove.',     key: '4' },
-  { id: 'delete',     label: 'Delete',      hint: 'Click a room to delete it, or an exit/custom line/label to remove it.',   key: '5' },
-  { id: 'pan',        label: 'Pan',         hint: 'Drag background to pan. Hold Space with any tool for temporary pan.',      key: '6' },
-];
-
-export function Toolbar() {
+export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => void; onLoadFromUrl: () => void }) {
   const activeTool = useEditorState((s) => s.activeTool);
   const map = useEditorState((s) => s.map);
   const mapLoaded = map != null;
@@ -22,9 +14,15 @@ export function Toolbar() {
   const currentZ = useEditorState((s) => s.currentZ);
   const snapToGrid = useEditorState((s) => s.snapToGrid);
   const status = useEditorState((s) => s.status);
+  const pending = useEditorState((s) => s.pending);
   const undoLen = useEditorState((s) => s.undo.length);
   const redoLen = useEditorState((s) => s.redo.length);
   const savedUndoLength = useEditorState((s) => s.savedUndoLength);
+  const swatchPaletteOpen = useEditorState((s) => s.swatchPaletteOpen);
+  const activeSwatchId = useEditorState((s) => s.activeSwatchId);
+  const activeSwatchSetId = useEditorState((s) => s.activeSwatchSetId);
+  const swatchSets = useEditorState((s) => s.swatchSets);
+  const activeSwatch = swatchSets.find(s => s.id === activeSwatchSetId)?.swatches.find(sw => sw.id === activeSwatchId) ?? null;
   const dirty = undoLen !== savedUndoLength;
   const structureVersion = useEditorState((s) => s.structureVersion);
 
@@ -42,6 +40,28 @@ export function Toolbar() {
   }, [map, currentAreaId, structureVersion]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [gotoInput, setGotoInput] = useState('');
+
+  const handleGotoRoom = () => {
+    const id = parseInt(gotoInput, 10);
+    if (Number.isNaN(id)) return;
+    const s = store.getState();
+    if (!s.map) return;
+    const room = s.map.rooms[id];
+    if (!room) {
+      store.setState({ status: `Room #${id} not found` });
+      return;
+    }
+    store.setState({
+      currentAreaId: room.area,
+      currentZ: room.z,
+      navigateTo: { mapX: room.x, mapY: -room.y },
+      selection: { kind: 'room', ids: [id] },
+      pending: null,
+    });
+    store.bumpStructure();
+    setGotoInput('');
+  };
 
   const handleNewMap = () => {
     const map = createEmptyMap();
@@ -57,37 +77,12 @@ export function Toolbar() {
       redo: [],
       savedUndoLength: 0,
       status: 'New map created · 0 rooms · 1 area',
+      sessionId: null,
     });
     store.bumpStructure();
   };
 
-  const handleFile = async (file: File) => {
-    try {
-      store.setState({ status: `Reading ${file.name}…` });
-      const bytes = await file.arrayBuffer();
-      const map = readMapFromBytes(bytes);
-      const firstAreaId = Number(Object.keys(map.areaNames)[0] ?? -1);
-      const resolvedArea = Number.isNaN(firstAreaId) ? null : firstAreaId;
-      const firstZ = 0;
-      store.setState({
-        map,
-        loaded: { fileName: file.name },
-        currentAreaId: resolvedArea,
-        currentZ: firstZ,
-        selection: null,
-        hover: null,
-        pending: null,
-        undo: [],
-        redo: [],
-        savedUndoLength: 0,
-        status: `Loaded ${file.name} · ${Object.keys(map.rooms).length} rooms · ${Object.keys(map.areaNames).length} areas`,
-      });
-      store.bumpStructure();
-    } catch (err) {
-      store.setState({ status: `Failed to read file: ${(err as Error).message}` });
-      console.error(err);
-    }
-  };
+  const handleFile = loadFileIntoStore;
 
   const handleSave = () => {
     const s = store.getState();
@@ -113,47 +108,120 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <img src="/logo.png" alt="Mudlet logo" id={"logo"}/>
-      <h1>Mudlet Map Editor</h1>
-      <button type="button" title="New Map" onClick={handleNewMap}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          <path d="M6 9h4M8 7v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
-      </button>
+      {/* Row 1: header */}
+      <div className="toolbar-row toolbar-row-header">
+        <img src="/logo.png" alt="Mudlet logo" id={"logo"}/>
+        <h1>Mudlet Map Editor</h1>
 
-      <label className="file-button" title="Load .dat">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path d="M1 5h14v9H1V5z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          <path d="M1 5l2-3h4l1 1h7" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          <path d="M8 8v4M6 10l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".dat"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFile(file);
-            e.target.value = '';
-          }}
-        />
-      </label>
+        <button type="button" title="New Map" onClick={handleNewMap}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <path d="M6 9h4M8 7v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+          </svg>
+        </button>
 
-      <button type="button" title="Save .dat" onClick={handleSave} disabled={!mapLoaded} style={{ position: 'relative', ...(dirty ? { color: '#ffd080' } : {}) }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path d="M2 2h9l3 3v9H2V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          <rect x="5" y="2" width="5" height="4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          <rect x="3" y="8" width="10" height="5" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-        </svg>
-        {dirty && <span style={{ position: 'absolute', top: 6, right: 7, fontSize: '10px', lineHeight: 1, color: '#ffd080' }}>*</span>}
-      </button>
+        <label className="file-button" title="Load .dat">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M1 5h14v9H1V5z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <path d="M1 5l2-3h4l1 1h7" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <path d="M8 8v4M6 10l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".dat"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFile(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
 
+        <button type="button" title="Load .dat from URL" onClick={onLoadFromUrl}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <path d="M2 8h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            <path d="M2.5 5.5h11M2.5 10.5h11" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1"/>
+          </svg>
+        </button>
+
+        <button type="button" title="Save .dat" onClick={handleSave} disabled={!mapLoaded} style={{ position: 'relative', ...(dirty ? { color: '#ffd080' } : {}) }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M2 2h9l3 3v9H2V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <rect x="5" y="2" width="5" height="4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+            <rect x="3" y="8" width="10" height="5" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          </svg>
+          {dirty && <span style={{ position: 'absolute', top: 6, right: 7, fontSize: '10px', lineHeight: 1, color: '#ffd080' }}>*</span>}
+        </button>
+
+        {mapLoaded && (
+          <>
+            <div className="toolbar-sep" />
+
+            <DropdownSelect
+              label="Area"
+              value={currentAreaId}
+              options={areaOptions.map((a) => ({ value: a.id, label: `${a.name} (#${a.id})` }))}
+              onChange={(id) => {
+                store.setState({ currentAreaId: id, currentZ: 0, selection: null, pending: null });
+                store.bumpStructure();
+              }}
+              searchable
+            />
+
+            <DropdownSelect
+              label="Level"
+              value={currentZ}
+              options={zLevels.map((z) => ({ value: z, label: String(z) }))}
+              onChange={(z) => {
+                store.setState({ currentZ: z, selection: null, pending: null });
+                store.bumpStructure();
+              }}
+            />
+
+            <div className="toolbar-sep" />
+
+            <div className="toolbar-goto" title="Go to room by ID">
+              <label className="toolbar-goto-label" htmlFor="toolbar-goto-input">Room</label>
+              <input
+                id="toolbar-goto-input"
+                className="toolbar-goto-input"
+                type="number"
+                min={1}
+                placeholder="ID"
+                value={gotoInput}
+                onChange={(e) => setGotoInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleGotoRoom(); }}
+              />
+              <button
+                type="button"
+                className="toolbar-goto-btn"
+                onClick={handleGotoRoom}
+                disabled={gotoInput === ''}
+              >
+                Go
+              </button>
+            </div>
+          </>
+        )}
+
+        <span className="status">
+          {loaded && <span className="status-file">[{loaded.fileName}]</span>}
+          <span className="status-action">{status}</span>
+        </span>
+
+        <button type="button" className="help-btn" title="Help (keyboard shortcuts)" onClick={onHelpClick}>
+          ?
+        </button>
+      </div>
+
+      {/* Row 2: tools (only when map loaded) */}
       {mapLoaded && (
-        <>
-          <div className="toolbar-sep" />
+        <div className="toolbar-row toolbar-row-tools">
           <div className="tool-group">
             {TOOL_BUTTONS.map((t) => (
               <button
@@ -192,27 +260,6 @@ export function Toolbar() {
 
           <div className="toolbar-sep" />
 
-          <DropdownSelect
-            label="Area"
-            value={currentAreaId}
-            options={areaOptions.map((a) => ({ value: a.id, label: `${a.name} (#${a.id})` }))}
-            onChange={(id) => {
-              store.setState({ currentAreaId: id, currentZ: 0, selection: null, pending: null });
-              store.bumpStructure();
-            }}
-            searchable
-          />
-
-          <DropdownSelect
-            label="Level"
-            value={currentZ}
-            options={zLevels.map((z) => ({ value: z, label: String(z) }))}
-            onChange={(z) => {
-              store.setState({ currentZ: z, selection: null, pending: null });
-              store.bumpStructure();
-            }}
-          />
-
           <button
             type="button"
             className={`tool-btn toolbar-snap-btn${snapToGrid ? ' active' : ''}`}
@@ -221,13 +268,73 @@ export function Toolbar() {
           >
             Snap
           </button>
-        </>
-      )}
 
-      <span className="status">
-        {loaded && <span className="status-file">[{loaded.fileName}]</span>}
-        <span className="status-action">{status}</span>
-      </span>
+          <button
+            type="button"
+            className={`tool-btn${swatchPaletteOpen ? ' active' : ''}`}
+            title="Room swatches palette"
+            onClick={() => store.setState({ swatchPaletteOpen: !swatchPaletteOpen })}
+          >
+            {activeSwatch
+              ? <><span className="tool-key">8↴</span>{activeSwatch.name}</>
+              : <><span className="tool-key">8↴</span>Swatches</>
+            }
+          </button>
+
+          {!pending && activeTool === 'paint' && (
+            <span className="toolbar-pending-hint">
+              {activeSwatch
+                ? `Painting "${activeSwatch.name}" (env ${activeSwatch.environment}${activeSwatch.symbol ? `, symbol "${activeSwatch.symbol}"` : ''}) · click or drag rooms`
+                : 'No swatch selected — open Swatches palette and pick one'}
+            </span>
+          )}
+          {pending?.kind === 'marquee' && (
+            <span className="toolbar-pending-hint">
+              Hold Ctrl to toggle selection
+            </span>
+          )}
+          {pending?.kind === 'connect' && (
+            <span className="toolbar-pending-hint">
+              Pick target · Shift = one-way · Esc cancels
+            </span>
+          )}
+          {pending?.kind === 'customLine' && (
+            <span className="toolbar-pending-hint">
+              Click to add waypoints · right-click or Enter to finish · Esc cancels
+            </span>
+          )}
+          {!pending && activeTool === 'select' && (
+            <span className="toolbar-pending-hint">
+              Hold Space to pan
+            </span>
+          )}
+          {!pending && activeTool === 'unlink' && (
+            <span className="toolbar-pending-hint">
+              Click a room to remove all its exits · click an exit or custom line to remove just that one
+            </span>
+          )}
+          {!pending && activeTool === 'addRoom' && (
+            <span className="toolbar-pending-hint">
+              Click an empty grid cell to place a room
+            </span>
+          )}
+          {!pending && activeTool === 'addLabel' && (
+            <span className="toolbar-pending-hint">
+              Click to place a label · select to move/edit · Delete to remove
+            </span>
+          )}
+          {pending?.kind === 'paint' && (
+            <span className="toolbar-pending-hint">
+              Drag to paint multiple rooms · release to commit
+            </span>
+          )}
+          {pending?.kind === 'pickSwatch' && (
+            <span className="toolbar-pending-hint" style={{ color: '#ffd080' }}>
+              Click a room to copy its symbol &amp; environment · Esc to cancel
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

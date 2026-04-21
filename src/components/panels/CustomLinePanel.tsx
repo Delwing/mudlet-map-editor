@@ -3,7 +3,9 @@ import { store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from '../../editor/tools';
 import { snap } from '../../editor/coords';
-import type { PendingCustomLine } from '../../editor/types';
+import type { PendingCustomLine, Direction } from '../../editor/types';
+import { CARDINAL_DIRECTIONS } from '../../editor/types';
+import { getExit } from '../../editor/mapHelpers';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor, MudletMap } from '../../mapIO';
 import { Field, RoomLink, mudletColorToHex, hexToMudletColor } from '../panelShared';
@@ -43,7 +45,7 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
       <h3>Custom Line</h3>
       <p className="hint" style={{ marginBottom: 10 }}>
         Drawing on room #{pending.roomId}.<br />
-        Click to add waypoints · double-click or Enter to finish · Esc cancels.
+        Click to add waypoints · right-click or Enter to finish · Esc cancels.
       </p>
 
       <Field label="Exit Name">
@@ -64,6 +66,8 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
           <option value={1}>Solid</option>
           <option value={2}>Dash</option>
           <option value={3}>Dot</option>
+          <option value={4}>Dash-Dot</option>
+          <option value={5}>Dash-Dot-Dot</option>
         </select>
       </div>
       <div className="cl-form-row">
@@ -90,7 +94,11 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
   const color = room?.customLinesColor?.[selection.exitName];
   const style = room?.customLinesStyle?.[selection.exitName] ?? 1;
   const arrow = room?.customLinesArrow?.[selection.exitName] ?? false;
-  const targetRoomId = room?.mSpecialExits?.[selection.exitName];
+  const specialTarget = room?.mSpecialExits?.[selection.exitName];
+  const dirTarget = CARDINAL_DIRECTIONS.includes(selection.exitName as Direction) && room
+    ? getExit(room, selection.exitName as Direction)
+    : undefined;
+  const targetRoomId = specialTarget ?? (dirTarget != null && dirTarget > 0 ? dirTarget : undefined);
   const targetRoom = targetRoomId != null ? map.rooms[targetRoomId] : null;
 
   const [colorHex, setColorHex] = useState(color ? mudletColorToHex(color) : '#ffffff');
@@ -178,6 +186,10 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
         </div>
       </div>
 
+      <p className="hint" style={{ margin: '8px 0 10px', fontSize: 11 }}>
+        Right-click a segment to insert a waypoint · drag a waypoint to move it · Delete to remove
+      </p>
+
       <div className="cl-form" style={{ marginTop: 10 }}>
         <div className="cl-form-row">
           <label className="cl-form-label">Color</label>
@@ -197,6 +209,8 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
             <option value={1}>Solid</option>
             <option value={2}>Dash</option>
             <option value={3}>Dot</option>
+            <option value={4}>Dash-Dot</option>
+            <option value={5}>Dash-Dot-Dot</option>
           </select>
         </div>
         <div className="cl-form-row">

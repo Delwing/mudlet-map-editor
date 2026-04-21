@@ -1,23 +1,31 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Toolbar } from './components/Toolbar';
+import { HelpModal } from './components/HelpModal';
+import { UrlLoadModal } from './components/UrlLoadModal';
 import { SidePanel } from './components/SidePanel';
 import { ContextMenu } from './components/ContextMenu';
+import { SessionsPanel } from './components/SessionsPanel';
+import { SwatchPalette } from './components/SwatchPalette';
 import { store, useEditorState } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import type { Command, ToolId } from './editor/types';
+import { saveSession } from './editor/session';
+import { loadFileIntoStore } from './editor/loadFile';
 
-// Toolbar: 12px from top + ~48px height + 16px gap = 76px. Side panel: always use expanded width (440px).
-const VIEW_INSETS = { top: 76, right: 464, bottom: 24, left: 24 };
+// Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px. Side panel: always use expanded width (440px).
+const VIEW_INSETS = { top: 104, right: 464, bottom: 24, left: 24 };
 
 const TOOL_KEYS: Record<string, ToolId> = {
   '1': 'select',
   '2': 'connect',
-  '3': 'addRoom',
-  '4': 'addLabel',
-  '5': 'delete',
-  '6': 'pan',
+  '3': 'unlink',
+  '4': 'addRoom',
+  '5': 'addLabel',
+  '6': 'delete',
+  '7': 'pan',
+  '8': 'paint',
 };
 
 // Raw Mudlet convention: +y = north (visually up). ArrowUp must increment raw.y.
@@ -33,13 +41,18 @@ export default function App() {
   const sceneRef = useRef<SceneHandle | null>(null);
 
   const map = useEditorState((s) => s.map);
+  const swatchPaletteOpen = useEditorState((s) => s.swatchPaletteOpen);
   const mapLoaded = map != null;
   const currentAreaId = useEditorState((s) => s.currentAreaId);
   const currentZ = useEditorState((s) => s.currentZ);
   const activeTool = useEditorState((s) => s.activeTool);
   const pending = useEditorState((s) => s.pending);
+  const hover = useEditorState((s) => s.hover);
   const spaceHeld = useEditorState((s) => s.spaceHeld);
   const panelCollapsed = useEditorState((s) => s.panelCollapsed);
+  const dataVersion = useEditorState((s) => s.dataVersion);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showUrlLoad, setShowUrlLoad] = useState(false);
 
   // Scene lifecycle: keyed on the raw map reference, so a file load (new MudletMap
   // identity) tears down and recreates the scene, while in-place mutations
@@ -90,21 +103,35 @@ export default function App() {
         el.removeEventListener('pointercancel', onUp);
       };
     }
-    if (pending?.kind === 'pickExit' || pending?.kind === 'pickSpecialExit') {
+    if (pending?.kind === 'pickExit' || pending?.kind === 'pickSpecialExit' || pending?.kind === 'pickSwatch') {
       el.style.cursor = 'crosshair';
       return;
     }
     const cursorByTool: Record<ToolId, string> = {
-      select: 'default',
+      select: hover ? 'pointer' : 'default',
       connect: 'crosshair',
+      unlink: 'crosshair',
       addRoom: 'crosshair',
       delete: 'not-allowed',
       pan: 'grab',
-      customLine: 'crosshair',  // activated from side panel, not toolbar
+      customLine: 'crosshair',
       addLabel: 'crosshair',
+      paint: 'cell',
     };
     el.style.cursor = cursorByTool[activeTool];
-  }, [activeTool, spaceHeld, pending]);
+  }, [activeTool, hover, spaceHeld, pending]);
+
+  // Auto-save session to IndexedDB whenever the map changes (debounced).
+  useEffect(() => {
+    const { map, loaded, undo, currentAreaId, currentZ, sessionId } = store.getState();
+    if (!map || !loaded) return;
+    const timer = setTimeout(() => {
+      saveSession(loaded.fileName, map, undo, currentAreaId, currentZ, sessionId ?? undefined)
+        .then((id) => { if (!sessionId) store.setState({ sessionId: id }); })
+        .catch(console.error);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [dataVersion]);
 
   // Keyboard accelerators.
   useEffect(() => {
@@ -242,6 +269,23 @@ export default function App() {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('editor:undo', performUndo as EventListener);
       window.removeEventListener('editor:redo', performRedo as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const file = Array.from(e.dataTransfer?.files ?? []).find((f) => f.name.endsWith('.dat'));
+      if (file) loadFileIntoStore(file);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
     };
   }, []);
 
@@ -390,21 +434,14 @@ export default function App() {
     <div className={`app${panelCollapsed ? ' panel-collapsed' : ''}`}>
       <div className="map-viewport">
         <div ref={containerRef} className="map-container" />
-        {!mapLoaded && <div className="empty-state">No map loaded.</div>}
-        <Toolbar />
-        {pending?.kind === 'connect' && (
-          <div className="pending-badge">
-            Connect: pick target (click a room) · Shift = one-way · Esc cancels
-          </div>
-        )}
-        {pending?.kind === 'customLine' && (
-          <div className="pending-badge">
-            Custom line: click to add waypoints · double-click or Enter to finish · Esc cancels
-          </div>
-        )}
-        <SidePanel sceneRef={sceneRef} />
+        {!mapLoaded && <SessionsPanel />}
+        <Toolbar onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} />
+<SidePanel sceneRef={sceneRef} />
       </div>
       <ContextMenu sceneRef={sceneRef} />
+      {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showUrlLoad && <UrlLoadModal onClose={() => setShowUrlLoad(false)} />}
     </div>
   );
 }

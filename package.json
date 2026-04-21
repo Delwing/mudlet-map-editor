@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "konva": "^10.2.5",
-    "mudlet-map-binary-reader": "0.7.3",
-    "mudlet-map-renderer": "0.39.0-konva",
+    "mudlet-map-binary-reader": "^0.8.0",
+    "mudlet-map-renderer": "^0.40.0-konva",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },

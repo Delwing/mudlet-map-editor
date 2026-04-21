@@ -48,7 +48,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   const rubberBand = new RubberBandEffect(sceneRef);
   const snapIndicator = new SnapIndicatorEffect(settings.roomSize);
   const connectHandles = new ConnectHandlesEffect(settings.roomSize, sceneRef);
-  const customLinePreview = new CustomLinePreviewEffect();
+  const customLinePreview = new CustomLinePreviewEffect(sceneRef);
   const selectedLink = new SelectedLinkEffect(sceneRef, settings.roomSize);
   const labelHalo = new LabelHaloEffect(sceneRef);
 

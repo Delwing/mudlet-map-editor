@@ -29,7 +29,11 @@ export function SidePanel({ sceneRef }: SidePanelProps) {
   const pending = useEditorState((s) => s.pending);
   const sidebarTab = useEditorState((s) => s.sidebarTab);
   const panelCollapsed = useEditorState((s) => s.panelCollapsed);
+  const undoCount = useEditorState((s) => s.undo.length);
   useEditorState((s) => s.dataVersion); // subscribe so exit/door/weight mutations re-render
+
+  const envsCount = map ? Object.keys(map.mCustomEnvColors).length : 0;
+  const areasCount = map ? Object.keys(map.areaNames).length : 0;
 
   if (activeTool === 'customLine' && pending?.kind === 'customLine') {
     return <CustomLineDrawPanel pending={pending} sceneRef={sceneRef} />;
@@ -60,9 +64,9 @@ export function SidePanel({ sceneRef }: SidePanelProps) {
   const tabBar = (
     <div className="side-panel-tabs">
       <button type="button" className={`side-panel-tab${sidebarTab === 'selection' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'selection' })}>Selection</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'areas' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'areas' })}>Areas</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>Envs</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>History</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'areas' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'areas' })}>Areas{areasCount > 0 && <span className="tab-badge">{areasCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>Envs{envsCount > 0 && <span className="tab-badge">{envsCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>History{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>Map</button>
       <button type="button" className="side-panel-tab side-panel-tab--collapse" title="Collapse panel" onClick={() => store.setState({ panelCollapsed: true })}>▶</button>
     </div>

@@ -16,28 +16,25 @@ export function RoomLink({ id, name, className }: { id: number; name?: string | 
   );
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({ label, children, as: Tag = 'label' }: { label: string; children: React.ReactNode; as?: 'label' | 'div' }) {
   return (
-    <label className="field">
+    <Tag className="field">
       <span className="label">{label}</span>
       {children}
-    </label>
+    </Tag>
   );
 }
 
-export function CheckboxField({ label, checked, onChange, description }: {
-  label: string;
+export function CheckboxField({ checked, onChange, description }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   description: string;
 }) {
   return (
-    <Field label={label}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <span>{description}</span>
-      </label>
-    </Field>
+    <label className="field checkbox-field">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>{description}</span>
+    </label>
   );
 }
 
@@ -49,7 +46,7 @@ export function ToolHint({ activeTool }: { activeTool: string }) {
     addRoom: 'Click an empty grid cell to create a room.',
     delete: 'Click a room to delete it.',
     pan: 'Drag to pan. Hold Space with any tool for temporary pan.',
-    customLine: 'Click to add waypoints. Double-click or Enter to finish.',
+    customLine: 'Click to add waypoints. Right-click or Enter to finish.',
     label: 'Click a label to select and edit its properties.',
   };
   return <p className="hint-tool">{hints[activeTool] ?? ''}</p>;
