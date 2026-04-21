@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const fsStub = fileURLToPath(new URL('./src/shims/fs-stub.ts', import.meta.url));
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH ?? '/',
   plugins: [
     react(),
     nodePolyfills({

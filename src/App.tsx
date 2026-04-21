@@ -48,6 +48,10 @@ export default function App() {
     if (!map || !containerRef.current) return;
     const scene = createScene(map, containerRef.current);
     sceneRef.current = scene;
+    const { currentAreaId, currentZ } = store.getState();
+    if (currentAreaId != null) {
+      scene.setArea(currentAreaId, currentZ, VIEW_INSETS);
+    }
     return () => {
       scene.destroy();
       sceneRef.current = null;
