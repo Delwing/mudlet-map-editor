@@ -110,7 +110,7 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
     <div className="toolbar">
       {/* Row 1: header */}
       <div className="toolbar-row toolbar-row-header">
-        <img src="/logo.png" alt="Mudlet logo" id={"logo"}/>
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Mudlet logo" id={"logo"}/>
         <h1>Mudlet Map Editor</h1>
 
         <button type="button" title="New Map" onClick={handleNewMap}>
