@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { HelpModal } from './components/HelpModal';
 import { UrlLoadModal } from './components/UrlLoadModal';
@@ -13,6 +13,7 @@ import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import type { Command, ToolId } from './editor/types';
 import { saveSession } from './editor/session';
 import { loadFileIntoStore } from './editor/loadFile';
+import type { EditorPlugin } from './editor/plugin';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px. Side panel: always use expanded width (440px).
 const VIEW_INSETS = { top: 104, right: 464, bottom: 24, left: 24 };
@@ -36,7 +37,7 @@ const NUDGE: Record<string, { dx: number; dy: number }> = {
   ArrowDown:  { dx:  0, dy: -1 },
 };
 
-export default function App() {
+export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plugins?: EditorPlugin[]; title?: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
 
@@ -58,6 +59,31 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('map');
   });
+
+  const pluginSwatchSets = useMemo(() => plugins.flatMap((p) => p.swatchSets?.() ?? []), [plugins]);
+  const pluginSidebarTabs = useMemo(() => plugins.flatMap((p) => p.sidebarTabs?.() ?? []), [plugins]);
+
+  useEffect(() => {
+    store.setState({ pluginSwatchSets });
+  }, [pluginSwatchSets]);
+
+  // onAppReady: run all plugins once on mount (fire-and-forget).
+  useEffect(() => {
+    if (plugins.length === 0) return;
+    (async () => { for (const p of plugins) await p.onAppReady?.(); })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // onMapOpened / onMapClosed: fire on map identity transitions.
+  const prevMapRef = useRef(map);
+  useEffect(() => {
+    const prev = prevMapRef.current;
+    prevMapRef.current = map;
+    if (map && map !== prev) {
+      for (const p of plugins) p.onMapOpened?.(map);
+    } else if (prev && !map) {
+      for (const p of plugins) p.onMapClosed?.();
+    }
+  }, [map]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scene lifecycle: keyed on the raw map reference, so a file load (new MudletMap
   // identity) tears down and recreates the scene, while in-place mutations
@@ -475,11 +501,12 @@ export default function App() {
       <div className="map-viewport">
         <div ref={containerRef} className="map-container" />
         {!mapLoaded && <SessionsPanel />}
-        <Toolbar onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} />
-<SidePanel sceneRef={sceneRef} />
+        <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} />
+<SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} />
       </div>
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}
+      {plugins.map((p, i) => <Fragment key={i}>{p.renderOverlay?.()}</Fragment>)}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {(showUrlLoad || autoLoadUrl) && (
         <UrlLoadModal

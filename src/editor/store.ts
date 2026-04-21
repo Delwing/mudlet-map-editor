@@ -73,7 +73,7 @@ export interface EditorState {
   dataVersion: number;
   /** Snapped cursor position in render-space, tracked by tools that show a snap indicator. */
   snapCursor: { x: number; y: number } | null;
-  sidebarTab: 'selection' | 'areas' | 'envs' | 'history' | 'map';
+  sidebarTab: string;
   panelCollapsed: boolean;
   contextMenu: ContextMenuState;
   savedUndoLength: number;
@@ -86,6 +86,7 @@ export interface EditorState {
   /** When true, label resize preserves the aspect ratio at the start of the drag. */
   labelAspectRatioLocked: boolean;
   swatchSets: SwatchSet[];
+  pluginSwatchSets: SwatchSet[];
   activeSwatchSetId: string | null;
   activeSwatchId: string | null;
   swatchPaletteOpen: boolean;
@@ -151,6 +152,7 @@ const initial: EditorState = {
   hitCycle: null,
   labelAspectRatioLocked: false,
   swatchSets: swatchInit.swatchSets,
+  pluginSwatchSets: [],
   activeSwatchSetId: swatchInit.activeSwatchSetId,
   activeSwatchId: swatchInit.activeSwatchId,
   swatchPaletteOpen: false,

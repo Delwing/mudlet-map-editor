@@ -6,7 +6,7 @@ import { loadFileIntoStore } from '../editor/loadFile';
 import { DropdownSelect } from './DropdownSelect';
 import { TOOL_BUTTONS } from './HelpModal';
 
-export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => void; onLoadFromUrl: () => void }) {
+export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUrl, onSave }: { title?: string; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void }) {
   const activeTool = useEditorState((s) => s.activeTool);
   const map = useEditorState((s) => s.map);
   const mapLoaded = map != null;
@@ -23,7 +23,8 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
   const activeSwatchId = useEditorState((s) => s.activeSwatchId);
   const activeSwatchSetId = useEditorState((s) => s.activeSwatchSetId);
   const swatchSets = useEditorState((s) => s.swatchSets);
-  const activeSwatch = swatchSets.find(s => s.id === activeSwatchSetId)?.swatches.find(sw => sw.id === activeSwatchId) ?? null;
+  const pluginSwatchSets = useEditorState((s) => s.pluginSwatchSets);
+  const activeSwatch = [...swatchSets, ...pluginSwatchSets].find(s => s.id === activeSwatchSetId)?.swatches.find(sw => sw.id === activeSwatchId) ?? null;
   const dirty = undoLen !== savedUndoLength;
   const structureVersion = useEditorState((s) => s.structureVersion);
 
@@ -101,6 +102,7 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
       a.remove();
       URL.revokeObjectURL(url);
       store.setState((s) => ({ savedUndoLength: s.undo.length, status: `Saved ${a.download}` }));
+      onSave?.(bytes);
     } catch (err) {
       store.setState({ status: `Save failed: ${(err as Error).message}` });
       console.error(err);
@@ -112,7 +114,7 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
       {/* Row 1: header */}
       <div className="toolbar-row toolbar-row-header">
         <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Mudlet logo" id={"logo"}/>
-        <h1>Mudlet Map Editor</h1>
+        <h1>{title}</h1>
 
         <button type="button" title="New Map" onClick={handleNewMap}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

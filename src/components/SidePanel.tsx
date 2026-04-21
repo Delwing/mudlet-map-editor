@@ -1,5 +1,6 @@
 import { store, useEditorState } from '../editor/store';
 import type { SceneHandle } from '../editor/scene';
+import type { SidebarTab } from '../editor/plugin';
 import { AreaPanel } from './AreaManagerModal';
 import { EnvPanel } from './EnvManagerModal';
 import { HistoryPanel } from './panels/HistoryPanel';
@@ -12,6 +13,7 @@ import { ToolHint } from './panelShared';
 
 interface SidePanelProps {
   sceneRef: { current: SceneHandle | null };
+  extraTabs?: SidebarTab[];
 }
 
 const TABS = [
@@ -22,7 +24,7 @@ const TABS = [
   { id: 'map',       label: 'Map' },
 ] as const;
 
-export function SidePanel({ sceneRef }: SidePanelProps) {
+export function SidePanel({ sceneRef, extraTabs = [] }: SidePanelProps) {
   const selection = useEditorState((s) => s.selection);
   const map = useEditorState((s) => s.map);
   const activeTool = useEditorState((s) => s.activeTool);
@@ -46,7 +48,7 @@ export function SidePanel({ sceneRef }: SidePanelProps) {
           ◀
         </button>
         <div className="side-panel-tabs side-panel-tabs--vert">
-          {TABS.map((t) => (
+          {[...TABS, ...extraTabs].map((t) => (
             <button
               key={t.id}
               type="button"
@@ -68,6 +70,9 @@ export function SidePanel({ sceneRef }: SidePanelProps) {
       <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>Envs{envsCount > 0 && <span className="tab-badge">{envsCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>History{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>Map</button>
+      {extraTabs.map((t) => (
+        <button key={t.id} type="button" className={`side-panel-tab${sidebarTab === t.id ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: t.id })}>{t.label}</button>
+      ))}
       <button type="button" className="side-panel-tab side-panel-tab--collapse" title="Collapse panel" onClick={() => store.setState({ panelCollapsed: true })}>▶</button>
     </div>
   );
@@ -104,6 +109,16 @@ export function SidePanel({ sceneRef }: SidePanelProps) {
       <div className="side-panel">
         {tabBar}
         <MapPanel sceneRef={sceneRef} />
+      </div>
+    );
+  }
+
+  const pluginTab = extraTabs.find((t) => t.id === sidebarTab);
+  if (pluginTab) {
+    return (
+      <div className="side-panel">
+        {tabBar}
+        <div className="panel-content">{pluginTab.render(sceneRef)}</div>
       </div>
     );
   }

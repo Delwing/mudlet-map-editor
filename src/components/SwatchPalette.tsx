@@ -6,6 +6,7 @@ import { EnvPicker } from './EnvPicker';
 
 export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle | null } }) {
   const swatchSets = useEditorState((s) => s.swatchSets);
+  const pluginSwatchSets = useEditorState((s) => s.pluginSwatchSets);
   const activeSwatchSetId = useEditorState((s) => s.activeSwatchSetId);
   const activeSwatchId = useEditorState((s) => s.activeSwatchId);
   const map = useEditorState((s) => s.map);
@@ -27,7 +28,8 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
   const [draftEnv, setDraftEnv] = useState(-1);
   const [showEnvPicker, setShowEnvPicker] = useState(false);
 
-  const activeSet = swatchSets.find((s) => s.id === activeSwatchSetId) ?? swatchSets[0] ?? null;
+  const allSets = [...swatchSets, ...pluginSwatchSets.map((s) => ({ ...s, readonly: true as const }))];
+  const activeSet = allSets.find((s) => s.id === activeSwatchSetId) ?? allSets[0] ?? null;
 
   // Drag to reposition
   useEffect(() => {
@@ -164,9 +166,9 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
 
       {/* Set selector row */}
       <div className="swatch-set-row">
-        {swatchSets.length === 0 ? (
+        {allSets.length === 0 ? (
           <span className="swatch-empty-hint">No sets yet</span>
-        ) : editingSetName ? (
+        ) : !activeSet?.readonly && editingSetName ? (
           <>
             <input
               className="swatch-set-name-input"
@@ -188,21 +190,23 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
               value={activeSet?.id ?? ''}
               onChange={(e) => selectSet(e.target.value)}
             >
-              {swatchSets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {allSets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <button
-              type="button"
-              className="swatch-icon-btn"
-              title="Rename set"
-              onClick={() => { setEditingSetName(true); setSetNameDraft(activeSet?.name ?? ''); }}
-            >✏</button>
-            <button
-              type="button"
-              className="swatch-icon-btn swatch-icon-btn-danger"
-              title="Delete set"
-              disabled={swatchSets.length <= 1}
-              onClick={deleteSet}
-            >🗑</button>
+            {!activeSet?.readonly && <>
+              <button
+                type="button"
+                className="swatch-icon-btn"
+                title="Rename set"
+                onClick={() => { setEditingSetName(true); setSetNameDraft(activeSet?.name ?? ''); }}
+              >✏</button>
+              <button
+                type="button"
+                className="swatch-icon-btn swatch-icon-btn-danger"
+                title="Delete set"
+                disabled={swatchSets.length <= 1}
+                onClick={deleteSet}
+              >🗑</button>
+            </>}
           </>
         )}
         {addingSet ? (
@@ -236,16 +240,18 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
               <span className="swatch-chip-env" style={{ background: getEnvColor(sw.environment) }} />
               {sw.symbol && <span className="swatch-chip-symbol">{sw.symbol}</span>}
               <span className="swatch-chip-name">{sw.name}</span>
-              <button type="button" className="swatch-chip-edit" title="Edit" onClick={(e) => { e.stopPropagation(); openEdit(sw); }}>✏</button>
-              <button type="button" className="swatch-chip-del" title="Delete" onClick={(e) => { e.stopPropagation(); deleteSwatch(sw.id); }}>×</button>
+              {!activeSet.readonly && <>
+                <button type="button" className="swatch-chip-edit" title="Edit" onClick={(e) => { e.stopPropagation(); openEdit(sw); }}>✏</button>
+                <button type="button" className="swatch-chip-del" title="Delete" onClick={(e) => { e.stopPropagation(); deleteSwatch(sw.id); }}>×</button>
+              </>}
             </div>
           ))}
-          <button type="button" className="swatch-add-btn" title="Add swatch" onClick={openAdd}>+</button>
+          {!activeSet.readonly && <button type="button" className="swatch-add-btn" title="Add swatch" onClick={openAdd}>+</button>}
         </div>
       )}
 
       {/* Add/Edit form */}
-      {editId && (
+      {editId && !activeSet?.readonly && (
         picking ? (
           <div className="swatch-pick-banner">
             <span>Click a room on the canvas to copy its values…</span>

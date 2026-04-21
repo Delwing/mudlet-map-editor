@@ -39,7 +39,7 @@ export type LabelSnapshot = {
 export type ToolId = 'select' | 'connect' | 'unlink' | 'addRoom' | 'delete' | 'pan' | 'customLine' | 'addLabel' | 'paint';
 
 export type Swatch = { id: string; name: string; symbol: string; environment: number };
-export type SwatchSet = { id: string; name: string; swatches: Swatch[] };
+export type SwatchSet = { id: string; name: string; swatches: Swatch[]; readonly?: boolean };
 
 export type Direction =
   | 'north' | 'northeast' | 'east' | 'southeast'

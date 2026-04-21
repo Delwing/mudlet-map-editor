@@ -1437,7 +1437,7 @@ export const addLabelTool: Tool = {
 
 export function getActiveSwatch(s: import('./store').EditorState): import('./types').Swatch | null {
   if (!s.activeSwatchSetId || !s.activeSwatchId) return null;
-  const set = s.swatchSets.find(ss => ss.id === s.activeSwatchSetId);
+  const set = [...s.swatchSets, ...s.pluginSwatchSets].find(ss => ss.id === s.activeSwatchSetId);
   return set?.swatches.find(sw => sw.id === s.activeSwatchId) ?? null;
 }
 
