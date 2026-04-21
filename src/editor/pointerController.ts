@@ -18,12 +18,17 @@ export function attachPointerController(ctx: ToolContext): () => void {
   };
 
   const shouldActivelyHandle = (ev: PointerEvent) => {
-    if (ev.button !== 0 && ev.type === 'pointerdown') return false;
-    return true;
+    return !(ev.button !== 0 && ev.type === 'pointerdown');
+
   };
 
   const onPointerDown = (ev: PointerEvent) => {
-    const tool = TOOLS[effectiveTool()];
+    const s = store.getState();
+    const pendingKind = s.pending?.kind;
+    const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit')
+      ? 'select'
+      : effectiveTool();
+    const tool = TOOLS[toolId];
     if (!tool.onPointerDown || !shouldActivelyHandle(ev)) return;
     const consumed = tool.onPointerDown(ev, ctx);
     if (consumed) {
