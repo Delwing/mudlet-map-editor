@@ -582,11 +582,11 @@ export const selectTool: Tool = {
     const ac = activeContext();
 
     // Multiple elements overlap → show disambiguate menu so the user can pick.
-    // Exits are excluded: they have no context menu, so a room+exit combo should
-    // just show the room menu directly.
+    // Exits and custom lines are excluded: they have no context menu, so a
+    // room+exit or room+customLine combo should just show the room menu directly.
     if (ac) {
       const hits = allHitsAt(ctx.renderer, ac.map, ac.areaId, ac.z, c.x, c.y, ctx.settings.roomSize, ctx.scene.reader)
-        .filter(h => h.kind !== 'exit');
+        .filter(h => h.kind !== 'exit' && h.kind !== 'customLine');
       if (hits.length > 1) {
         store.setState({
           contextMenu: { kind: 'disambiguate', hits, screenX: ev.clientX, screenY: ev.clientY },
@@ -607,6 +607,18 @@ export const selectTool: Tool = {
         },
       });
       return true;
+    }
+
+    if (ac) {
+      const lblHit = labelAt(ac.areaId, ac.z, c.x, c.y, ctx.scene.reader);
+      if (lblHit) {
+        store.setState({
+          selection: { kind: 'label', id: lblHit.id, areaId: lblHit.areaId },
+          contextMenu: { kind: 'label', areaId: lblHit.areaId, labelId: lblHit.id, screenX: ev.clientX, screenY: ev.clientY },
+          sidebarTab: 'selection',
+        });
+        return true;
+      }
     }
 
     if (s.selection?.kind !== 'customLine') return false;
@@ -976,11 +988,15 @@ export const addRoomTool: Tool = {
     pushCommand({ kind: 'addRoom', id, room, areaId: ac.areaId }, ctx.scene);
     ctx.refresh();
     store.bumpStructure();
-    store.setState({
-      activeTool: 'select',
-      selection: { kind: 'room', ids: [id] },
-      status: `Added room ${id} at (${rawX}, ${rawY}, ${ac.z})`,
-    });
+    if (ev.ctrlKey || ev.metaKey) {
+      store.setState({ status: `Added room ${id} at (${rawX}, ${rawY}, ${ac.z})` });
+    } else {
+      store.setState({
+        activeTool: 'select',
+        selection: { kind: 'room', ids: [id] },
+        status: `Added room ${id} at (${rawX}, ${rawY}, ${ac.z})`,
+      });
+    }
     return true;
   },
   onPointerMove(ev, ctx) {

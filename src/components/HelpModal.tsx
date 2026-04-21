@@ -1,10 +1,11 @@
 import type { ToolId } from '../editor/types';
+import { modKey } from '../platform';
 
 export const TOOL_BUTTONS: { id: ToolId; label: string; hint: string; key: string }[] = [
   { id: 'select',     label: 'Select',      hint: 'Click a room to select. Drag to move (snaps to grid). Arrow keys nudge.', key: '1' },
   { id: 'connect',    label: 'Connect',     hint: 'Click source, then target. Shift = one-way.',                              key: '2' },
   { id: 'unlink',     label: 'Unlink',      hint: 'Click a room to remove all its exits. Click an exit/custom line to remove just that one.', key: '3' },
-  { id: 'addRoom',    label: 'Add Room',    hint: 'Click empty cell to create a room.',                                       key: '4' },
+  { id: 'addRoom',    label: 'Add Room',    hint: `Click empty cell to create a room. ${modKey}+click to place without selecting.`, key: '4' },
   { id: 'addLabel',   label: 'Add Label',   hint: 'Click to place a text label. Select to move/edit, Delete to remove.',     key: '5' },
   { id: 'delete',     label: 'Delete',      hint: 'Click a room to delete it, or an exit/custom line/label to remove it.',   key: '6' },
   { id: 'pan',        label: 'Pan',         hint: 'Drag background to pan. Hold Space with any tool for temporary pan.',      key: '7' },
@@ -16,11 +17,11 @@ const SHORTCUTS = [
   { keys: ['Space'], desc: 'Hold to pan temporarily (any tool)' },
   { keys: ['G'], desc: 'Toggle snap to grid' },
   { keys: ['F'], desc: 'Fit area to view' },
-  { keys: ['Ctrl+A'], desc: 'Select all rooms on current level' },
+  { keys: [`${modKey}+A`], desc: 'Select all rooms on current level' },
   { keys: ['Delete'], desc: 'Delete selection' },
   { keys: ['Arrow keys'], desc: 'Nudge selected room (Shift = ×5)' },
-  { keys: ['Ctrl+Z'], desc: 'Undo' },
-  { keys: ['Ctrl+Shift+Z'], desc: 'Redo' },
+  { keys: [`${modKey}+Z`], desc: 'Undo' },
+  { keys: [`${modKey}+Shift+Z`], desc: 'Redo' },
   { keys: ['Enter'], desc: 'Finish custom line' },
   { keys: ['Esc'], desc: 'Cancel / deselect' },
 ];

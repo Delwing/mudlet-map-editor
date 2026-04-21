@@ -6,6 +6,27 @@ const SWATCH_SETS_KEY = 'mudlet-swatch-sets';
 const ACTIVE_SET_KEY = 'mudlet-active-swatch-set';
 const ACTIVE_SWATCH_KEY = 'mudlet-active-swatch';
 
+const USER_SETTINGS_KEY = 'mudlet-editor-settings';
+
+interface UserSettings {
+  snapToGrid: boolean;
+}
+
+function loadUserSettings(): UserSettings {
+  try {
+    const raw = localStorage.getItem(USER_SETTINGS_KEY);
+    if (raw) return { snapToGrid: true, ...JSON.parse(raw) };
+  } catch {}
+  return { snapToGrid: true };
+}
+
+export function saveUserSettings(patch: Partial<UserSettings>): void {
+  try {
+    const current = loadUserSettings();
+    localStorage.setItem(USER_SETTINGS_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {}
+}
+
 function loadSwatchState(): { swatchSets: SwatchSet[]; activeSwatchSetId: string | null; activeSwatchId: string | null } {
   try {
     const raw = localStorage.getItem(SWATCH_SETS_KEY);
@@ -58,6 +79,8 @@ export interface EditorState {
   savedUndoLength: number;
   /** When set, the next area/z navigation pans to this map-space point instead of fitting. Consumed and cleared by App. */
   navigateTo: { mapX: number; mapY: number } | null;
+  /** When set, App pans to this map-space point without changing area/z. Consumed and cleared by App. */
+  panRequest: { mapX: number; mapY: number } | null;
   /** Tracks the last Alt+click position (integer cell) and cycle index for overlapping-element cycling. */
   hitCycle: { x: number; y: number; index: number } | null;
   /** When true, label resize preserves the aspect ratio at the start of the drag. */
@@ -90,9 +113,17 @@ export type ContextMenuState =
       screenX: number;
       screenY: number;
     }
+  | {
+      kind: 'label';
+      areaId: number;
+      labelId: number;
+      screenX: number;
+      screenY: number;
+    }
   | null;
 
 const swatchInit = loadSwatchState();
+const userSettings = loadUserSettings();
 const initial: EditorState = {
   map: null,
   loaded: null,
@@ -102,7 +133,7 @@ const initial: EditorState = {
   selection: null,
   hover: null,
   pending: null,
-  snapToGrid: true,
+  snapToGrid: userSettings.snapToGrid,
   gridStep: 1,
   spaceHeld: false,
   undo: [],
@@ -116,6 +147,7 @@ const initial: EditorState = {
   contextMenu: null,
   savedUndoLength: 0,
   navigateTo: null,
+  panRequest: null,
   hitCycle: null,
   labelAspectRatioLocked: false,
   swatchSets: swatchInit.swatchSets,

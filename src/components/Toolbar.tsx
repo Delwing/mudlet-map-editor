@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import { store, useEditorState } from '../editor/store';
+import { modKey } from '../platform';
+import { store, useEditorState, saveUserSettings } from '../editor/store';
 import { createEmptyMap, writeMapToBytes } from '../mapIO';
 import { loadFileIntoStore } from '../editor/loadFile';
 import { DropdownSelect } from './DropdownSelect';
@@ -171,6 +172,7 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
                 store.bumpStructure();
               }}
               searchable
+              width={300}
             />
 
             <DropdownSelect
@@ -206,6 +208,16 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
                 Go
               </button>
             </div>
+
+            <button
+              type="button"
+              className="tool-btn"
+              title="Fit area to view (F)"
+              onClick={() => window.dispatchEvent(new CustomEvent('editor:fit'))}
+            >
+              <span className="tool-key">F</span>
+              <span>Fit</span>
+            </button>
           </>
         )}
 
@@ -234,7 +246,7 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
                 }}
               >
                 <span className="tool-key">{t.key}</span>
-                {t.label}
+                <span>{t.label}</span>
               </button>
             ))}
           </div>
@@ -264,9 +276,10 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
             type="button"
             className={`tool-btn toolbar-snap-btn${snapToGrid ? ' active' : ''}`}
             title="Snap to grid (G)"
-            onClick={() => store.setState({ snapToGrid: !snapToGrid })}
+            onClick={() => { saveUserSettings({ snapToGrid: !snapToGrid }); store.setState({ snapToGrid: !snapToGrid }); }}
           >
-            Snap
+            <span className="tool-key">G</span>
+            <span>Snap</span>
           </button>
 
           <button
@@ -276,8 +289,8 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
             onClick={() => store.setState({ swatchPaletteOpen: !swatchPaletteOpen })}
           >
             {activeSwatch
-              ? <><span className="tool-key">8↴</span>{activeSwatch.name}</>
-              : <><span className="tool-key">8↴</span>Swatches</>
+              ? <><span className="tool-key">8↴</span><span>{activeSwatch.name}</span></>
+              : <><span className="tool-key">8↴</span><span>Swatches</span></>
             }
           </button>
 
@@ -315,7 +328,7 @@ export function Toolbar({ onHelpClick, onLoadFromUrl }: { onHelpClick: () => voi
           )}
           {!pending && activeTool === 'addRoom' && (
             <span className="toolbar-pending-hint">
-              Click an empty grid cell to place a room
+              {`Click an empty grid cell to place a room · ${modKey}+click to place without selecting`}
             </span>
           )}
           {!pending && activeTool === 'addLabel' && (

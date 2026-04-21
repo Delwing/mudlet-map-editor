@@ -6,7 +6,7 @@ import { SidePanel } from './components/SidePanel';
 import { ContextMenu } from './components/ContextMenu';
 import { SessionsPanel } from './components/SessionsPanel';
 import { SwatchPalette } from './components/SwatchPalette';
-import { store, useEditorState } from './editor/store';
+import { store, useEditorState, saveUserSettings } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
@@ -51,6 +51,7 @@ export default function App() {
   const spaceHeld = useEditorState((s) => s.spaceHeld);
   const panelCollapsed = useEditorState((s) => s.panelCollapsed);
   const dataVersion = useEditorState((s) => s.dataVersion);
+  const panRequest = useEditorState((s) => s.panRequest);
   const [showHelp, setShowHelp] = useState(false);
   const [showUrlLoad, setShowUrlLoad] = useState(false);
   const [autoLoadUrl, setAutoLoadUrl] = useState<string | null>(() => {
@@ -89,6 +90,14 @@ export default function App() {
       scene.setArea(currentAreaId, currentZ, VIEW_INSETS);
     }
   }, [currentAreaId, currentZ, mapLoaded]);
+
+  // Pan to a room in the current area/z without resetting the view fit.
+  useEffect(() => {
+    if (!panRequest || !sceneRef.current) return;
+    store.setState({ panRequest: null });
+    sceneRef.current.renderer.backend.viewport.panToMapPoint(panRequest.mapX, panRequest.mapY);
+    sceneRef.current.refresh();
+  }, [panRequest]);
 
   // Cursor styling per tool (Space-held forces grab/grabbing regardless of active tool).
   useEffect(() => {
@@ -200,7 +209,10 @@ export default function App() {
         return;
       }
       if (e.key === 'g' || e.key === 'G') {
-        store.setState((s) => ({ snapToGrid: !s.snapToGrid }));
+        store.setState((s) => {
+          saveUserSettings({ snapToGrid: !s.snapToGrid });
+          return { snapToGrid: !s.snapToGrid };
+        });
         return;
       }
       if (e.key === 'f' || e.key === 'F') {
@@ -229,10 +241,31 @@ export default function App() {
         return;
       }
 
-      // Arrow-key nudge for selected room (single selection only).
+      // Arrow-key nudge for selected room or label (single selection only).
       if (NUDGE[e.key]) {
         const s = store.getState();
-        if (s.activeTool !== 'select' || !s.selection || s.selection.kind !== 'room' || !s.map) return;
+        if (s.activeTool !== 'select' || !s.selection || !s.map) return;
+
+        if (s.selection.kind === 'label') {
+          const { id, areaId } = s.selection;
+          const snap = sceneRef.current?.reader.getLabelSnapshot(areaId, id);
+          if (!snap) return;
+          e.preventDefault();
+          const step = (e.shiftKey ? 5 : 1) * s.gridStep;
+          const nudge = NUDGE[e.key];
+          const dx = nudge.dx * step;
+          const dy = nudge.dy * step;
+          const from: [number, number, number] = [...snap.pos] as [number, number, number];
+          const to: [number, number, number] = [snap.pos[0] + dx, snap.pos[1] + dy, snap.pos[2]];
+          sceneRef.current?.reader.moveLabel(areaId, id, to[0], -to[1]);
+          store.setState((st) => ({ undo: [...st.undo, { kind: 'moveLabel', areaId, id, from, to }], redo: [] }));
+          sceneRef.current?.refresh();
+          store.bumpData();
+          store.setState({ status: `Moved label ${id}` });
+          return;
+        }
+
+        if (s.selection.kind !== 'room') return;
         if (s.selection.ids.length !== 1) return;
         const selId = s.selection.ids[0];
         const room = s.map.rooms[selId];
@@ -265,14 +298,17 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    const performFit = () => sceneRef.current?.renderer.fitArea(VIEW_INSETS);
     window.addEventListener('editor:undo', performUndo as EventListener);
     window.addEventListener('editor:redo', performRedo as EventListener);
+    window.addEventListener('editor:fit', performFit);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('editor:undo', performUndo as EventListener);
       window.removeEventListener('editor:redo', performRedo as EventListener);
+      window.removeEventListener('editor:fit', performFit);
     };
   }, []);
 

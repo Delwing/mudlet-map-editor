@@ -16,14 +16,23 @@ interface MoveToState {
   z: string;
 }
 
+interface MoveLabelToState {
+  x: string;
+  y: string;
+  z: string;
+}
+
 export function ContextMenu({ sceneRef }: ContextMenuProps) {
   const menu = useEditorState((s) => s.contextMenu);
   const ref = useRef<HTMLDivElement | null>(null);
   const [moveToDialog, setMoveToDialog] = useState<MoveToState | null>(null);
+  const [moveLabelToDialog, setMoveLabelToDialog] = useState<MoveLabelToState | null>(null);
+  void moveLabelToDialog; // used inside if(menu.kind === 'label') — TS 6 false positive
 
   useEffect(() => {
     if (!menu) {
       setMoveToDialog(null);
+      setMoveLabelToDialog(null);
       return;
     }
     const close = () => store.setState({ contextMenu: null });
@@ -85,6 +94,12 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
           contextMenu: { kind: 'room', roomId: hit.id, screenX: menu.screenX, screenY: menu.screenY },
           sidebarTab: 'selection',
         });
+      } else if (hit.kind === 'label') {
+        store.setState({
+          selection: hitToSelection(hit),
+          contextMenu: { kind: 'label', areaId: hit.areaId, labelId: hit.id, screenX: menu.screenX, screenY: menu.screenY },
+          sidebarTab: 'selection',
+        });
       } else {
         store.setState({
           selection: hitToSelection(hit),
@@ -138,6 +153,114 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       >
         <button type="button" className="context-menu-item danger" onClick={deletePoint}>
           Delete waypoint
+        </button>
+      </div>
+    );
+  }
+
+  // ── Label context menu ────────────────────────────────────────────────────
+
+  if (menu.kind === 'label') {
+    const snap = sceneRef.current?.reader.getLabelSnapshot(menu.areaId, menu.labelId);
+
+    const openLabelMoveTo = () => {
+      if (!snap) return;
+      setMoveLabelToDialog({ x: String(snap.pos[0]), y: String(snap.pos[1]), z: String(snap.pos[2]) });
+    };
+
+    const deleteLabel = () => {
+      if (!snap) return close();
+      pushCommand({ kind: 'deleteLabel', areaId: menu.areaId, label: snap }, sceneRef.current);
+      sceneRef.current?.refresh();
+      store.bumpData();
+      const sel = store.getState().selection;
+      if (sel?.kind === 'label' && sel.id === menu.labelId) {
+        store.setState({ selection: null });
+      }
+      store.setState({ status: `Deleted label ${menu.labelId}`, contextMenu: null });
+    };
+
+    const submitLabelMoveTo = () => {
+      if (!moveLabelToDialog || !snap) return;
+      const newX = parseInt(moveLabelToDialog.x, 10);
+      const newY = parseInt(moveLabelToDialog.y, 10);
+      const newZ = parseInt(moveLabelToDialog.z, 10);
+      if (isNaN(newX) || isNaN(newY) || isNaN(newZ)) return;
+      if (newX !== snap.pos[0] || newY !== snap.pos[1] || newZ !== snap.pos[2]) {
+        pushCommand({
+          kind: 'moveLabel',
+          areaId: menu.areaId,
+          id: menu.labelId,
+          from: [snap.pos[0], snap.pos[1], snap.pos[2]],
+          to: [newX, newY, newZ],
+        }, sceneRef.current);
+        sceneRef.current?.refresh();
+        store.bumpData();
+        store.setState({ status: `Moved label ${menu.labelId} to (${newX}, ${newY}, ${newZ})` });
+      }
+      store.setState({ contextMenu: null });
+    };
+
+    if (moveLabelToDialog) {
+      return (
+        <div
+          ref={ref}
+          className="context-menu context-menu-form"
+          style={{ left: menu.screenX, top: menu.screenY }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="context-menu-title">Move label {menu.labelId} to</div>
+          <div className="context-menu-coords">
+            <div className="context-menu-field">
+              <label>X</label>
+              <input
+                type="number"
+                value={moveLabelToDialog.x}
+                onChange={(e) => setMoveLabelToDialog((d) => d && { ...d, x: e.target.value })}
+              />
+            </div>
+            <div className="context-menu-field">
+              <label>Y</label>
+              <input
+                type="number"
+                value={moveLabelToDialog.y}
+                onChange={(e) => setMoveLabelToDialog((d) => d && { ...d, y: e.target.value })}
+              />
+            </div>
+            <div className="context-menu-field">
+              <label>Z</label>
+              <input
+                type="number"
+                value={moveLabelToDialog.z}
+                onChange={(e) => setMoveLabelToDialog((d) => d && { ...d, z: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="context-menu-actions">
+            <button type="button" className="context-menu-btn" onClick={() => setMoveLabelToDialog(null)}>
+              Back
+            </button>
+            <button type="button" className="context-menu-btn primary" onClick={submitLabelMoveTo}>
+              Move
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        ref={ref}
+        className="context-menu"
+        style={{ left: menu.screenX, top: menu.screenY }}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <div className="context-menu-title">Label {menu.labelId}</div>
+        <button type="button" className="context-menu-item" onClick={openLabelMoveTo}>
+          Move to&hellip;
+        </button>
+        <button type="button" className="context-menu-item danger" onClick={deleteLabel}>
+          Delete label
         </button>
       </div>
     );

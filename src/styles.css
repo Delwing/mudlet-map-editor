@@ -108,7 +108,7 @@ html, body, #root {
     radial-gradient(ellipse 60% 80% at 80% 100%, rgba(18, 30, 60, 0.3) 0%, transparent 55%),
     linear-gradient(160deg, #0a0d16 0%, #080c14 50%, #06090f 100%);
   color: #e6e9ef;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .app {
@@ -191,12 +191,12 @@ html, body, #root {
   border-radius: 5px;
   cursor: pointer;
   font-size: 13px;
+  line-height: 1;
   font-family: inherit;
   backdrop-filter: blur(8px);
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 5px;
 }
 
@@ -249,13 +249,18 @@ html, body, #root {
 }
 
 .toolbar .tool-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 10px;
+  line-height: 1;
   color: #6a7588;
   background: rgba(10, 14, 22, 0.7);
   border: 1px solid rgba(143, 184, 255, 0.1);
-  padding: 1px 5px;
+  padding: 2px 5px;
   border-radius: 3px;
   font-family: ui-monospace, Consolas, monospace;
+  align-self: center;
 }
 
 .toolbar .tool-btn.active .tool-key {
@@ -309,16 +314,15 @@ html, body, #root {
 
 .dropdown-trigger-value {
   flex: 1;
+  min-width: 0;
   padding-left: 8px;
-  height: 100%;
-  display: flex;
-  align-items: center;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  white-space: nowrap;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  text-align: left;
 }
 
 .dropdown-arrow {
@@ -403,6 +407,16 @@ html, body, #root {
   border-color: rgba(52, 100, 168, 0.5);
   color: #cfe1ff;
 }
+.dropdown-option.highlighted {
+  background: rgba(52, 100, 168, 0.25);
+  color: #e6e9ef;
+  border-color: rgba(143, 184, 255, 0.15);
+}
+.dropdown-option.highlighted.selected {
+  background: rgba(52, 100, 168, 0.45);
+  border-color: rgba(52, 100, 168, 0.7);
+  color: #cfe1ff;
+}
 
 .dropdown-empty {
   color: #4a5568;
@@ -438,7 +452,7 @@ html, body, #root {
 
 .toolbar-row-tools .tool-key {
   font-size: 9px;
-  padding: 1px 4px;
+  padding: 2px 4px;
 }
 
 .toolbar-snap-btn {
@@ -2373,6 +2387,65 @@ html, body, #root {
 .map-stat-value {
   color: #e6e9ef;
   font-variant-numeric: tabular-nums;
+}
+
+.warnings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.warning-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: rgba(220, 160, 30, 0.08);
+  border: 1px solid rgba(220, 160, 30, 0.25);
+  border-radius: 4px;
+  padding: 5px 6px;
+  font-size: 12px;
+}
+
+.warning-icon {
+  color: #d4922a;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.warning-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.warning-text strong {
+  color: #e6c870;
+  font-weight: 600;
+}
+
+.warning-detail {
+  color: #8a96aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.warning-go-btn {
+  flex-shrink: 0;
+  background: rgba(220, 160, 30, 0.15);
+  border: 1px solid rgba(220, 160, 30, 0.35);
+  border-radius: 3px;
+  color: #e6c870;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.warning-go-btn:hover {
+  background: rgba(220, 160, 30, 0.28);
 }
 
 /* Env manager modal — grid layout */

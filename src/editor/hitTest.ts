@@ -20,11 +20,14 @@ export function labelAt(
   const plane = area.getPlane(z);
   if (!plane) return null;
   const labels = plane.getLabels();
+  const MIN_HIT = 1;
   let hit: { id: number; areaId: number } | null = null;
   for (const label of labels) {
     const rx = label.X;
     const ry = -label.Y;
-    if (mapX >= rx && mapX <= rx + label.Width && mapY >= ry && mapY <= ry + label.Height) {
+    const hw = Math.max(label.Width, MIN_HIT);
+    const hh = Math.max(label.Height, MIN_HIT);
+    if (mapX >= rx && mapX <= rx + hw && mapY >= ry && mapY <= ry + hh) {
       hit = { id: label.labelId ?? label.id, areaId };
     }
   }
@@ -47,11 +50,14 @@ export function allLabelsAt(
   const plane = area.getPlane(z);
   if (!plane) return [];
   const labels = plane.getLabels();
+  const MIN_HIT = 1;
   const hits: { id: number; areaId: number }[] = [];
   for (const label of labels) {
     const rx = label.X;
     const ry = -label.Y;
-    if (mapX >= rx && mapX <= rx + label.Width && mapY >= ry && mapY <= ry + label.Height) {
+    const hw = Math.max(label.Width, MIN_HIT);
+    const hh = Math.max(label.Height, MIN_HIT);
+    if (mapX >= rx && mapX <= rx + hw && mapY >= ry && mapY <= ry + hh) {
       hits.push({ id: label.labelId ?? label.id, areaId });
     }
   }

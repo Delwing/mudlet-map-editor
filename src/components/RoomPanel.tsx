@@ -347,6 +347,8 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
           <option value={1}>Solid</option>
           <option value={2}>Dash</option>
           <option value={3}>Dot</option>
+          <option value={4}>Dash-Dot</option>
+          <option value={5}>Dash-Dot-Dot</option>
         </select>
       </div>
       <div className="cl-form-row">

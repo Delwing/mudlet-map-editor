@@ -777,7 +777,6 @@ export class EditorMapReader {
 
   getLabelSnapshot(areaId: number, labelId: number): LabelSnapshot | null {
     const raw = this.raw.labels[areaId]?.find(l => l.id === labelId);
-    console.log(raw)
     return raw ? snapshotFromRawLabel(raw) : null;
   }
 
