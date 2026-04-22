@@ -6,6 +6,7 @@ import type { MudletColor } from '../../mapIO';
 import type { Command, LabelFont, LabelSnapshot } from '../../editor/types';
 import { generateLabelPixmap } from '../../editor/labelPixmap';
 import { CheckboxField, Field, mudletColorToHex, hexToMudletColor } from '../panelShared';
+import { FontPicker } from '../FontPicker';
 
 const COMMON_FONTS = [
   'Arial', 'Arial Black', 'Comic Sans MS', 'Courier New', 'Georgia',
@@ -422,18 +423,12 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           </div>
         </Field>
 
-        <Field label="Font">
-          <input
-            list="label-font-list"
-            defaultValue={snap.font.family}
-            key={`font-family-${selection.id}`}
-            onBlur={(e) => { const v = e.target.value.trim(); if (v) commitFont({ family: v }); }}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            style={{ flex: 1 }}
+        <Field label="Font" as="div">
+          <FontPicker
+            value={snap.font.family}
+            options={availableFonts}
+            onChange={(family) => commitFont({ family })}
           />
-          <datalist id="label-font-list">
-            {availableFonts.map((f) => <option key={f} value={f} />)}
-          </datalist>
         </Field>
 
         <Field label="Size">
