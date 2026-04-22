@@ -14,9 +14,7 @@
   "author": "Delwing",
   "license": "MIT",
   "repository": {
-    "repository": {
-      "url": "git+https://github.com/Delwing/mudlet-map-editor.git"
-    }
+    "url": "git+https://github.com/Delwing/mudlet-map-editor.git"
   },
   "exports": {
     ".": {
