@@ -60,8 +60,8 @@ export function inferDirection(
   return 'northeast';
 }
 
-export function getExit(room: MudletRoom, dir: Direction): number {
-  return (room as any)[dir] as number;
+export function getExit(room: MudletRoom, dir: string): number {
+  return (room as any)[dir] as number ?? room.mSpecialExits[dir] ?? undefined;
 }
 
 export function setExit(room: MudletRoom, dir: Direction, value: number): void {

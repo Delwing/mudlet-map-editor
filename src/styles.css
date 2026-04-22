@@ -2292,6 +2292,83 @@ html, body, #root {
   font-family: inherit;
 }
 
+.cl-waypoints {
+  background: rgba(6, 9, 16, 0.55);
+  border: 1px solid rgba(143, 184, 255, 0.07);
+  border-radius: 5px;
+  padding: 6px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cl-waypoints-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8f97a6;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 2px 4px;
+}
+
+.cl-waypoint-row {
+  display: grid;
+  grid-template-columns: 18px 14px 1fr 14px 1fr;
+  gap: 3px;
+  align-items: center;
+  padding: 1px 2px;
+  border-radius: 3px;
+  cursor: default;
+}
+
+.cl-waypoint-row.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cl-waypoint-idx {
+  font-size: 10px;
+  color: #555e6e;
+  text-align: right;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.cl-waypoint-axis {
+  font-size: 9px;
+  color: #6b7585;
+  text-transform: uppercase;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+
+.cl-waypoint-input {
+  background: rgba(12, 17, 28, 0.7);
+  color: #e6e9ef;
+  border: 1px solid rgba(143, 184, 255, 0.1);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: ui-monospace, Consolas, monospace;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  /* hide number spinner arrows */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.cl-waypoint-input::-webkit-outer-spin-button,
+.cl-waypoint-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cl-waypoint-input:focus {
+  outline: none;
+  border-color: rgba(52, 100, 168, 0.7);
+  box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.15);
+}
+
 /* Area delete confirm panel */
 .area-delete-confirm {
   background: rgba(14, 10, 10, 0.7);

@@ -69,6 +69,14 @@ export const DIR_SHORT: Record<Direction, string> = {
   up: 'up', down: 'down', in: 'in', out: 'out',
 };
 
+export const DIR_LONG: Record<string, Direction> = Object.entries(DIR_SHORT).reduce(
+    (acc, [full, short]) => {
+      acc[short] = full as Direction;
+      return acc;
+    },
+    {} as Record<string, Direction>,
+);
+
 /** 1-based direction index used by Mudlet's stubs/exitLocks arrays. */
 export const DIR_INDEX: Record<Direction, number> = {
   north: 1, northeast: 2, northwest: 3, east: 4, west: 5,

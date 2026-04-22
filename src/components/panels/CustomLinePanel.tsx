@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from '../../editor/tools';
 import { snap } from '../../editor/coords';
-import type { PendingCustomLine, Direction } from '../../editor/types';
-import { CARDINAL_DIRECTIONS } from '../../editor/types';
+import {PendingCustomLine, DIR_LONG} from '../../editor/types';
 import { getExit } from '../../editor/mapHelpers';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor, MudletMap } from '../../mapIO';
@@ -84,8 +83,10 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
   );
 }
 
+type PointDraft = { index: number; axis: 'x' | 'y'; value: string };
+
 export function CustomLineSelectPanel({ selection, map, sceneRef }: {
-  selection: { kind: 'customLine'; roomId: number; exitName: string };
+  selection: { kind: 'customLine'; roomId: number; exitName: string; pointIndex?: number };
   map: MudletMap;
   sceneRef: { current: SceneHandle | null };
 }) {
@@ -95,15 +96,14 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
   const style = room?.customLinesStyle?.[selection.exitName] ?? 1;
   const arrow = room?.customLinesArrow?.[selection.exitName] ?? false;
   const specialTarget = room?.mSpecialExits?.[selection.exitName];
-  const dirTarget = CARDINAL_DIRECTIONS.includes(selection.exitName as Direction) && room
-    ? getExit(room, selection.exitName as Direction)
-    : undefined;
+  const dirTarget = getExit(room, DIR_LONG[selection.exitName] ?? selection.exitName)
   const targetRoomId = specialTarget ?? (dirTarget != null && dirTarget > 0 ? dirTarget : undefined);
   const targetRoom = targetRoomId != null ? map.rooms[targetRoomId] : null;
 
   const [colorHex, setColorHex] = useState(color ? mudletColorToHex(color) : '#ffffff');
   const [styleDraft, setStyleDraft] = useState(style);
   const [arrowDraft, setArrowDraft] = useState(arrow);
+  const [activeDraft, setActiveDraft] = useState<PointDraft | null>(null);
 
   if (!room || !cl) {
     return <h3>Custom line not found</h3>;
@@ -140,6 +140,47 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ selection: null, status: `Custom line '${selection.exitName}' removed` });
+  };
+
+  const selectPoint = (i: number) => {
+    store.setState({ selection: { ...selection, pointIndex: i } });
+    store.bumpData();
+  };
+
+  const getPointDisplayValue = (i: number, axis: 'x' | 'y') => {
+    if (activeDraft && activeDraft.index === i && activeDraft.axis === axis) return activeDraft.value;
+    const raw = cl![i];
+    return String(axis === 'x' ? raw[0] : raw[1]);
+  };
+
+  const handlePointChange = (i: number, axis: 'x' | 'y', val: string) => {
+    setActiveDraft({ index: i, axis, value: val });
+  };
+
+  const commitPointDraft = (i: number, axis: 'x' | 'y', val: string) => {
+    setActiveDraft(null);
+    const parsed = parseFloat(val);
+    if (isNaN(parsed)) return;
+    const current = cl![i];
+    const newX = axis === 'x' ? parsed : current[0];
+    const newY = axis === 'y' ? parsed : current[1];
+    if (newX === current[0] && newY === current[1]) return;
+    const rawColor = color ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+    const newPoints: [number, number][] = cl!.map((p, j) => j === i ? [newX, newY] : [p[0], p[1]]);
+    pushCommand({
+      kind: 'setCustomLine',
+      roomId: selection.roomId,
+      exitName: selection.exitName,
+      data: { points: newPoints, color: rawColor, style, arrow },
+      previous: { points: [...cl!] as [number, number][], color: rawColor, style, arrow },
+    }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpData();
+  };
+
+  const handlePointKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.currentTarget.blur(); }
+    if (e.key === 'Escape') { setActiveDraft(null); e.currentTarget.blur(); }
   };
 
   const snapToGrid = () => {
@@ -221,6 +262,41 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
             onChange={(e) => { setArrowDraft(e.target.checked); applyChange({ arrow: e.target.checked }); }}
           />
         </div>
+      </div>
+
+      <div className="cl-waypoints" style={{ marginTop: 12 }}>
+        <div className="cl-waypoints-header">Waypoints</div>
+        {cl.map((_pt, i) => (
+          <div
+            key={i}
+            className={`cl-waypoint-row${selection.pointIndex === i ? ' active' : ''}`}
+            onMouseDown={() => selectPoint(i)}
+          >
+            <span className="cl-waypoint-idx">{i + 1}</span>
+            <span className="cl-waypoint-axis">X</span>
+            <input
+              type="number"
+              step="any"
+              className="cl-waypoint-input"
+              value={getPointDisplayValue(i, 'x')}
+              onChange={(e) => handlePointChange(i, 'x', e.target.value)}
+              onFocus={() => selectPoint(i)}
+              onBlur={(e) => commitPointDraft(i, 'x', e.target.value)}
+              onKeyDown={handlePointKeyDown}
+            />
+            <span className="cl-waypoint-axis">Y</span>
+            <input
+              type="number"
+              step="any"
+              className="cl-waypoint-input"
+              value={getPointDisplayValue(i, 'y')}
+              onChange={(e) => handlePointChange(i, 'y', e.target.value)}
+              onFocus={() => selectPoint(i)}
+              onBlur={(e) => commitPointDraft(i, 'y', e.target.value)}
+              onKeyDown={handlePointKeyDown}
+            />
+          </div>
+        ))}
       </div>
 
       <button type="button" style={{ marginTop: 12, width: '100%' }} onClick={snapToGrid} disabled={cl.length === 0}>

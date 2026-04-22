@@ -432,7 +432,8 @@ export const selectTool: Tool = {
     if (s.pending?.kind === 'customLinePoint' && s.map) {
       const pending = s.pending;
       const rawRoom = s.map.rooms[pending.roomId];
-      const newPoints = rawRoom?.customLines?.[pending.exitName] ?? [];
+      const rawPoints = rawRoom?.customLines?.[pending.exitName];
+      const newPoints: [number, number][] = rawPoints ? [...rawPoints] : [];
       const rawColor = rawRoom?.customLinesColor?.[pending.exitName]
         ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
       const rawStyle = rawRoom?.customLinesStyle?.[pending.exitName] ?? 1;

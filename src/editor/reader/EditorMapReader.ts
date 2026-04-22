@@ -689,7 +689,7 @@ export class EditorMapReader {
   ): void {
     const rawRoom = this.raw.rooms[roomId];
     if (!rawRoom) return;
-    rawRoom.customLines[exitName] = points;
+    rawRoom.customLines[exitName] = points.map(p => [p[0], p[1]] as [number, number]);
     rawRoom.customLinesColor[exitName] = color;
     rawRoom.customLinesStyle[exitName] = style;
     rawRoom.customLinesArrow[exitName] = arrow;
