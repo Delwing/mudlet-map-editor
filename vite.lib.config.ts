@@ -33,8 +33,10 @@ export default defineConfig({
       entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
       formats: ['es'],
       fileName: 'index',
+      cssFileName: 'styles'
     },
     outDir: 'dist-lib',
+    copyPublicDir: false,
     rollupOptions: {
       external: ['react', 'react-dom', 'react/jsx-runtime', 'konva', 'mudlet-map-renderer', 'mudlet-map-binary-reader'],
     },

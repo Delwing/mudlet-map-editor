@@ -13,7 +13,7 @@ import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import type { Command, ToolId } from './editor/types';
 import { saveSession } from './editor/session';
 import { loadFileIntoStore } from './editor/loadFile';
-import type { EditorPlugin } from './editor/plugin';
+import type { EditorPlugin, RoomPanelSection } from './editor/plugin';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px. Side panel: always use expanded width (440px).
 const VIEW_INSETS = { top: 104, right: 464, bottom: 24, left: 24 };
@@ -62,6 +62,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
 
   const pluginSwatchSets = useMemo(() => plugins.flatMap((p) => p.swatchSets?.() ?? []), [plugins]);
   const pluginSidebarTabs = useMemo(() => plugins.flatMap((p) => p.sidebarTabs?.() ?? []), [plugins]);
+  const pluginRoomSections = useMemo<RoomPanelSection[]>(() => plugins.flatMap((p) => p.roomPanelSections?.() ?? []), [plugins]);
 
   useEffect(() => {
     store.setState({ pluginSwatchSets });
@@ -502,7 +503,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         <div ref={containerRef} className="map-container" />
         {!mapLoaded && <SessionsPanel />}
         <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} />
-<SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} />
+<SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} pluginRoomSections={pluginRoomSections} />
       </div>
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}

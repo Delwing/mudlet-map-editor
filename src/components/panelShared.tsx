@@ -97,7 +97,7 @@ export function UserDataEditor({ data, onCommit }: UserDataEditorProps) {
         <div key={key} className="userdata-row">
           <span className="ud-key" title={key}>{key}</span>
           <input
-            key={`ud-val-${key}`}
+            key={`ud-val-${key}-${val}`}
             className="ud-value"
             defaultValue={val}
             onBlur={(e) => { if (e.target.value !== val) onCommit(key, val, e.target.value); }}

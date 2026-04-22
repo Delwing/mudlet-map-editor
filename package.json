@@ -1,24 +1,31 @@
 {
   "name": "mudlet-map-editor",
-  "private": true,
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./styles.css": "./src/styles.css"
+    ".": {
+      "import": "./dist-lib/index.js",
+      "types": "./dist-lib/index.d.ts"
+    },
+    "./styles.css": "./dist-lib/styles.css"
   },
+  "main": "./dist-lib/index.js",
+  "types": "./dist-lib/index.d.ts",
+  "files": [
+    "dist-lib"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:lib": "tsc -b && vite build --config vite.lib.config.ts",
+    "build:lib": "vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "konva": "^10.2.5",
-    "mudlet-map-binary-reader": "^0.8.0",
-    "mudlet-map-renderer": "^0.40.0-konva",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+  "peerDependencies": {
+    "konva": ">=10",
+    "mudlet-map-binary-reader": ">=0.8.0",
+    "mudlet-map-renderer": ">=0.40.0-konva",
+    "react": ">=19",
+    "react-dom": ">=19"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
@@ -26,6 +33,11 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "buffer": "^6.0.3",
+    "konva": "^10.2.5",
+    "mudlet-map-binary-reader": "^0.8.0",
+    "mudlet-map-renderer": "^0.40.0-konva",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "typescript": "^6.0.3",
     "vite": "^8.0.8",
     "vite-plugin-node-polyfills": "^0.26.0"

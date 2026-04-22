@@ -5,6 +5,7 @@ import { pushCommand, pushBatch } from '../editor/commands';
 import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type CustomLineCompanion, type Direction } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
+import type { RoomPanelSection } from '../editor/plugin';
 import { EnvPicker } from './EnvPicker';
 import { DoorIcon, LockIcon, WeightIcon, CrosshairIcon, CenterOnRoomIcon } from './icons';
 import { RoomLink, Field, UserDataEditor, hexToMudletColor } from './panelShared';
@@ -40,9 +41,10 @@ interface RoomPanelProps {
   room: NonNullable<MudletMap['rooms'][number]>;
   map: MudletMap;
   sceneRef: { current: SceneHandle | null };
+  pluginSections?: RoomPanelSection[];
 }
 
-export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
+export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] }: RoomPanelProps) {
   const selId = selection.ids[0];
   const pending = useEditorState((s) => s.pending);
 
@@ -715,6 +717,9 @@ export function RoomPanel({ selection, room, map, sceneRef }: RoomPanelProps) {
         </>
       )}
 
+      {pluginSections.map((s) => (
+        <Fragment key={s.id}>{s.render({ roomId: selId, room, map, sceneRef })}</Fragment>
+      ))}
       <h4>User Data</h4>
       <UserDataEditor
         data={room.userData}

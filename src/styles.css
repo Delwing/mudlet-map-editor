@@ -1367,6 +1367,7 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 2px 5px;
 }
 
 .ud-value {

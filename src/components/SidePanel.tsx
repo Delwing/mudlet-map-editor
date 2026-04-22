@@ -1,6 +1,6 @@
 import { store, useEditorState } from '../editor/store';
 import type { SceneHandle } from '../editor/scene';
-import type { SidebarTab } from '../editor/plugin';
+import type { RoomPanelSection, SidebarTab } from '../editor/plugin';
 import { AreaPanel } from './AreaManagerModal';
 import { EnvPanel } from './EnvManagerModal';
 import { HistoryPanel } from './panels/HistoryPanel';
@@ -14,6 +14,7 @@ import { ToolHint } from './panelShared';
 interface SidePanelProps {
   sceneRef: { current: SceneHandle | null };
   extraTabs?: SidebarTab[];
+  pluginRoomSections?: RoomPanelSection[];
 }
 
 const TABS = [
@@ -24,7 +25,7 @@ const TABS = [
   { id: 'map',       label: 'Map' },
 ] as const;
 
-export function SidePanel({ sceneRef, extraTabs = [] }: SidePanelProps) {
+export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }: SidePanelProps) {
   const selection = useEditorState((s) => s.selection);
   const map = useEditorState((s) => s.map);
   const activeTool = useEditorState((s) => s.activeTool);
@@ -184,7 +185,7 @@ export function SidePanel({ sceneRef, extraTabs = [] }: SidePanelProps) {
   return (
     <div className="side-panel">
       {tabBar}
-      <RoomPanel selection={selection} room={room} map={map!} sceneRef={sceneRef} />
+      <RoomPanel selection={selection} room={room} map={map!} sceneRef={sceneRef} pluginSections={pluginRoomSections} />
     </div>
   );
 }
