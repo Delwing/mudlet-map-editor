@@ -168,7 +168,10 @@ class Store {
   getState = (): EditorState => this.state;
 
   setState = (patch: Partial<EditorState> | ((s: EditorState) => Partial<EditorState>)) => {
-    const next = typeof patch === 'function' ? patch(this.state) : patch;
+    let next = typeof patch === 'function' ? patch(this.state) : patch;
+    if ('selection' in next && next.selection !== this.state.selection && next.selection !== null && !('sidebarTab' in next)) {
+      next = { ...next, sidebarTab: 'selection' };
+    }
     this.state = { ...this.state, ...next };
     this.listeners.forEach((l) => l(this.state));
   };
