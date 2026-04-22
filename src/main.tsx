@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './styles.css';
 import type { EditorPlugin } from './editor/plugin';
 
 const pluginModules = import.meta.glob('./plugins/*/index.ts', { eager: true });
