@@ -113,7 +113,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
     <div className="toolbar">
       {/* Row 1: header */}
       <div className="toolbar-row toolbar-row-header">
-        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Mudlet logo" id={"logo"}/>
+        <img src={`logo.png`} alt="Mudlet logo" id={"logo"}/>
         <h1>{title}</h1>
 
         <button type="button" title="New Map" onClick={handleNewMap}>
