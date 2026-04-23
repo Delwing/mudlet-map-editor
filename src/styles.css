@@ -2988,15 +2988,17 @@ html, body, #root {
 }
 
 .side-panel .history-undone {
-  background: transparent;
-  color: #3a4a5a;
+  background: rgba(6, 9, 16, 0.5);
+  color: #b0b8c6;
   border-color: transparent;
+  opacity: 0.4;
 }
 
 .side-panel .history-undone:hover {
-  background: rgba(6, 9, 16, 0.4);
-  color: #6a7588;
-  border-color: rgba(143, 184, 255, 0.05);
+  background: rgba(31, 42, 60, 0.5);
+  color: #e6e9ef;
+  border-color: rgba(143, 184, 255, 0.1);
+  opacity: 0.65;
 }
 
 .history-label {
@@ -3018,13 +3020,6 @@ html, body, #root {
   font-size: 11px;
 }
 
-.history-sep {
-  text-align: center;
-  font-size: 10px;
-  color: rgba(43, 51, 64, 0.8);
-  padding: 6px 0 4px;
-  letter-spacing: 0.04em;
-}
 
 .context-menu {
   position: fixed;

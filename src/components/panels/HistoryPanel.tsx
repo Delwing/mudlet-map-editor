@@ -90,11 +90,19 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
   };
 
   const undoReversed = [...undo].reverse();
-  const redoReversed = [...redo].reverse();
 
   return (
     <div className="panel-content">
       <div className="history-list">
+        {redo.map((cmd, i) => (
+          <HistoryEntry
+            key={i}
+            cmd={cmd}
+            className="history-item history-undone"
+            onClick={() => jumpTo(0, redo.length - i)}
+            title={`Redo ${redo.length - i} step${redo.length - i === 1 ? '' : 's'}`}
+          />
+        ))}
         <div className="history-item history-current">
           <span className="history-marker">▶</span>
           <span className="history-label">Current state</span>
@@ -110,20 +118,6 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
         ))}
         {undo.length === 0 && redo.length === 0 && (
           <p className="hint" style={{ marginTop: 8 }}>No history yet.</p>
-        )}
-        {redo.length > 0 && (
-          <>
-            <div className="history-sep">— undone —</div>
-            {redoReversed.map((cmd, i) => (
-              <HistoryEntry
-                key={i}
-                cmd={cmd}
-                className="history-item history-undone"
-                onClick={() => jumpTo(0, i + 1)}
-                title={`Redo ${i + 1} step${i === 0 ? '' : 's'}`}
-              />
-            ))}
-          </>
         )}
       </div>
     </div>
