@@ -1813,6 +1813,101 @@ html, body, #root {
   font-family: ui-monospace, Consolas, monospace;
 }
 
+/* Multi-room bulk edit panel */
+.multi-room-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.multi-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.multi-field-check {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.multi-field-label {
+  font-size: 11px;
+  color: #8f97a6;
+  width: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.multi-field-mixed {
+  color: #6a7280;
+  font-size: 10px;
+}
+
+.multi-field-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(6, 9, 16, 0.6);
+  color: #e6e9ef;
+  border: 1px solid rgba(143, 184, 255, 0.12);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 13px;
+}
+.multi-field-input:disabled { opacity: 0.4; }
+.multi-field-input:focus { outline: none; border-color: rgba(52, 100, 168, 0.7); }
+
+.multi-field-symbol {
+  max-width: 60px;
+  flex: 0 0 auto;
+}
+
+.multi-lock-btn {
+  background: rgba(5, 8, 15, 0.7);
+  border: 1px solid rgba(143, 184, 255, 0.08);
+  border-radius: 3px;
+  color: #8f97a6;
+  cursor: pointer;
+  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+.multi-lock-btn:disabled { opacity: 0.4; cursor: default; }
+.multi-lock-btn:not(:disabled):hover { border-color: rgba(52, 100, 168, 0.6); color: #8fb8ff; }
+.multi-lock-btn.lock-active { color: #f07070; border-color: rgba(92, 28, 28, 0.8); }
+
+.multi-room-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.multi-room-apply-btn {
+  background: rgba(52, 100, 168, 0.25);
+  border: 1px solid rgba(52, 100, 168, 0.5);
+  border-radius: 3px;
+  color: #8fb8ff;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.multi-room-apply-btn:hover:not(:disabled) { background: rgba(52, 100, 168, 0.4); border-color: rgba(52, 100, 168, 0.8); }
+.multi-room-apply-btn:disabled { opacity: 0.35; cursor: default; }
+
+.multi-room-warning {
+  font-size: 11px;
+  color: #8f97a6;
+  margin: 0;
+}
+
 /* Env picker popup */
 .env-picker-popup {
   position: absolute;

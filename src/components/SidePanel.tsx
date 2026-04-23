@@ -9,6 +9,7 @@ import { ExitPanel } from './panels/ExitPanel';
 import { CustomLineDrawPanel, CustomLineSelectPanel } from './panels/CustomLinePanel';
 import { LabelPanel } from './panels/LabelPanel';
 import { RoomPanel } from './RoomPanel';
+import { MultiRoomPanel } from './MultiRoomPanel';
 import { ToolHint } from './panelShared';
 
 interface SidePanelProps {
@@ -155,14 +156,11 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
     );
   }
 
-  if (selection?.kind === 'room' && selection.ids.length > 1) {
+  if (selection?.kind === 'room' && selection.ids.length > 1 && map) {
     return (
       <div className="side-panel">
         {tabBar}
-        <div className="panel-content">
-          <h3>{selection.ids.length} rooms selected</h3>
-          <p className="hint">Drag to move all. Delete to remove all. Shift+click/drag to add more. Ctrl+click/drag to toggle. Ctrl+A selects all.</p>
-        </div>
+        <MultiRoomPanel selection={selection} map={map} sceneRef={sceneRef} />
       </div>
     );
   }
