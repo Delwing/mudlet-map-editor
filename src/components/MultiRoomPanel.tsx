@@ -33,6 +33,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
   const commonColor = unanimous(rooms.map((r) => r.userData?.[COLOR_KEY] ?? null));
   const commonEnv = unanimous(rooms.map((r) => r.environment));
   const commonLock = unanimous(rooms.map((r) => r.isLocked ?? false));
+  const commonWeight = unanimous(rooms.map((r) => r.weight ?? 1));
 
   const [nameEnabled, setNameEnabled] = useState(false);
   const [nameDraft, setNameDraft] = useState(() => (commonName.same ? commonName.value : ''));
@@ -55,7 +56,10 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
   const [lockEnabled, setLockEnabled] = useState(false);
   const [lockDraft, setLockDraft] = useState(() => (commonLock.same ? commonLock.value : false));
 
-  const anyEnabled = nameEnabled || symbolEnabled || symbolColorEnabled || envEnabled || lockEnabled;
+  const [weightEnabled, setWeightEnabled] = useState(false);
+  const [weightDraft, setWeightDraft] = useState(() => String(commonWeight.same ? commonWeight.value : 1));
+
+  const anyEnabled = nameEnabled || symbolEnabled || symbolColorEnabled || envEnabled || lockEnabled || weightEnabled;
 
   const handleApply = () => {
     const cmds: Command[] = [];
@@ -81,6 +85,12 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
       }
       if (lockEnabled && lockDraft !== room.isLocked) {
         cmds.push({ kind: 'setRoomLock', id, lock: lockDraft });
+      }
+      if (weightEnabled) {
+        const w = Math.max(1, parseInt(weightDraft, 10) || 1);
+        if (w !== (room.weight ?? 1)) {
+          cmds.push({ kind: 'setRoomField', id, field: 'weight', from: room.weight ?? 1, to: w });
+        }
       }
     }
 
@@ -206,6 +216,30 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
               />
             )}
           </div>
+        </div>
+
+        <div className="multi-field-row">
+          <input
+            type="checkbox"
+            className="multi-field-check"
+            checked={weightEnabled}
+            onChange={(e) => setWeightEnabled(e.target.checked)}
+            title="Enable weight override"
+          />
+          <span className="multi-field-label">
+            Weight
+            {!commonWeight.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+          </span>
+          <input
+            type="number"
+            className="multi-field-input multi-field-weight"
+            disabled={!weightEnabled}
+            min={1}
+            value={weightDraft}
+            onChange={(e) => setWeightDraft(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            placeholder={commonWeight.same ? '' : 'mixed'}
+          />
         </div>
 
         <div className="multi-field-row">
