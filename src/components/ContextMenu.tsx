@@ -458,12 +458,30 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       style={{ left: menu.screenX, top: menu.screenY }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div className="context-menu-title">Room {menu.roomId}</div>
+      <div className="context-menu-title">{multiIds ? `${multiIds.length} rooms` : `Room ${menu.roomId}`}</div>
       <button type="button" className="context-menu-item" onClick={openMoveTo}>
         Move to&hellip;
       </button>
+      {multiIds && (
+        <>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => store.setState({ spreadShrink: { mode: 'spread', factor: 2, centerMode: 'centroid', anchorRoomId: null }, contextMenu: null })}
+          >
+            Spread&hellip;
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => store.setState({ spreadShrink: { mode: 'shrink', factor: 0.5, centerMode: 'centroid', anchorRoomId: null }, contextMenu: null })}
+          >
+            Shrink&hellip;
+          </button>
+        </>
+      )}
       <button type="button" className="context-menu-item danger" onClick={deleteRoom}>
-        Delete room
+        {multiIds ? `Delete ${multiIds.length} rooms` : 'Delete room'}
       </button>
     </div>
   );

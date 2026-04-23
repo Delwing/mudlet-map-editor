@@ -39,7 +39,6 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-
   useEffect(() => {
     inputRef.current?.focus();
   }, []);

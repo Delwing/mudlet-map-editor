@@ -7,6 +7,7 @@ import { ContextMenu } from './components/ContextMenu';
 import { SessionsPanel } from './components/SessionsPanel';
 import { SwatchPalette } from './components/SwatchPalette';
 import { SearchPanel } from './components/SearchPanel';
+import { SpreadShrinkPopup } from './components/SpreadShrinkPopup';
 import { store, useEditorState, saveUserSettings } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
@@ -516,7 +517,11 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}
       {plugins.map((p, i) => <Fragment key={i}>{p.renderOverlay?.()}</Fragment>)}
-      {showSearch && mapLoaded && <SearchPanel onClose={() => setShowSearch(false)} />}
+      {showSearch && mapLoaded && <>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 399 }} onMouseDown={() => setShowSearch(false)} />
+        <SearchPanel onClose={() => setShowSearch(false)} />
+      </>}
+      <SpreadShrinkPopup sceneRef={sceneRef} />
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {(showUrlLoad || autoLoadUrl) && (
         <UrlLoadModal

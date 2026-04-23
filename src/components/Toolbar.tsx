@@ -227,10 +227,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
               title="Search rooms and labels (Ctrl+F)"
               onClick={onSearchClick}
             >
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
-                <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
+              <span className="tool-key">^F</span>
               <span>Search</span>
             </button>
           </>

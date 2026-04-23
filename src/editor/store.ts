@@ -51,6 +51,13 @@ export function saveSwatchState(sets: SwatchSet[], activeSetId: string | null, a
   } catch {}
 }
 
+export type SpreadShrinkState = {
+  mode: 'spread' | 'shrink';
+  factor: number;
+  centerMode: 'centroid' | 'anchor';
+  anchorRoomId: number | null;
+};
+
 export interface EditorState {
   map: MudletMap | null;
   loaded: LoadedMap | null;
@@ -91,6 +98,7 @@ export interface EditorState {
   activeSwatchId: string | null;
   swatchPaletteOpen: boolean;
   sessionId: string | null;
+  spreadShrink: SpreadShrinkState | null;
 }
 
 export type ContextMenuState =
@@ -157,6 +165,7 @@ const initial: EditorState = {
   activeSwatchId: swatchInit.activeSwatchId,
   swatchPaletteOpen: false,
   sessionId: null,
+  spreadShrink: null,
 };
 
 type Listener = (state: EditorState) => void;

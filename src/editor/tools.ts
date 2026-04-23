@@ -593,6 +593,15 @@ export const selectTool: Tool = {
     const s = store.getState();
     if (!s.map) return false;
 
+    // When the spread/shrink popup is open, right-click on any room sets it as the anchor.
+    if (s.spreadShrink) {
+      const hit = roomUnder(ctx, ev);
+      if (hit) {
+        store.setState({ spreadShrink: { ...s.spreadShrink, centerMode: 'anchor', anchorRoomId: hit.id } });
+        return true;
+      }
+    }
+
     const c = mapCoord(ctx, ev);
     const ac = activeContext();
 
