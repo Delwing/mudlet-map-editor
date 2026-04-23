@@ -375,6 +375,13 @@ export class EditorArea {
     this.markDirty();
   }
 
+  addRoomsLive(newRooms: LiveRoom[]): void {
+    this.rooms.push(...newRooms);
+    this.rebuildPlanes();
+    this.rebuildExits();
+    this.markDirty();
+  }
+
   removeRoomById(id: number): void {
     this.rooms = this.rooms.filter(r => r.id !== id);
     this.rebuildPlanes();
@@ -594,6 +601,31 @@ export class EditorMapReader {
     this.areas[rawRoom.area]?.addRoomLive(live);
   }
 
+  /** Bulk-add many rooms. Does one rebuildPlanes/rebuildExits per affected area. */
+  addRooms(rooms: Array<{ id: number; room: MudletRoom }>): void {
+    const byArea = new Map<number, LiveRoom[]>();
+    for (const { id, room } of rooms) {
+      this.raw.rooms[id] = room;
+      const rawArea = this.raw.areas[room.area];
+      if (rawArea && !rawArea.rooms.includes(id)) rawArea.rooms.push(id);
+      const live = makeLiveRoom(id, room);
+      this.rooms[id] = live;
+      let arr = byArea.get(room.area);
+      if (!arr) { arr = []; byArea.set(room.area, arr); }
+      arr.push(live);
+    }
+    const affectedAreaIds = new Set(byArea.keys());
+    for (const [areaId, liveRooms] of byArea) {
+      this.areas[areaId]?.addRoomsLive(liveRooms);
+    }
+    for (const otherArea of this.getAreas()) {
+      if (!affectedAreaIds.has(otherArea.getAreaId())) {
+        otherArea.rebuildExits();
+        otherArea.markDirty();
+      }
+    }
+  }
+
   setSpecialExit(roomId: number, name: string, toId: number): void {
     const rawRoom = this.raw.rooms[roomId];
     if (!rawRoom) return;
@@ -734,20 +766,21 @@ export class EditorMapReader {
   moveRoomsToArea(roomIds: number[], fromAreaId: number, toAreaId: number): void {
     const fromArea = this.areas[fromAreaId];
     const toArea = this.areas[toAreaId];
-    // Copy: callers sometimes pass a live reference to `fromArea.rooms`, which
-    // we splice below — iterating that array directly would skip entries.
-    const ids = [...roomIds];
-    for (const roomId of ids) {
+    const movedSet = new Set(roomIds);
+    const liveRooms: LiveRoom[] = [];
+    for (const roomId of roomIds) {
       const rawRoom = this.raw.rooms[roomId];
       if (!rawRoom) continue;
       rawRoom.area = toAreaId;
-      const fromRaw = this.raw.areas[fromAreaId];
-      if (fromRaw) { const idx = fromRaw.rooms.indexOf(roomId); if (idx !== -1) fromRaw.rooms.splice(idx, 1); }
       const toRaw = this.raw.areas[toAreaId];
       if (toRaw && !toRaw.rooms.includes(roomId)) toRaw.rooms.push(roomId);
       const liveRoom = this.rooms[roomId];
-      if (liveRoom) { fromArea?.removeRoomById(roomId); toArea?.addRoomLive(liveRoom); }
+      if (liveRoom) liveRooms.push(liveRoom);
     }
+    const fromRaw = this.raw.areas[fromAreaId];
+    if (fromRaw) fromRaw.rooms = fromRaw.rooms.filter(id => !movedSet.has(id));
+    if (fromArea) fromArea.removeRoomsById(movedSet);
+    if (toArea) toArea.addRoomsLive(liveRooms);
     fromArea?.markDirty();
   }
 

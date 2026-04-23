@@ -39,6 +39,8 @@ All map mutations go through `applyCommand()`. Commands are plain objects pushed
 **EditorMapReader** (`src/editor/reader/EditorMapReader.ts`)  
 Adapter wrapping `MudletMap`. All getters/setters negate Y so the rest of the editor works in Mudlet convention (+Y = North), while the renderer uses canvas convention (+Y = down). **Never bypass this adapter when touching room coordinates.**
 
+Bulk operation invariant: `EditorArea.addRoomLive` and `removeRoomById` each call `rebuildPlanes + rebuildExits`, so N calls = O(N²) cost. For any operation touching multiple rooms, use the bulk variants — `addRoomsLive(rooms[])` and `removeRoomsById(Set<number>)` — which rebuild once per area. The reader exposes `addRooms` and `removeRooms` as bulk equivalents of `addRoom`/`removeRoom`. Batch fast paths in `applyCommand`/`revertCommand` exist for `deleteRoom` batches; to hit them on initial apply, use `pushCommand({ kind: 'batch', cmds })` rather than `pushBatch`, since `pushBatch` applies each sub-command individually before wrapping.
+
 **LiveEffects** (`src/editor/effects/`)  
 8 Konva overlays drawn on top of the renderer: selection halo, hover halo, rubber band (connect preview), snap indicator, connect handles, custom line preview, selected link highlight, grid overlay. Effects read store state and re-draw when `renderer.refresh()` is called.
 

@@ -642,6 +642,24 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       return { structural: false };
     }
     case 'batch': {
+      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'deleteRoom')) {
+        // Fast path: mirror of applyCommand's bulk-delete — restore raw rooms and
+        // neighbor exits in one pass, then bulk-add to the reader (one rebuild per area).
+        const deleteCmds = cmd.cmds as Extract<Command, { kind: 'deleteRoom' }>[];
+        for (const c of deleteCmds) {
+          map.rooms[c.id] = { ...c.room };
+          const area = map.areas[c.areaId];
+          if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
+        }
+        for (const c of deleteCmds) {
+          for (const edit of c.neighborEdits) {
+            const neighbor = map.rooms[edit.roomId];
+            if (neighbor) (neighbor as any)[edit.dir] = edit.was;
+          }
+        }
+        scene.reader.addRooms(deleteCmds.map(c => ({ id: c.id, room: map.rooms[c.id] })));
+        return { structural: true };
+      }
       let structural = false;
       for (const c of [...cmd.cmds].reverse()) { if (revertCommand(map, c, scene).structural) structural = true; }
       return { structural };

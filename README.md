@@ -75,3 +75,5 @@ Binary .dat file
 ```
 
 All map mutations go through a command system (`applyCommand`) that records operations for undo/redo. State is managed in a single centralized store.
+
+Bulk operations (multi-room delete, move rooms to area, undo/redo of the above) go through optimized paths in `EditorMapReader` that perform a single `rebuildPlanes`/`rebuildExits` per affected area rather than one per room, keeping large selections responsive.
