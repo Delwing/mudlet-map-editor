@@ -240,7 +240,8 @@ export type PendingMarquee = {
   currentX: number;
   currentY: number;
   ctrlHeld: boolean;
-  /** Room IDs that were selected before the drag began; used for Ctrl toggle. */
+  shiftHeld: boolean;
+  /** Room IDs that were selected before the drag began; used for Ctrl toggle / Shift add. */
   preExistingIds: number[];
 };
 

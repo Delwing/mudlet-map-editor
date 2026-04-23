@@ -320,7 +320,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
           )}
           {!pending && activeTool === 'select' && (
             <span className="toolbar-pending-hint">
-              Hold Space to pan
+              Click to select · Shift+click/drag to add · Ctrl+click/drag to toggle · drag selected rooms to move · MMB or Space to pan
             </span>
           )}
           {!pending && activeTool === 'unlink' && (

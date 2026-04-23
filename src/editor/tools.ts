@@ -247,6 +247,15 @@ export const selectTool: Tool = {
       const raw = s.map?.rooms[room.id];
       if (!raw) return true;
 
+      if (ev.shiftKey) {
+        // Always add to selection (never remove).
+        const currentIds = s.selection?.kind === 'room' ? s.selection.ids : [];
+        if (!currentIds.includes(room.id)) {
+          store.setState({ selection: { kind: 'room', ids: [...currentIds, room.id] } });
+        }
+        return true;
+      }
+
       if (ev.ctrlKey || ev.metaKey) {
         // Toggle this room in/out of the selection.
         const currentIds = s.selection?.kind === 'room' ? s.selection.ids : [];
@@ -319,6 +328,7 @@ export const selectTool: Tool = {
         startX: mc.x, startY: mc.y,
         currentX: mc.x, currentY: mc.y,
         ctrlHeld: ev.ctrlKey || ev.metaKey,
+        shiftHeld: ev.shiftKey,
         preExistingIds: s.selection?.kind === 'room' ? s.selection.ids : [],
       },
     });
@@ -348,6 +358,10 @@ export const selectTool: Tool = {
       if (p.ctrlHeld) {
         const pre = new Set(p.preExistingIds);
         for (const id of hit) { if (pre.has(id)) pre.delete(id); else pre.add(id); }
+        newIds = [...pre];
+      } else if (p.shiftHeld) {
+        const pre = new Set(p.preExistingIds);
+        for (const id of hit) pre.add(id);
         newIds = [...pre];
       } else {
         newIds = hit;
@@ -467,7 +481,7 @@ export const selectTool: Tool = {
       const dy = Math.abs(p.currentY - p.startY);
       // Selection is already live-updated by onPointerMove. For a bare click
       // (no significant drag) without Ctrl, clear the selection.
-      if (dx <= MARQUEE_THRESHOLD && dy <= MARQUEE_THRESHOLD && !p.ctrlHeld) {
+      if (dx <= MARQUEE_THRESHOLD && dy <= MARQUEE_THRESHOLD && !p.ctrlHeld && !p.shiftHeld) {
         store.setState({ selection: null });
       }
       store.setState({ pending: null });

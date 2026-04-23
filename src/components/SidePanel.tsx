@@ -161,7 +161,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
         {tabBar}
         <div className="panel-content">
           <h3>{selection.ids.length} rooms selected</h3>
-          <p className="hint">Drag to move all. Delete to remove all. Ctrl+click to toggle rooms. Ctrl+A selects all.</p>
+          <p className="hint">Drag to move all. Delete to remove all. Shift+click/drag to add more. Ctrl+click/drag to toggle. Ctrl+A selects all.</p>
         </div>
       </div>
     );

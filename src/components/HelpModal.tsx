@@ -2,7 +2,7 @@ import type { ToolId } from '../editor/types';
 import { modKey } from '../platform';
 
 export const TOOL_BUTTONS: { id: ToolId; label: string; hint: string; key: string }[] = [
-  { id: 'select',     label: 'Select',      hint: 'Click a room to select. Drag to move (snaps to grid). Arrow keys nudge.', key: '1' },
+  { id: 'select',     label: 'Select',      hint: 'Click to select · Shift+click/drag to add · Ctrl+click/drag to toggle · drag to move (snaps to grid) · arrow keys nudge · MMB or Space to pan.', key: '1' },
   { id: 'connect',    label: 'Connect',     hint: 'Click source, then target. Shift = one-way.',                              key: '2' },
   { id: 'unlink',     label: 'Unlink',      hint: 'Click a room to remove all its exits. Click an exit/custom line to remove just that one.', key: '3' },
   { id: 'addRoom',    label: 'Add Room',    hint: `Click empty cell to create a room. ${modKey}+click to place without selecting.`, key: '4' },
