@@ -6,6 +6,7 @@ import { SidePanel } from './components/SidePanel';
 import { ContextMenu } from './components/ContextMenu';
 import { SessionsPanel } from './components/SessionsPanel';
 import { SwatchPalette } from './components/SwatchPalette';
+import { SearchPanel } from './components/SearchPanel';
 import { store, useEditorState, saveUserSettings } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
@@ -55,6 +56,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   const panRequest = useEditorState((s) => s.panRequest);
   const [showHelp, setShowHelp] = useState(false);
   const [showUrlLoad, setShowUrlLoad] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [autoLoadUrl, setAutoLoadUrl] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('map');
@@ -201,6 +203,12 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         return;
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setShowSearch((v) => !v);
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         performUndo();
@@ -293,33 +301,33 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         }
 
         if (s.selection.kind !== 'room') return;
-        if (s.selection.ids.length !== 1) return;
-        const selId = s.selection.ids[0];
-        const room = s.map.rooms[selId];
-        if (!room) return;
         e.preventDefault();
         const step = (e.shiftKey ? 5 : 1) * s.gridStep;
         const nudge = NUDGE[e.key];
         const dx = nudge.dx * step;
         const dy = nudge.dy * step;
-        const from = { x: room.x, y: room.y, z: room.z };
-        // Build custom line commands before moving (captures current positions as 'previous')
-        const clCmds = buildCustomLineMoveCommands(s.map, selId, dx, dy);
-        // reader.moveRoom expects render coords (Y-flipped); pass -(room.y + dy).
-        sceneRef.current?.reader.moveRoom(selId, room.x + dx, -(room.y + dy), room.z);
-        const to = { x: room.x, y: room.y, z: room.z };
-        // Apply custom line translations
-        for (const cmd of clCmds) {
-          if (cmd.kind === 'setCustomLine') {
-            sceneRef.current?.reader.setCustomLine(cmd.roomId, cmd.exitName, cmd.data.points, cmd.data.color, cmd.data.style, cmd.data.arrow);
+        const allCmds: Command[] = [];
+        for (const selId of s.selection.ids) {
+          const room = s.map.rooms[selId];
+          if (!room) continue;
+          const from = { x: room.x, y: room.y, z: room.z };
+          const clCmds = buildCustomLineMoveCommands(s.map, selId, dx, dy);
+          sceneRef.current?.reader.moveRoom(selId, room.x + dx, -(room.y + dy), room.z);
+          const to = { x: room.x, y: room.y, z: room.z };
+          for (const cmd of clCmds) {
+            if (cmd.kind === 'setCustomLine') {
+              sceneRef.current?.reader.setCustomLine(cmd.roomId, cmd.exitName, cmd.data.points, cmd.data.color, cmd.data.style, cmd.data.arrow);
+            }
           }
+          allCmds.push({ kind: 'moveRoom', id: selId, from, to }, ...clCmds);
         }
-        const moveCmd: Command = { kind: 'moveRoom', id: selId, from, to };
-        const undoCmd: Command = clCmds.length > 0 ? { kind: 'batch', cmds: [moveCmd, ...clCmds] } : moveCmd;
+        if (allCmds.length === 0) return;
+        const undoCmd: Command = allCmds.length === 1 ? allCmds[0] : { kind: 'batch', cmds: allCmds };
         store.setState((st) => ({ undo: [...st.undo, undoCmd], redo: [] }));
         sceneRef.current?.refresh();
         store.bumpData();
-        store.setState({ status: `Moved room ${selId} → (${room.x}, ${room.y}, ${room.z})` });
+        const { ids } = s.selection;
+        store.setState({ status: ids.length === 1 ? `Moved room ${ids[0]} → (${s.map.rooms[ids[0]]?.x}, ${s.map.rooms[ids[0]]?.y}, ${s.map.rooms[ids[0]]?.z})` : `Moved ${ids.length} rooms` });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -502,12 +510,13 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       <div className="map-viewport">
         <div ref={containerRef} className="map-container" />
         {!mapLoaded && <SessionsPanel />}
-        <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} />
+        <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} />
 <SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} pluginRoomSections={pluginRoomSections} />
       </div>
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}
       {plugins.map((p, i) => <Fragment key={i}>{p.renderOverlay?.()}</Fragment>)}
+      {showSearch && mapLoaded && <SearchPanel onClose={() => setShowSearch(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {(showUrlLoad || autoLoadUrl) && (
         <UrlLoadModal

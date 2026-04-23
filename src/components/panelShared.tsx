@@ -31,7 +31,7 @@ export function RoomLink({ id, name, className }: { id: number; name?: string | 
       onMouseEnter={() => store.setState({ hover: { kind: 'room', id, handleDir: null } })}
       onMouseLeave={() => store.setState({ hover: null })}
     >
-      #{id}{name ? ` · ${name}` : ''}
+      #{id}{name && String(id) !== name ? ` · ${name}` : ''}
     </button>
   );
 }

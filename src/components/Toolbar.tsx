@@ -6,7 +6,7 @@ import { loadFileIntoStore } from '../editor/loadFile';
 import { DropdownSelect } from './DropdownSelect';
 import { TOOL_BUTTONS } from './HelpModal';
 
-export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUrl, onSave }: { title?: string; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void }) {
+export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUrl, onSave, onSearchClick }: { title?: string; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void }) {
   const activeTool = useEditorState((s) => s.activeTool);
   const map = useEditorState((s) => s.map);
   const mapLoaded = map != null;
@@ -219,6 +219,19 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
             >
               <span className="tool-key">F</span>
               <span>Fit</span>
+            </button>
+
+            <button
+              type="button"
+              className="tool-btn"
+              title="Search rooms and labels (Ctrl+F)"
+              onClick={onSearchClick}
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+                <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+              <span>Search</span>
             </button>
           </>
         )}

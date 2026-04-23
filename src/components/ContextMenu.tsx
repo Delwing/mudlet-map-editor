@@ -112,7 +112,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
     const displayLabel = (hit: HitItem): string => {
       if (hit.kind === 'room') {
         const name = s.map?.rooms[hit.id]?.name;
-        return name ? `Room ${hit.id}: ${name}` : `Room ${hit.id}`;
+        return name && String(hit.id) !== name ? `Room ${hit.id}: ${name}` : `Room ${hit.id}`;
       }
       if (hit.kind === 'label') {
         const snap = sceneRef.current?.reader.getLabelSnapshot(hit.areaId, hit.id);

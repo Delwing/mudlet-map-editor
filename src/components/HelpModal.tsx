@@ -17,6 +17,7 @@ const SHORTCUTS = [
   { keys: ['Space'], desc: 'Hold to pan temporarily (any tool)' },
   { keys: ['G'], desc: 'Toggle snap to grid' },
   { keys: ['F'], desc: 'Fit area to view' },
+  { keys: [`${modKey}+F`], desc: 'Open / close search (rooms, labels)' },
   { keys: [`${modKey}+A`], desc: 'Select all rooms on current level' },
   { keys: ['Delete'], desc: 'Delete selection' },
   { keys: ['Arrow keys'], desc: 'Nudge selected room (Shift = ×5)' },
