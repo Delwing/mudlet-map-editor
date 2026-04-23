@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { store, useEditorState } from '../editor/store';
-import { pushCommand, buildDeleteNeighborEdits, pushBatch, buildCustomLineMoveCommands } from '../editor/commands';
+import { pushCommand, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushBatch, buildCustomLineMoveCommands } from '../editor/commands';
 import { hitToSelection, hitStatusLabel } from '../editor/tools';
 import type { HitItem } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
@@ -289,6 +289,24 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
   const deleteRoom = () => {
     const st = store.getState();
     if (!st.map) return close();
+    if (multiIds) {
+      const neighborEditsMap = buildDeleteNeighborEditsForMany(st.map, multiIds);
+      const cmds = multiIds.map(id => {
+        const room = st.map!.rooms[id];
+        return {
+          kind: 'deleteRoom' as const,
+          id,
+          room: { ...room },
+          areaId: room.area,
+          neighborEdits: neighborEditsMap.get(id) ?? [],
+        };
+      });
+      pushCommand({ kind: 'batch', cmds }, sceneRef.current);
+      sceneRef.current?.refresh();
+      store.bumpStructure();
+      store.setState({ selection: null, status: `Deleted ${multiIds.length} rooms`, contextMenu: null });
+      return;
+    }
     const rawRoom = st.map.rooms[menu.roomId];
     if (!rawRoom) return close();
     const snapshot = { ...rawRoom };

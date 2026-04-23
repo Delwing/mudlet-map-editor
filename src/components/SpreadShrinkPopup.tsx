@@ -73,7 +73,7 @@ export function SpreadShrinkPopup({ sceneRef }: SpreadShrinkPopupProps) {
 
     const snapV = state.snapToGrid
       ? (v: number) => Math.round(v / state.gridStep) * state.gridStep
-      : Math.round;
+      : (v: number) => v;
 
     const cmds: Command[] = [];
     for (const { id, rx, ry } of rooms) {
