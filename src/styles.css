@@ -898,6 +898,13 @@ html, body, #root {
 .side-panel-tab.active .tab-badge {
   background: rgba(143, 184, 255, 0.25);
 }
+.tab-badge.tab-badge--warn {
+  background: rgba(220, 160, 30, 0.18);
+  color: #e6c870;
+}
+.side-panel-tab.active .tab-badge.tab-badge--warn {
+  background: rgba(220, 160, 30, 0.3);
+}
 
 /* Collapse arrow button inside the tab bar */
 .side-panel-tabs .side-panel-tab--collapse {

@@ -10,9 +10,14 @@ interface MapPanelProps {
 
 type MapWarning =
   | { kind: 'zeroSizeLabel'; labelId: number; areaId: number; areaName: string; z: number; text: string; x: number; y: number }
-  | { kind: 'selfLinkRoom'; roomId: number; dirs: string[] };
+  | { kind: 'selfLinkRoom'; roomId: number; dirs: string[] }
+  | { kind: 'orphanRoom'; roomId: number; areaName: string }
+  | { kind: 'danglingExit'; roomId: number; dir: string; targetId: number; areaName: string }
+  | { kind: 'duplicateCoord'; roomIds: number[]; areaId: number; areaName: string; x: number; y: number; z: number };
 
-function collectWarnings(sceneRef: { current: SceneHandle | null }, map: MudletMap): MapWarning[] {
+const CARDINAL_DIRS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'up', 'down', 'in', 'out'] as const;
+
+export function collectWarnings(sceneRef: { current: SceneHandle | null }, map: MudletMap): MapWarning[] {
   const warnings: MapWarning[] = [];
 
   // Zero-size labels
@@ -40,21 +45,87 @@ function collectWarnings(sceneRef: { current: SceneHandle | null }, map: MudletM
     }
   }
 
-  // Self-linking rooms
-  const CARDINAL_DIRS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'up', 'down', 'in', 'out'] as const;
+  // Single-pass scan: inbound counts, self-links, dangling exits.
+  const inbound = new Map<number, number>();
+  const coordBuckets = new Map<string, number[]>();
+  const roomIds = new Set<number>();
+  for (const idStr of Object.keys(map.rooms)) roomIds.add(Number(idStr));
+
+  const danglingWarnings: Extract<MapWarning, { kind: 'danglingExit' }>[] = [];
+
   for (const [idStr, room] of Object.entries(map.rooms)) {
     if (!room) continue;
     const id = Number(idStr);
+    const areaName = map.areaNames[room.area] ?? `Area ${room.area}`;
     const selfDirs: string[] = [];
+
     for (const dir of CARDINAL_DIRS) {
-      if ((room as any)[dir] === id) selfDirs.push(dir);
+      const target = (room as any)[dir] as number;
+      if (target === id) selfDirs.push(dir);
+      if (target > 0) {
+        if (roomIds.has(target)) {
+          inbound.set(target, (inbound.get(target) ?? 0) + 1);
+        } else {
+          danglingWarnings.push({ kind: 'danglingExit', roomId: id, dir, targetId: target, areaName });
+        }
+      }
     }
     for (const [exitName, targetId] of Object.entries(room.mSpecialExits ?? {})) {
       if (targetId === id) selfDirs.push(exitName);
+      if (targetId > 0) {
+        if (roomIds.has(targetId)) {
+          inbound.set(targetId, (inbound.get(targetId) ?? 0) + 1);
+        } else {
+          danglingWarnings.push({ kind: 'danglingExit', roomId: id, dir: exitName, targetId, areaName });
+        }
+      }
     }
+
     if (selfDirs.length > 0) {
       warnings.push({ kind: 'selfLinkRoom', roomId: id, dirs: selfDirs });
     }
+
+    const coordKey = `${room.area}|${room.x}|${room.y}|${room.z}`;
+    const bucket = coordBuckets.get(coordKey);
+    if (bucket) bucket.push(id);
+    else coordBuckets.set(coordKey, [id]);
+  }
+
+  // Orphan rooms: no outgoing exits AND no inbound references.
+  for (const [idStr, room] of Object.entries(map.rooms)) {
+    if (!room) continue;
+    const id = Number(idStr);
+    if ((inbound.get(id) ?? 0) > 0) continue;
+    let hasOutgoing = false;
+    for (const dir of CARDINAL_DIRS) {
+      if ((room as any)[dir] > 0) { hasOutgoing = true; break; }
+    }
+    if (!hasOutgoing) {
+      for (const target of Object.values(room.mSpecialExits ?? {})) {
+        if ((target as number) > 0) { hasOutgoing = true; break; }
+      }
+    }
+    if (!hasOutgoing) {
+      warnings.push({ kind: 'orphanRoom', roomId: id, areaName: map.areaNames[room.area] ?? `Area ${room.area}` });
+    }
+  }
+
+  warnings.push(...danglingWarnings);
+
+  // Duplicate coordinates within area.
+  for (const [key, ids] of coordBuckets) {
+    if (ids.length < 2) continue;
+    const [areaStr, xStr, yStr, zStr] = key.split('|');
+    const areaId = Number(areaStr);
+    warnings.push({
+      kind: 'duplicateCoord',
+      roomIds: ids,
+      areaId,
+      areaName: map.areaNames[areaId] ?? `Area ${areaId}`,
+      x: Number(xStr),
+      y: Number(yStr),
+      z: Number(zStr),
+    });
   }
 
   return warnings;
@@ -84,15 +155,15 @@ function goToLabel(w: Extract<MapWarning, { kind: 'zeroSizeLabel' }>) {
   }
 }
 
-function goToRoom(w: Extract<MapWarning, { kind: 'selfLinkRoom' }>) {
+function goToRoom(roomId: number) {
   const s = store.getState();
-  const room = s.map?.rooms[w.roomId];
+  const room = s.map?.rooms[roomId];
   if (!room) return;
   const areaChanged = room.area !== s.currentAreaId;
   const zChanged = room.z !== s.currentZ;
   if (areaChanged || zChanged) {
     store.setState({
-      selection: { kind: 'room', ids: [w.roomId] },
+      selection: { kind: 'room', ids: [roomId] },
       currentAreaId: room.area,
       currentZ: room.z,
       navigateTo: { mapX: room.x, mapY: -room.y },
@@ -101,7 +172,7 @@ function goToRoom(w: Extract<MapWarning, { kind: 'selfLinkRoom' }>) {
     store.bumpStructure();
   } else {
     store.setState({
-      selection: { kind: 'room', ids: [w.roomId] },
+      selection: { kind: 'room', ids: [roomId] },
       panRequest: { mapX: room.x, mapY: -room.y },
       sidebarTab: 'selection',
     });
@@ -166,13 +237,49 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
               }
               if (w.kind === 'selfLinkRoom') {
                 return (
-                  <div key={`room-${w.roomId}`} className="warning-row">
+                  <div key={`selflink-${w.roomId}`} className="warning-row">
                     <span className="warning-icon">⚠</span>
                     <span className="warning-text">
                       <strong>Self-linking room</strong>
                       <span className="warning-detail">#{w.roomId} · {w.dirs.join(', ')}</span>
                     </span>
-                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w)}>Go</button>
+                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId)}>Go</button>
+                  </div>
+                );
+              }
+              if (w.kind === 'orphanRoom') {
+                return (
+                  <div key={`orphan-${w.roomId}`} className="warning-row">
+                    <span className="warning-icon">⚠</span>
+                    <span className="warning-text">
+                      <strong>Orphan room</strong>
+                      <span className="warning-detail">#{w.roomId} · {w.areaName}</span>
+                    </span>
+                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId)}>Go</button>
+                  </div>
+                );
+              }
+              if (w.kind === 'danglingExit') {
+                return (
+                  <div key={`dangling-${w.roomId}-${w.dir}`} className="warning-row">
+                    <span className="warning-icon">⚠</span>
+                    <span className="warning-text">
+                      <strong>Dangling exit</strong>
+                      <span className="warning-detail">#{w.roomId} {w.dir} → missing #{w.targetId} · {w.areaName}</span>
+                    </span>
+                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId)}>Go</button>
+                  </div>
+                );
+              }
+              if (w.kind === 'duplicateCoord') {
+                return (
+                  <div key={`dup-${w.areaId}-${w.x}-${w.y}-${w.z}`} className="warning-row">
+                    <span className="warning-icon">⚠</span>
+                    <span className="warning-text">
+                      <strong>Duplicate coords</strong>
+                      <span className="warning-detail">{w.areaName} ({w.x}, {w.y}, {w.z}) · {w.roomIds.map((id) => `#${id}`).join(', ')}</span>
+                    </span>
+                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomIds[0])}>Go</button>
                   </div>
                 );
               }

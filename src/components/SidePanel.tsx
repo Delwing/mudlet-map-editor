@@ -4,7 +4,7 @@ import type { RoomPanelSection, SidebarTab } from '../editor/plugin';
 import { AreaPanel } from './AreaManagerModal';
 import { EnvPanel } from './EnvManagerModal';
 import { HistoryPanel } from './panels/HistoryPanel';
-import { MapPanel } from './panels/MapPanel';
+import { MapPanel, collectWarnings } from './panels/MapPanel';
 import { ExitPanel } from './panels/ExitPanel';
 import { StubPanel } from './panels/StubPanel';
 import { CustomLineDrawPanel, CustomLineSelectPanel } from './panels/CustomLinePanel';
@@ -39,6 +39,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
 
   const envsCount = map ? Object.keys(map.mCustomEnvColors).length : 0;
   const areasCount = map ? Object.keys(map.areaNames).length : 0;
+  const warningCount = map ? collectWarnings(sceneRef, map).length : 0;
 
   if (activeTool === 'customLine' && pending?.kind === 'customLine') {
     return <CustomLineDrawPanel pending={pending} sceneRef={sceneRef} />;
@@ -72,7 +73,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
       <button type="button" className={`side-panel-tab${sidebarTab === 'areas' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'areas' })}>Areas{areasCount > 0 && <span className="tab-badge">{areasCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>Envs{envsCount > 0 && <span className="tab-badge">{envsCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>History{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>Map</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>Map{warningCount > 0 && <span className="tab-badge tab-badge--warn">{warningCount}</span>}</button>
       {extraTabs.map((t) => (
         <button key={t.id} type="button" className={`side-panel-tab${sidebarTab === t.id ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: t.id })}>{t.label}</button>
       ))}

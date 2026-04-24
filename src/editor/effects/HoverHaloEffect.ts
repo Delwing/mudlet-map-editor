@@ -2,6 +2,7 @@ import Konva from 'konva';
 import type { CoordinateTransform, LiveEffect, ViewportBounds } from 'mudlet-map-renderer';
 import { store, type EditorState } from '../store';
 import type { SceneHandle } from '../scene';
+import {Shape} from "konva/lib/Shape";
 
 const HALO_COLOR = '#ffcc00';
 const HALO_OPACITY = 0.9;
@@ -40,7 +41,7 @@ export class HoverHaloEffect implements LiveEffect {
     const linkStroke = Math.max(0.04, 2.5 / scale);
     if (this.roomRect) this.roomRect.strokeWidth(Math.max(0.025, 1.5 / scale));
     this.linkGroup?.getChildren().forEach((c) => {
-      if (c instanceof Konva.Line || c instanceof Konva.Arrow) c.strokeWidth(linkStroke);
+      if (c instanceof Shape) c.strokeWidth(linkStroke);
     });
     this.layer?.batchDraw();
   }
