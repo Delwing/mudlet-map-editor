@@ -1,6 +1,13 @@
 import { useSyncExternalStore } from 'react';
-import type { MudletMap } from '../mapIO';
+import type { MudletMap, MudletRoom } from '../mapIO';
 import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
+
+export type RoomClipboard = {
+  /** Rooms captured at copy time; origId preserved for internal-exit remap. */
+  rooms: Array<{ origId: number; room: MudletRoom }>;
+  /** Centroid of source rooms in raw Mudlet space — paste offset is computed relative to this. */
+  origin: { x: number; y: number; z: number };
+};
 
 const SWATCH_SETS_KEY = 'mudlet-swatch-sets';
 const ACTIVE_SET_KEY = 'mudlet-active-swatch-set';
@@ -80,6 +87,10 @@ export interface EditorState {
   dataVersion: number;
   /** Snapped cursor position in render-space, tracked by tools that show a snap indicator. */
   snapCursor: { x: number; y: number } | null;
+  /** Last pointer position over the map in render-space (y-down), updated on every pointermove. */
+  cursorMap: { x: number; y: number } | null;
+  /** In-memory clipboard of copied rooms. Not persisted across reloads. */
+  clipboard: RoomClipboard | null;
   sidebarTab: string;
   panelCollapsed: boolean;
   contextMenu: ContextMenuState;
@@ -151,6 +162,8 @@ const initial: EditorState = {
   structureVersion: 0,
   dataVersion: 0,
   snapCursor: null,
+  cursorMap: null,
+  clipboard: null,
   sidebarTab: 'selection',
   panelCollapsed: false,
   contextMenu: null,

@@ -44,6 +44,15 @@ interface RoomPanelProps {
   pluginSections?: RoomPanelSection[];
 }
 
+function lookupRoomHash(map: MudletMap, id: number, room: NonNullable<MudletMap['rooms'][number]>): string {
+  const raw = (room as any).hash;
+  if (typeof raw === 'string' && raw.length > 0) return raw;
+  for (const [h, rid] of Object.entries(map.mpRoomDbHashToRoomId ?? {})) {
+    if (rid === id) return h;
+  }
+  return '';
+}
+
 export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] }: RoomPanelProps) {
   const selId = selection.ids[0];
   const pending = useEditorState((s) => s.pending);
@@ -51,6 +60,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   const [nameDraft, setNameDraft] = useState(room.name ?? '');
   const [weightDraft, setWeightDraft] = useState(String(room.weight ?? 1));
   const [symbolDraft, setSymbolDraft] = useState(room.symbol ?? '');
+  const [hashDraft, setHashDraft] = useState(() => lookupRoomHash(map, selId, room));
   const [symbolColor, setSymbolColor] = useState<string | null>(room.userData?.['system.fallback_symbol_color'] ?? null);
   const [envPickerOpen, setEnvPickerOpen] = useState(false);
   const [specialExitName, setSpecialExitName] = useState('');
@@ -77,10 +87,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   weightDraftRef.current = weightDraft;
   const symbolDraftRef = useRef(symbolDraft);
   symbolDraftRef.current = symbolDraft;
+  const hashDraftRef = useRef(hashDraft);
+  hashDraftRef.current = hashDraft;
 
   useEffect(() => {
     const prevRoom = room;
     const prevId = selId;
+    const prevHash = lookupRoomHash(map, prevId, prevRoom);
     return () => {
       let changed = false;
       const sym = symbolDraftRef.current;
@@ -98,6 +111,11 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         pushCommand({ kind: 'setRoomField', id: prevId, field: 'weight', from: prevRoom.weight, to: w }, sceneRef.current);
         changed = true;
       }
+      const hashNext = hashDraftRef.current.trim();
+      if (hashNext !== prevHash) {
+        pushCommand({ kind: 'setRoomHash', id: prevId, from: prevHash || null, to: hashNext || null }, sceneRef.current);
+        changed = true;
+      }
       if (changed) { sceneRef.current?.refresh(); store.bumpData(); }
     };
   }, [room]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -106,6 +124,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     setNameDraft(room.name ?? '');
     setWeightDraft(String(room.weight ?? 1));
     setSymbolDraft(room.symbol ?? '');
+    setHashDraft(lookupRoomHash(map, selId, room));
     setSymbolColor(room.userData?.['system.fallback_symbol_color'] ?? null);
     setEnvPickerOpen(false);
     setSpecialExitName('');
@@ -130,6 +149,16 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ status: `Updated ${field} on room ${selId}` });
+  };
+
+  const commitHash = (raw: string) => {
+    const next = raw.trim();
+    const current = lookupRoomHash(map, selId, room);
+    if (next === current) return;
+    pushCommand({ kind: 'setRoomHash', id: selId, from: current || null, to: next || null }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpData();
+    store.setState({ status: next ? `Room ${selId} hash → ${next}` : `Room ${selId} hash cleared` });
   };
 
   const handleEnvSelect = (envId: number) => {
@@ -512,6 +541,17 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
           onBlur={() => commit('name', nameDraft)}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        />
+      </Field>
+
+      <Field label="Hash">
+        <input
+          value={hashDraft}
+          placeholder="(none)"
+          spellCheck={false}
+          onChange={(e) => setHashDraft(e.target.value)}
+          onBlur={() => commitHash(hashDraft)}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
         />
       </Field>

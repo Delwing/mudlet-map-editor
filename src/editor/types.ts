@@ -108,18 +108,21 @@ export type HitItem =
   | { kind: 'room'; id: number }
   | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
   | { kind: 'customLine'; roomId: number; exitName: string }
+  | { kind: 'stub'; roomId: number; dir: Direction }
   | { kind: 'label'; id: number; areaId: number };
 
 export type Selection =
   | { kind: 'room'; ids: number[] }
   | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
   | { kind: 'customLine'; roomId: number; exitName: string; pointIndex?: number }
+  | { kind: 'stub'; roomId: number; dir: Direction }
   | { kind: 'label'; id: number; areaId: number }
   | null;
 export type HoverTarget =
   | { kind: 'room'; id: number; handleDir: Direction | null }
   | { kind: 'exit'; fromId: number; toId: number; dir: Direction }
   | { kind: 'customLine'; roomId: number; exitName: string }
+  | { kind: 'stub'; roomId: number; dir: Direction }
   | { kind: 'label'; id: number; areaId: number }
   | null;
 
@@ -279,6 +282,7 @@ export type Command =
   | { kind: 'removeExit'; fromId: number; dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }
   | { kind: 'removeAllExits'; roomId: number; exits: Array<{ dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }>; specialExits: Array<{ name: string; toId: number }> }
   | { kind: 'setRoomField'; id: number; field: 'name' | 'environment' | 'weight' | 'symbol'; from: string | number; to: string | number }
+  | { kind: 'setRoomHash'; id: number; from: string | null; to: string | null }
   | { kind: 'addArea'; id: number; name: string }
   | { kind: 'deleteArea'; id: number; name: string }
   | {

@@ -114,6 +114,9 @@ export function allHitsAt(
   const exit = exitAt(renderer, mapX, mapY, roomSize);
   if (exit) hits.push({ kind: 'exit', fromId: exit.fromId, toId: exit.toId, dir: exit.dir });
 
+  const stub = stubAt(renderer, mapX, mapY, roomSize);
+  if (stub) hits.push({ kind: 'stub', roomId: stub.roomId, dir: stub.dir });
+
   return hits;
 }
 
@@ -400,4 +403,26 @@ export function customLinePointAt(
     return best ? best.index : null;
   }
   return null;
+}
+
+/**
+ * Hit-test a `room.stubs` entry against the geometry the renderer actually
+ * drew. Non-cardinal stubs (up/down/in/out) render as zero-length segments
+ * and are implicitly skipped by the distance check.
+ */
+export function stubAt(
+  renderer: MapRenderer,
+  mapX: number,
+  mapY: number,
+  roomSize: number,
+): { roomId: number; dir: Direction } | null {
+  const threshold = roomSize * 0.3;
+  let best: { roomId: number; dir: Direction; dist: number } | null = null;
+  for (const stub of renderer.getDrawnStubs()) {
+    const d = distToSegment(mapX, mapY, stub.x1, stub.y1, stub.x2, stub.y2);
+    if (d < threshold && (best === null || d < best.dist)) {
+      best = { roomId: stub.roomId, dir: stub.direction as Direction, dist: d };
+    }
+  }
+  return best ? { roomId: best.roomId, dir: best.dir } : null;
 }

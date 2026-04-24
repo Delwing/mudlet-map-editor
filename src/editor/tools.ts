@@ -1,7 +1,7 @@
 import type { MapRenderer, Settings } from 'mudlet-map-renderer';
 import { clientToMap, snap } from './coords';
 import { pushCommand, buildDeleteNeighborEdits } from './commands';
-import { allHitsAt, exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, labelAt, labelResizeHandleAt, roomAtCell } from './hitTest';
+import { allHitsAt, exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, labelAt, labelResizeHandleAt, roomAtCell, stubAt } from './hitTest';
 import {
   createDefaultRoom,
   getExit,
@@ -318,6 +318,11 @@ export const selectTool: Tool = {
         store.setState({ selection: { kind: 'exit', fromId: exit.fromId, toId: exit.toId, dir: exit.dir } });
         return true;
       }
+      const stub = stubAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (stub) {
+        store.setState({ selection: { kind: 'stub', roomId: stub.roomId, dir: stub.dir } });
+        return true;
+      }
     }
     // Empty space: start a marquee drag. A tiny movement that stays under
     // MARQUEE_THRESHOLD is treated as a click and clears the selection on up.
@@ -610,7 +615,7 @@ export const selectTool: Tool = {
     // room+exit or room+customLine combo should just show the room menu directly.
     if (ac) {
       const hits = allHitsAt(ctx.renderer, ac.map, ac.areaId, ac.z, c.x, c.y, ctx.settings.roomSize, ctx.scene.reader)
-        .filter(h => h.kind !== 'exit' && h.kind !== 'customLine');
+        .filter(h => h.kind !== 'exit' && h.kind !== 'customLine' && h.kind !== 'stub');
       if (hits.length > 1) {
         store.setState({
           contextMenu: { kind: 'disambiguate', hits, screenX: ev.clientX, screenY: ev.clientY },
@@ -957,6 +962,19 @@ export const unlinkTool: Tool = {
         });
         return true;
       }
+
+      const stub = stubAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (stub) {
+        pushCommand({ kind: 'setStub', roomId: stub.roomId, dir: stub.dir, stub: false }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'stub' && s.selection.roomId === stub.roomId && s.selection.dir === stub.dir) {
+          store.setState({ selection: null });
+        }
+        store.setState({ status: `Removed stub ${stub.dir} on room ${stub.roomId}` });
+        return true;
+      }
     }
 
     if (!room) {
@@ -1114,6 +1132,19 @@ export const deleteTool: Tool = {
             ? `Removed exit ${exit.fromId}.${exit.dir} ↔ ${exit.toId}.${opposite}`
             : `Removed exit ${exit.fromId}.${exit.dir} → ${exit.toId}`,
         });
+        return true;
+      }
+
+      const stub = stubAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+      if (stub) {
+        pushCommand({ kind: 'setStub', roomId: stub.roomId, dir: stub.dir, stub: false }, ctx.scene);
+        ctx.refresh();
+        store.bumpData();
+        const s = store.getState();
+        if (s.selection?.kind === 'stub' && s.selection.roomId === stub.roomId && s.selection.dir === stub.dir) {
+          store.setState({ selection: null });
+        }
+        store.setState({ status: `Removed stub ${stub.dir} on room ${stub.roomId}` });
         return true;
       }
     }
@@ -1559,6 +1590,7 @@ export function hitToSelection(hit: HitItem): Selection {
     case 'label': return { kind: 'label', id: hit.id, areaId: hit.areaId };
     case 'customLine': return { kind: 'customLine', roomId: hit.roomId, exitName: hit.exitName };
     case 'exit': return { kind: 'exit', fromId: hit.fromId, toId: hit.toId, dir: hit.dir };
+    case 'stub': return { kind: 'stub', roomId: hit.roomId, dir: hit.dir };
   }
 }
 
@@ -1568,6 +1600,7 @@ export function hitStatusLabel(hit: HitItem): string {
     case 'label': return `label ${hit.id}`;
     case 'customLine': return `custom line '${hit.exitName}' on room ${hit.roomId}`;
     case 'exit': return `exit ${hit.dir} (${hit.fromId}→${hit.toId})`;
+    case 'stub': return `stub ${hit.dir} on room ${hit.roomId}`;
   }
 }
 
@@ -1591,7 +1624,12 @@ function updateHover(ctx: ToolContext, ev: PointerEvent) {
         target = { kind: 'customLine', roomId: cl.roomId, exitName: cl.exitName };
       } else {
         const exit = exitAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
-        if (exit) target = { kind: 'exit', ...exit };
+        if (exit) {
+          target = { kind: 'exit', ...exit };
+        } else {
+          const stub = stubAt(ctx.renderer, c.x, c.y, ctx.settings.roomSize);
+          if (stub) target = { kind: 'stub', roomId: stub.roomId, dir: stub.dir };
+        }
       }
     }
   }
@@ -1610,6 +1648,8 @@ function hoverEquals(a: HoverTarget, b: HoverTarget): boolean {
     return a.fromId === b.fromId && a.toId === b.toId && a.dir === b.dir;
   if (a.kind === 'customLine' && b.kind === 'customLine')
     return a.roomId === b.roomId && a.exitName === b.exitName;
+  if (a.kind === 'stub' && b.kind === 'stub')
+    return a.roomId === b.roomId && a.dir === b.dir;
   if (a.kind === 'label' && b.kind === 'label')
     return a.id === b.id && a.areaId === b.areaId;
   return false;

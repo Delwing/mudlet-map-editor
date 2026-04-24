@@ -117,6 +117,20 @@ export class HoverHaloEffect implements LiveEffect {
         }));
       }
       this.linkGroup.visible(true);
+    } else if (h.kind === 'stub') {
+      const stub = scene.renderer.getDrawnStubs().find((s) =>
+        s.roomId === h.roomId && s.direction === h.dir,
+      );
+      if (!stub) { this.layer.batchDraw(); return; }
+      this.linkGroup.add(new Konva.Line({
+        points: [stub.x1, stub.y1, stub.x2, stub.y2],
+        stroke: HALO_COLOR,
+        strokeWidth: linkStroke,
+        listening: false,
+        lineCap: 'round',
+        opacity: HALO_OPACITY,
+      }));
+      this.linkGroup.visible(true);
     } else if (h.kind === 'customLine') {
       const spec = scene.renderer.getDrawnSpecialExits().find((e) =>
         e.roomId === h.roomId && e.exitName === h.exitName,

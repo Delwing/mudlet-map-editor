@@ -12,6 +12,7 @@ export function commandLabel(cmd: Command): string {
     case 'removeExit': return `Remove exit #${cmd.fromId} ${cmd.dir}`;
     case 'removeAllExits': return `Remove all exits from #${cmd.roomId}`;
     case 'setRoomField': return `Set ${cmd.field} on #${cmd.id}`;
+    case 'setRoomHash': return cmd.to === null ? `Clear hash on #${cmd.id}` : `Set hash on #${cmd.id}`;
     case 'addArea': return `Add area "${cmd.name}"`;
     case 'deleteArea': return `Delete area "${cmd.name}"`;
     case 'deleteAreaWithRooms': return `Delete area "${cmd.areaName}" + rooms`;

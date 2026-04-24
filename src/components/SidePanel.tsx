@@ -6,6 +6,7 @@ import { EnvPanel } from './EnvManagerModal';
 import { HistoryPanel } from './panels/HistoryPanel';
 import { MapPanel } from './panels/MapPanel';
 import { ExitPanel } from './panels/ExitPanel';
+import { StubPanel } from './panels/StubPanel';
 import { CustomLineDrawPanel, CustomLineSelectPanel } from './panels/CustomLinePanel';
 import { LabelPanel } from './panels/LabelPanel';
 import { RoomPanel } from './RoomPanel';
@@ -140,6 +141,17 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
         {tabBar}
         <div className="panel-content">
           <ExitPanel selection={selection} map={map} sceneRef={sceneRef} />
+        </div>
+      </div>
+    );
+  }
+
+  if (selection?.kind === 'stub' && map) {
+    return (
+      <div className="side-panel">
+        {tabBar}
+        <div className="panel-content">
+          <StubPanel selection={selection} map={map} sceneRef={sceneRef} />
         </div>
       </div>
     );

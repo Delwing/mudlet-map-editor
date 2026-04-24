@@ -85,6 +85,13 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       }
       return { structural: false };
     }
+    case 'setRoomHash': {
+      if (cmd.from) delete map.mpRoomDbHashToRoomId[cmd.from];
+      if (cmd.to) map.mpRoomDbHashToRoomId[cmd.to] = cmd.id;
+      const room = map.rooms[cmd.id];
+      if (room) (room as any).hash = cmd.to ?? undefined;
+      return { structural: false };
+    }
     case 'addArea': {
       if (reader) reader.addArea(cmd.id, cmd.name);
       else { map.areas[cmd.id] = { rooms: [], zLevels: [0], mAreaExits: {}, gridMode: false, max_x: 0, max_y: 0, max_z: 0, min_x: 0, min_y: 0, min_z: 0, span: [0,0,0], xmaxForZ: {}, ymaxForZ: {}, xminForZ: {}, yminForZ: {}, pos: [0,0,0], isZone: false, zoneAreaRef: -1, userData: {} }; map.areaNames[cmd.id] = cmd.name; }
@@ -328,6 +335,17 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
         scene.reader.removeRooms(ids);
         return { structural: true };
       }
+      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'addRoom')) {
+        // Fast path: one rebuild per affected area instead of one per added room.
+        const addCmds = cmd.cmds as Extract<Command, { kind: 'addRoom' }>[];
+        for (const c of addCmds) {
+          map.rooms[c.id] = { ...c.room };
+          const area = map.areas[c.areaId];
+          if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
+        }
+        scene.reader.addRooms(addCmds.map(c => ({ id: c.id, room: map.rooms[c.id] })));
+        return { structural: true };
+      }
       let structural = false;
       for (const c of cmd.cmds) { if (applyCommand(map, c, scene).structural) structural = true; }
       return { structural };
@@ -407,6 +425,13 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
         const room = map.rooms[cmd.id];
         if (room) (room as any)[cmd.field] = cmd.from;
       }
+      return { structural: false };
+    }
+    case 'setRoomHash': {
+      if (cmd.to) delete map.mpRoomDbHashToRoomId[cmd.to];
+      if (cmd.from) map.mpRoomDbHashToRoomId[cmd.from] = cmd.id;
+      const room = map.rooms[cmd.id];
+      if (room) (room as any).hash = cmd.from ?? undefined;
       return { structural: false };
     }
     case 'addArea': {
@@ -658,6 +683,13 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
           }
         }
         scene.reader.addRooms(deleteCmds.map(c => ({ id: c.id, room: map.rooms[c.id] })));
+        return { structural: true };
+      }
+      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'addRoom')) {
+        // Fast path: mirror of applyCommand's bulk-add — bulk-remove in one call.
+        const addCmds = cmd.cmds as Extract<Command, { kind: 'addRoom' }>[];
+        const ids = addCmds.map(c => c.id);
+        scene.reader.removeRooms(ids);
         return { structural: true };
       }
       let structural = false;

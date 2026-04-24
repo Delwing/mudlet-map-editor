@@ -1,5 +1,6 @@
 import { store } from './store';
 import { TOOLS, type ToolContext } from './tools';
+import { clientToMap } from './coords';
 import type { ToolId } from './types';
 
 export function attachPointerController(ctx: ToolContext): () => void {
@@ -66,6 +67,9 @@ export function attachPointerController(ctx: ToolContext): () => void {
       stopAll(ev);
       return;
     }
+    // Track cursor in render-space so paste-at-cursor works regardless of active tool.
+    const pt = clientToMap(ctx.renderer, container, ev.clientX, ev.clientY);
+    store.setState({ cursorMap: pt });
     const tool = TOOLS[effectiveTool()];
     const consumed = tool.onPointerMove?.(ev, ctx);
     if (consumed || consumingPointer === ev.pointerId) stopAll(ev);
@@ -101,7 +105,11 @@ export function attachPointerController(ctx: ToolContext): () => void {
   };
 
   const onPointerLeave = () => {
-    if (store.getState().hover) store.setState({ hover: null });
+    const s = store.getState();
+    const patch: Partial<import('./store').EditorState> = {};
+    if (s.hover) patch.hover = null;
+    if (s.cursorMap) patch.cursorMap = null;
+    if (Object.keys(patch).length) store.setState(patch);
   };
 
   // Mirror events — the renderer's click/hover handlers are wired on mouse* events.

@@ -96,6 +96,23 @@ export class SelectedLinkEffect implements LiveEffect {
       return;
     }
 
+    if (sel.kind === 'stub') {
+      const stub = scene.renderer.getDrawnStubs().find((s) =>
+        s.roomId === sel.roomId && s.direction === sel.dir,
+      );
+      if (!stub) { this.group.visible(false); this.layer.batchDraw(); return; }
+      this.group.add(new Konva.Line({
+        points: [stub.x1, stub.y1, stub.x2, stub.y2],
+        stroke: HALO_COLOR,
+        strokeWidth: 0.08,
+        listening: false,
+        ...HALO_SHADOW,
+      }));
+      this.group.visible(true);
+      this.layer.batchDraw();
+      return;
+    }
+
     if (sel.kind === 'customLine') {
       const spec = scene.renderer.getDrawnSpecialExits().find((e) =>
         e.roomId === sel.roomId && e.exitName === sel.exitName,

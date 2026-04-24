@@ -11,7 +11,9 @@ import { SpreadShrinkPopup } from './components/SpreadShrinkPopup';
 import { store, useEditorState, saveUserSettings } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
+import { copyRoomsToClipboard, pasteClipboard, duplicateRooms } from './editor/clipboard';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
+import { snap } from './editor/coords';
 import type { Command, ToolId } from './editor/types';
 import { saveSession } from './editor/session';
 import { loadFileIntoStore } from './editor/loadFile';
@@ -38,6 +40,20 @@ const NUDGE: Record<string, { dx: number; dy: number }> = {
   ArrowUp:    { dx:  0, dy:  1 },
   ArrowDown:  { dx:  0, dy: -1 },
 };
+
+function buildPasteStatus(
+  verb: string,
+  result: { count: number; externalExitsStubbed: number; externalSpecialExitsDropped: number },
+): string {
+  const parts = [`${verb} ${result.count} room${result.count === 1 ? '' : 's'}`];
+  if (result.externalExitsStubbed > 0) {
+    parts.push(`${result.externalExitsStubbed} external exit${result.externalExitsStubbed === 1 ? '' : 's'} → stub`);
+  }
+  if (result.externalSpecialExitsDropped > 0) {
+    parts.push(`${result.externalSpecialExitsDropped} special exit${result.externalSpecialExitsDropped === 1 ? '' : 's'} dropped`);
+  }
+  return parts.join(' · ');
+}
 
 export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plugins?: EditorPlugin[]; title?: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -218,6 +234,39 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && e.key.toLowerCase() === 'z') || e.key.toLowerCase() === 'y')) {
         e.preventDefault();
         performRedo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'c') {
+        const s = store.getState();
+        if (!s.map || s.selection?.kind !== 'room') return;
+        e.preventDefault();
+        const n = copyRoomsToClipboard(s.map, s.selection.ids);
+        if (n > 0) store.setState({ status: `Copied ${n} room${n === 1 ? '' : 's'}` });
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'v') {
+        pasteAtCursor();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'd') {
+        const s = store.getState();
+        if (!s.map || s.selection?.kind !== 'room' || s.currentAreaId == null) return;
+        e.preventDefault();
+        // Offset one grid step right + south (raw Mudlet: +x, -y) — matches the familiar "duplicate and nudge" feel.
+        const result = duplicateRooms(
+          s.map,
+          s.selection.ids,
+          { dx: s.gridStep, dy: -s.gridStep },
+          { areaId: s.currentAreaId, z: s.currentZ },
+          sceneRef.current,
+        );
+        if (!result) return;
+        sceneRef.current?.refresh();
+        store.bumpStructure();
+        store.setState({
+          selection: { kind: 'room', ids: result.newIds },
+          status: buildPasteStatus('Duplicated', result),
+        });
         return;
       }
       if (e.key === 'Enter') {
@@ -486,6 +535,55 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       store.setState({ selection: null, status: `Deleted label ${sel.id}` });
       return;
     }
+
+    if (sel.kind === 'stub') {
+      pushCommand({ kind: 'setStub', roomId: sel.roomId, dir: sel.dir, stub: false }, sceneRef.current);
+      sceneRef.current?.refresh();
+      store.bumpData();
+      store.setState({ selection: null, status: `Removed stub ${sel.dir} on room ${sel.roomId}` });
+      return;
+    }
+  };
+
+  const pasteAtCursor = () => {
+    const s = store.getState();
+    if (!s.map || !s.clipboard || s.currentAreaId == null) return;
+    // Paste anchor in raw Mudlet space: prefer last pointer-over-map position (render-space, y-down → negate).
+    // Fall back to viewport centre so Ctrl+V still works when the cursor is off-canvas.
+    let rawX: number;
+    let rawY: number;
+    if (s.cursorMap) {
+      rawX = s.cursorMap.x;
+      rawY = -s.cursorMap.y;
+    } else {
+      const bounds = sceneRef.current?.renderer.getViewportBounds();
+      if (bounds) {
+        rawX = Math.round((bounds.minX + bounds.maxX) / 2);
+        rawY = -Math.round((bounds.minY + bounds.maxY) / 2);
+      } else {
+        rawX = s.clipboard.origin.x;
+        rawY = s.clipboard.origin.y;
+      }
+    }
+    if (s.snapToGrid) {
+      rawX = snap(rawX, s.gridStep);
+      rawY = snap(rawY, s.gridStep);
+    } else {
+      rawX = Math.round(rawX);
+      rawY = Math.round(rawY);
+    }
+    const result = pasteClipboard(
+      s.clipboard,
+      { x: rawX, y: rawY, z: s.currentZ, areaId: s.currentAreaId },
+      sceneRef.current,
+    );
+    if (!result) return;
+    sceneRef.current?.refresh();
+    store.bumpStructure();
+    store.setState({
+      selection: { kind: 'room', ids: result.newIds },
+      status: buildPasteStatus('Pasted', result),
+    });
   };
 
   const performUndo = () => {
