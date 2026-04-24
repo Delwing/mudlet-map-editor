@@ -19,8 +19,13 @@ import { saveSession } from './editor/session';
 import { loadFileIntoStore } from './editor/loadFile';
 import type { EditorPlugin, RoomPanelSection } from './editor/plugin';
 
-// Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px. Side panel: always use expanded width (440px).
-const VIEW_INSETS = { top: 104, right: 464, bottom: 24, left: 24 };
+// Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px.
+// Right inset mirrors the current side-panel width (12px offset + panelWidth + 12px gap),
+// so fitArea/setArea respects whatever the user has resized the panel to.
+function getViewInsets() {
+  const w = store.getState().panelWidth;
+  return { top: 104, right: w + 24, bottom: 24, left: 24 };
+}
 
 const TOOL_KEYS: Record<string, ToolId> = {
   '1': 'select',
@@ -114,7 +119,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     sceneRef.current = scene;
     const { currentAreaId, currentZ } = store.getState();
     if (currentAreaId != null) {
-      scene.setArea(currentAreaId, currentZ, VIEW_INSETS);
+      scene.setArea(currentAreaId, currentZ, getViewInsets());
     }
     return () => {
       scene.destroy();
@@ -133,7 +138,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       store.setState({ navigateTo: null });
       scene.setAreaAt(currentAreaId, currentZ, nav.mapX, nav.mapY);
     } else {
-      scene.setArea(currentAreaId, currentZ, VIEW_INSETS);
+      scene.setArea(currentAreaId, currentZ, getViewInsets());
     }
   }, [currentAreaId, currentZ, mapLoaded]);
 
@@ -199,10 +204,10 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       if (!el) return false;
       const tag = el.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-      // CodeMirror and other rich editors use contenteditable divs.
+      // Rich editors (Monaco) use contenteditable or nested focus roots.
       if (el.isContentEditable) return true;
-      if (el.closest?.('.cm-editor')) return true;
-      return false;
+      return !!el.closest?.('.monaco-editor');
+
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -309,7 +314,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         return;
       }
       if (e.key === 'f' || e.key === 'F') {
-        sceneRef.current?.renderer.fitArea(VIEW_INSETS);
+        sceneRef.current?.renderer.fitArea(getViewInsets());
         return;
       }
 
@@ -391,7 +396,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
-    const performFit = () => sceneRef.current?.renderer.fitArea(VIEW_INSETS);
+    const performFit = () => sceneRef.current?.renderer.fitArea(getViewInsets());
     window.addEventListener('editor:undo', performUndo as EventListener);
     window.addEventListener('editor:redo', performRedo as EventListener);
     window.addEventListener('editor:fit', performFit);

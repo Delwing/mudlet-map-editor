@@ -9,6 +9,26 @@ import { ScriptHelpModal } from './ScriptHelpModal';
 const ScriptCodeEditor = lazy(() => import('./ScriptCodeEditor'));
 
 const LS_KEY = 'mudlet-editor-script';
+const LS_NAME = 'mudlet-editor-script-name';
+const LS_LIBRARY = 'mudlet-editor-scripts';
+
+interface SavedScript { code: string; savedAt: number }
+type ScriptLibrary = Record<string, SavedScript>;
+
+function loadLibrary(): ScriptLibrary {
+  try {
+    const raw = localStorage.getItem(LS_LIBRARY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed as ScriptLibrary : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistLibrary(lib: ScriptLibrary) {
+  localStorage.setItem(LS_LIBRARY, JSON.stringify(lib));
+}
 
 const DEFAULT_CODE = `// JavaScript. Whole run = one undo step.
 // Read:  rooms() / findRooms(pred) / room(id) / areas() / area(id)
@@ -34,6 +54,57 @@ export function ScriptPanel({ sceneRef }: Props) {
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [running, setRunning] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [library, setLibrary] = useState<ScriptLibrary>(() => loadLibrary());
+  const [currentName, setCurrentName] = useState<string | null>(() => localStorage.getItem(LS_NAME) || null);
+  const [nameInput, setNameInput] = useState<string>(() => localStorage.getItem(LS_NAME) ?? '');
+
+  const libraryNames = Object.keys(library).sort((a, b) => a.localeCompare(b));
+  const trimmedName = nameInput.trim();
+  const nameExists = trimmedName in library;
+  const saveLabel = nameExists && trimmedName !== currentName ? 'Overwrite' : 'Save';
+
+  const onSave = () => {
+    const name = trimmedName;
+    if (!name) return;
+    const next: ScriptLibrary = { ...library, [name]: { code, savedAt: Date.now() } };
+    setLibrary(next);
+    persistLibrary(next);
+    setCurrentName(name);
+    localStorage.setItem(LS_NAME, name);
+    store.setState({ status: `Script "${name}" saved` });
+  };
+
+  const onLoad = (name: string) => {
+    if (!name) {
+      setCurrentName(null);
+      setNameInput('');
+      localStorage.removeItem(LS_NAME);
+      return;
+    }
+    const entry = library[name];
+    if (!entry) return;
+    setCode(entry.code);
+    setCurrentName(name);
+    setNameInput(name);
+    localStorage.setItem(LS_NAME, name);
+    setResult(null);
+    store.setState({ status: `Script "${name}" loaded` });
+  };
+
+  const onDelete = () => {
+    const name = trimmedName;
+    if (!name || !library[name]) return;
+    if (!window.confirm(`Delete saved script "${name}"?`)) return;
+    const { [name]: _discard, ...rest } = library;
+    void _discard;
+    setLibrary(rest);
+    persistLibrary(rest);
+    if (currentName === name) {
+      setCurrentName(null);
+      localStorage.removeItem(LS_NAME);
+    }
+    store.setState({ status: `Script "${name}" deleted` });
+  };
 
   const onRun = () => {
     const scene = sceneRef.current;
@@ -73,6 +144,43 @@ export function ScriptPanel({ sceneRef }: Props) {
         >? API</button>
       </div>
       <p className="hint">Bulk-edit rooms with JavaScript. One run = one undo step.</p>
+      <div className="script-library">
+        <select
+          className="script-library-select"
+          value={currentName ?? ''}
+          onChange={(e) => onLoad(e.target.value)}
+          title="Load a saved script"
+          disabled={libraryNames.length === 0}
+        >
+          <option value="">{libraryNames.length === 0 ? '— no saved scripts —' : '— load —'}</option>
+          {libraryNames.map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          className="script-library-name"
+          placeholder="Name to save as…"
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+          }}
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!trimmedName}
+          title={nameExists ? `Overwrite "${trimmedName}"` : 'Save current script to library'}
+        >{saveLabel}</button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={!nameExists}
+          title={nameExists ? `Delete "${trimmedName}"` : 'Type or load a name to delete'}
+        >Delete</button>
+      </div>
       <Suspense
         fallback={
           <textarea

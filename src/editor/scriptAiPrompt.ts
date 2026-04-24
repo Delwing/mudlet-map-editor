@@ -30,7 +30,7 @@ export function buildAiPrompt(): string {
 
 You are writing **JavaScript** that will run inside a browser-based Mudlet \`.dat\` map editor. Your code is executed via \`new Function(...)\` with a fixed set of helpers injected as parameters — nothing else is available. No \`fetch\`, no DOM, no modules, no Node APIs.
 
-Respond with only the script body (no markdown fences, no \`runScript(...)\` wrapper) unless the user asks otherwise.
+Format your response as normal markdown: wrap the script in a \`\`\`js … \`\`\` fenced code block with proper indentation, and use \`inline code\` for identifiers, function names, and field names. Do **not** add a \`runScript(...)\` wrapper or any surrounding boilerplate — the body inside the fence is pasted verbatim into the editor.
 
 ## Execution model
 

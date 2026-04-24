@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { store, useEditorState } from '../../editor/store';
 import { undoOnce, redoOnce } from '../../editor/commands';
 import type { Command } from '../../editor/types';
 import type { SceneHandle } from '../../editor/scene';
+
+const COLLAPSED_SUBS = 5;
 
 export function commandLabel(cmd: Command): string {
   switch (cmd.kind) {
@@ -57,13 +60,36 @@ function HistoryEntry({ cmd, className, onClick, title }: {
   onClick: () => void;
   title: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const subs = cmd.kind === 'batch' ? cmd.cmds.slice(1) : [];
+  const showToggle = subs.length > COLLAPSED_SUBS;
+  const visibleSubs = expanded || !showToggle ? subs : subs.slice(0, COLLAPSED_SUBS);
+  const hiddenCount = subs.length - visibleSubs.length;
+
   return (
-    <button type="button" className={className} onClick={onClick} title={title}>
+    <div
+      className={className}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      title={title}
+      role="button"
+      tabIndex={0}
+    >
       <span className="history-label">{commandLabel(cmd)}</span>
-      {cmd.kind === 'batch' && cmd.cmds.slice(1).map((sub, i) => (
+      {visibleSubs.map((sub, i) => (
         <span key={i} className="history-sub">{commandLabel(sub)}</span>
       ))}
-    </button>
+      {showToggle && (
+        <button
+          type="button"
+          className="history-expand"
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+          title={expanded ? 'Collapse' : `Show ${hiddenCount} more`}
+        >
+          {expanded ? '− collapse' : `+ ${hiddenCount} more`}
+        </button>
+      )}
+    </div>
   );
 }
 

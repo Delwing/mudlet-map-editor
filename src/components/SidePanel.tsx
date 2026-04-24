@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { store, useEditorState } from '../editor/store';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { store, useEditorState, saveUserSettings } from '../editor/store';
 import type { SceneHandle } from '../editor/scene';
 import type { RoomPanelSection, SidebarTab } from '../editor/plugin';
 import { AreaPanel } from './AreaManagerModal';
@@ -38,6 +38,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   const sidebarTab = useEditorState((s) => s.sidebarTab);
   const panelCollapsed = useEditorState((s) => s.panelCollapsed);
   const panelExpanded = useEditorState((s) => s.panelExpanded);
+  const panelWidth = useEditorState((s) => s.panelWidth);
   const undoCount = useEditorState((s) => s.undo.length);
   useEditorState((s) => s.dataVersion); // subscribe so exit/door/weight mutations re-render
 
@@ -156,8 +157,38 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   if (isEmpty) classes.push('empty');
   if (panelExpanded) classes.push('side-panel--expanded');
 
+  // Only the normal (docked) state honours panelWidth — collapsed is 48px and
+  // modal-expanded is centered with its own width.
+  const inlineStyle = panelCollapsed || panelExpanded ? undefined : { width: panelWidth };
+
+  const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = store.getState().panelWidth;
+    const MIN = 300;
+    const MAX = Math.max(MIN, Math.min(1200, window.innerWidth - 120));
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.max(MIN, Math.min(MAX, startWidth + (startX - ev.clientX)));
+      store.setState({ panelWidth: next });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      saveUserSettings({ panelWidth: store.getState().panelWidth });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
   const panel = (
-    <div className={classes.join(' ')}>
+    <div className={classes.join(' ')} style={inlineStyle}>
+      {!panelCollapsed && !panelExpanded && (
+        <div
+          className="side-panel-resize-handle"
+          onPointerDown={startResize}
+          title="Drag to resize"
+        />
+      )}
       {tabBar}
       {body}
     </div>

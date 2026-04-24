@@ -809,8 +809,7 @@ html, body, #root {
   right: 12px;
   bottom: 12px;
   width: 440px;
-  background: rgba(28, 40, 60, 0.52);
-  backdrop-filter: blur(16px) saturate(1.8) brightness(0.4);
+  background: transparent;
   border: 1px solid rgba(143, 184, 255, 0.18);
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
@@ -822,10 +821,42 @@ html, body, #root {
   z-index: 10;
 }
 
+/* Blur lives on a pseudo-element so the panel itself doesn't become a
+   containing block for position:fixed descendants (breaks Monaco overflow
+   widgets in the Script tab). */
+.side-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 40, 60, 0.52);
+  backdrop-filter: blur(16px) saturate(1.8) brightness(0.4);
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
 .side-panel--collapsed {
   width: 48px;
   overflow: visible;
   box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+.side-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  margin-left: -3px;
+  cursor: ew-resize;
+  z-index: 30;
+  touch-action: none;
+  background: transparent;
+  transition: background 0.15s;
+}
+.side-panel-resize-handle:hover,
+.side-panel-resize-handle:active {
+  background: rgba(143, 184, 255, 0.25);
 }
 
 .side-panel-collapse-btn {
@@ -951,12 +982,16 @@ html, body, #root {
   border-left: 1px solid rgba(143, 184, 255, 0.07);
 }
 
-/* Expanded (modal) state: centered, larger panel */
-.side-panel-modal-overlay {
+/* Expanded (modal) state: centered, larger panel.
+   Overlay is a click-catcher only — no backdrop-filter or dark scrim, so the
+   panel's own backdrop-filter applies directly to the canvas and the expanded
+   panel matches the regular side-panel's look. Dual-class selector bumps
+   specificity above the generic `.modal-overlay` rule defined later. */
+.modal-overlay.side-panel-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  background: transparent;
+  backdrop-filter: none;
   z-index: 500;
   display: flex;
   align-items: center;
@@ -2806,6 +2841,44 @@ html, body, #root {
   margin: 8px 0;
 }
 
+.script-library {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 8px;
+}
+
+.script-library-select,
+.script-library-name {
+  flex: 1 1 140px;
+  min-width: 0;
+  background: rgba(10, 14, 22, 0.7);
+  color: #e6e9ef;
+  border: 1px solid rgba(143, 184, 255, 0.14);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.script-library-select:focus,
+.script-library-name:focus {
+  outline: none;
+  border-color: rgba(52, 100, 168, 0.7);
+  box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.15);
+}
+
+.script-library-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.side-panel .script-library button {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
 .script-hint {
   color: #6a7588;
   font-size: 11px;
@@ -2813,13 +2886,10 @@ html, body, #root {
 }
 
 .script-code-editor {
+  position: relative;
   border: 1px solid rgba(143, 184, 255, 0.14);
   border-radius: 4px;
-  overflow: hidden;
-  min-height: 260px;
-  max-height: 50vh;
-  display: flex;
-  flex-direction: column;
+  height: 420px;
   background: rgba(8, 12, 20, 0.6);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -2829,14 +2899,20 @@ html, body, #root {
   box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.18);
 }
 
-.script-code-editor .cm-editor {
-  flex: 1;
-  min-height: 0;
+.script-code-editor > section {
+  width: 100%;
+  height: 100%;
   background: transparent;
 }
 
-.script-code-editor .cm-editor.cm-focused {
-  outline: none;
+.script-code-editor .monaco-editor,
+.script-code-editor .monaco-editor .overflow-guard {
+  background: transparent;
+}
+
+.script-code-editor .monaco-editor .margin,
+.script-code-editor .monaco-editor-background {
+  background: transparent;
 }
 
 .side-panel .script-run-btn {
@@ -3358,6 +3434,35 @@ html, body, #root {
   border: 1px solid transparent;
   text-align: left;
   width: 100%;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+}
+
+.history-item:focus-visible {
+  outline: 1px solid rgba(143, 184, 255, 0.5);
+  outline-offset: -1px;
+}
+
+.history-expand {
+  flex-basis: 100%;
+  margin-left: 16px;
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  color: #8fb8ff;
+  font-size: 11px;
+  font-family: ui-monospace, Consolas, monospace;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 3px;
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.history-expand:hover {
+  background: rgba(143, 184, 255, 0.12);
+  color: #cfe1ff;
 }
 
 .history-current {

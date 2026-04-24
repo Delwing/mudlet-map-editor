@@ -17,14 +17,17 @@ const USER_SETTINGS_KEY = 'mudlet-editor-settings';
 
 interface UserSettings {
   snapToGrid: boolean;
+  panelWidth: number;
 }
+
+const DEFAULT_PANEL_WIDTH = 440;
 
 function loadUserSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(USER_SETTINGS_KEY);
-    if (raw) return { snapToGrid: true, ...JSON.parse(raw) };
+    if (raw) return { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH, ...JSON.parse(raw) };
   } catch {}
-  return { snapToGrid: true };
+  return { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH };
 }
 
 export function saveUserSettings(patch: Partial<UserSettings>): void {
@@ -94,6 +97,8 @@ export interface EditorState {
   sidebarTab: string;
   panelCollapsed: boolean;
   panelExpanded: boolean;
+  /** Side panel width in pixels (persisted). Ignored when the panel is collapsed or modal-expanded. */
+  panelWidth: number;
   contextMenu: ContextMenuState;
   savedUndoLength: number;
   /** When set, the next area/z navigation pans to this map-space point instead of fitting. Consumed and cleared by App. */
@@ -168,6 +173,7 @@ const initial: EditorState = {
   sidebarTab: 'selection',
   panelCollapsed: false,
   panelExpanded: false,
+  panelWidth: userSettings.panelWidth,
   contextMenu: null,
   savedUndoLength: 0,
   navigateTo: null,
