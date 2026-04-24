@@ -98,6 +98,15 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     (async () => { for (const p of plugins) await p.onAppReady?.(); })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Prewarm the Monaco chunk right after mount so the first Script-tab open
+  // doesn't wait for the chunk to download + parse. `import()` is async, so
+  // this doesn't block paint. Earlier we deferred via requestIdleCallback, but
+  // that could hold the prewarm up to 2 s on a busy startup and the user
+  // opened the tab before the import had fired.
+  useEffect(() => {
+    void import('./components/panels/ScriptCodeEditor');
+  }, []);
+
   // onMapOpened / onMapClosed: fire on map identity transitions.
   const prevMapRef = useRef(map);
   useEffect(() => {

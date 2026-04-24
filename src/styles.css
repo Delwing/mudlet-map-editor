@@ -2834,6 +2834,47 @@ html, body, #root {
   box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.15);
 }
 
+.script-editor-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 420px;
+  background: rgba(6, 9, 16, 0.8);
+  border: 1px solid rgba(143, 184, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(200, 208, 220, 0.75);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.script-editor-loading-bar {
+  position: relative;
+  width: 160px;
+  height: 3px;
+  background: rgba(143, 184, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.script-editor-loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(143, 184, 255, 0.7), transparent);
+  animation: script-editor-loading-sweep 1.1s ease-in-out infinite;
+}
+
+@keyframes script-editor-loading-sweep {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
 .script-actions {
   display: flex;
   gap: 8px;

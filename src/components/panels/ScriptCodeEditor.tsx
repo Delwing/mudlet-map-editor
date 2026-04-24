@@ -1,6 +1,16 @@
 import { useRef } from 'react';
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
+// Import the trimmed entry: core editor + contributions, NO basic-languages, NO
+// CSS/HTML/JSON language services. Register only the tokenizer for JavaScript
+// and the TypeScript language service (which powers JS diagnostics, hover, and
+// completion). This drops ~80 language contribution chunks from the build.
+import * as monaco from 'monaco-editor/esm/vs/editor/edcore.main';
+import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution';
+// Use the named exports of this contribution module directly. Monaco's public
+// types already mark `languages.typescript` as deprecated in favor of a top-
+// level `typescript` namespace, which IS this module's exports — so skip the
+// attachment dance and talk to it straight.
+import * as tsLang from 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { SCRIPT_TYPES_DTS } from '../../editor/scriptTypes';
@@ -25,10 +35,6 @@ if (!W.__mmeMonacoConfigured) {
   W.__mmeMonacoConfigured = true;
 }
 
-// Monaco 0.55 hid languages.typescript from the public .d.ts (it's flagged
-// deprecated there), but the runtime surface is unchanged. Cast through to
-// access javascriptDefaults / ScriptTarget.
-const tsLang = (monaco.languages as unknown as { typescript: any }).typescript;
 tsLang.javascriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: false,
   noSyntaxValidation: false,
@@ -135,6 +141,12 @@ export default function ScriptCodeEditor({ value, onChange, onRun, minHeight = '
         value={value}
         onChange={(v) => onChange(v ?? '')}
         onMount={handleMount}
+        loading={
+          <div className="script-editor-loading" role="status" aria-live="polite">
+            <div className="script-editor-loading-bar" />
+            <span>Loading editor…</span>
+          </div>
+        }
         options={{
           fontFamily: "'Consolas', 'Menlo', 'Monaco', monospace",
           fontSize: 12,

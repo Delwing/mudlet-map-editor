@@ -5,9 +5,19 @@ import type { SceneHandle } from '../../editor/scene';
 import { ScriptHelpModal } from './ScriptHelpModal';
 import { ScriptLibraryModal } from './ScriptLibraryModal';
 
-// Lazy-load the CodeMirror editor so its ~200 KB chunk only downloads when the
-// user actually opens the Script tab.
+// Lazy-load the Monaco editor so its chunk only downloads when the user
+// actually opens the Script tab. App.tsx also kicks the same dynamic import
+// right after mount so this usually resolves from cache.
 const ScriptCodeEditor = lazy(() => import('./ScriptCodeEditor'));
+
+function ScriptEditorLoading() {
+  return (
+    <div className="script-editor-loading" role="status" aria-live="polite">
+      <div className="script-editor-loading-bar" />
+      <span>Loading editor…</span>
+    </div>
+  );
+}
 
 const LS_KEY = 'mudlet-editor-script';
 const LS_NAME = 'mudlet-editor-script-name';
@@ -173,18 +183,7 @@ export function ScriptPanel({ sceneRef }: Props) {
         >{saveLabel}</button>
       </div>
       <div className="script-editor-container">
-        <Suspense
-          fallback={
-            <textarea
-              className="script-editor"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              spellCheck={false}
-              rows={16}
-              placeholder="// Loading editor…"
-            />
-          }
-        >
+        <Suspense fallback={<ScriptEditorLoading />}>
           <ScriptCodeEditor value={code} onChange={setCode} onRun={onRun} />
         </Suspense>
         {showLibrary && (
