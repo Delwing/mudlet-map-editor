@@ -98,7 +98,7 @@ export function SessionsPanel() {
   };
 
   if (!loaded) return <div className="empty-state">Loading…</div>;
-  if (sessions.length === 0) return <div className="empty-state">No map loaded.<br />Drag a .dat file in or load from toolbar.<img src={`${import.meta.env.BASE_URL}logo.png`} alt="logo" className="empty-state-logo" /></div>;
+  if (sessions.length === 0) return <div className="empty-state">No map loaded.<br />Drag a .dat file in or load from toolbar.<img src="logo.png" alt="logo" className="empty-state-logo" /></div>;
 
   return (
     <div className="sessions-panel-overlay">
