@@ -3,6 +3,7 @@ import { runScript, type ScriptResult } from '../../editor/script';
 import { store } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
 import { ScriptHelpModal } from './ScriptHelpModal';
+import { ScriptLibraryModal } from './ScriptLibraryModal';
 
 // Lazy-load the CodeMirror editor so its ~200 KB chunk only downloads when the
 // user actually opens the Script tab.
@@ -54,11 +55,12 @@ export function ScriptPanel({ sceneRef }: Props) {
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [running, setRunning] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [library, setLibrary] = useState<ScriptLibrary>(() => loadLibrary());
   const [currentName, setCurrentName] = useState<string | null>(() => localStorage.getItem(LS_NAME) || null);
   const [nameInput, setNameInput] = useState<string>(() => localStorage.getItem(LS_NAME) ?? '');
 
-  const libraryNames = Object.keys(library).sort((a, b) => a.localeCompare(b));
+  const libraryCount = Object.keys(library).length;
   const trimmedName = nameInput.trim();
   const nameExists = trimmedName in library;
   const saveLabel = nameExists && trimmedName !== currentName ? 'Overwrite' : 'Save';
@@ -91,16 +93,15 @@ export function ScriptPanel({ sceneRef }: Props) {
     store.setState({ status: `Script "${name}" loaded` });
   };
 
-  const onDelete = () => {
-    const name = trimmedName;
+  const onDeleteByName = (name: string) => {
     if (!name || !library[name]) return;
-    if (!window.confirm(`Delete saved script "${name}"?`)) return;
     const { [name]: _discard, ...rest } = library;
     void _discard;
     setLibrary(rest);
     persistLibrary(rest);
     if (currentName === name) {
       setCurrentName(null);
+      setNameInput('');
       localStorage.removeItem(LS_NAME);
     }
     store.setState({ status: `Script "${name}" deleted` });
@@ -136,31 +137,27 @@ export function ScriptPanel({ sceneRef }: Props) {
     <div className="panel-content script-panel">
       <div className="script-header">
         <h3>Script</h3>
-        <button
-          type="button"
-          className="script-help-btn"
-          onClick={() => setShowHelp(true)}
-          title="Show script API reference"
-        >? API</button>
+        <div className="script-header-actions">
+          <button
+            type="button"
+            className="script-help-btn"
+            onClick={() => setShowLibrary(true)}
+            title="Browse saved scripts"
+          >Library{libraryCount > 0 && <span className="tab-badge">{libraryCount}</span>}</button>
+          <button
+            type="button"
+            className="script-help-btn"
+            onClick={() => setShowHelp(true)}
+            title="Show script API reference"
+          >? API</button>
+        </div>
       </div>
       <p className="hint">Bulk-edit rooms with JavaScript. One run = one undo step.</p>
       <div className="script-library">
-        <select
-          className="script-library-select"
-          value={currentName ?? ''}
-          onChange={(e) => onLoad(e.target.value)}
-          title="Load a saved script"
-          disabled={libraryNames.length === 0}
-        >
-          <option value="">{libraryNames.length === 0 ? '— no saved scripts —' : '— load —'}</option>
-          {libraryNames.map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
         <input
           type="text"
           className="script-library-name"
-          placeholder="Name to save as…"
+          placeholder="Script name…"
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
           onKeyDown={(e) => {
@@ -174,27 +171,32 @@ export function ScriptPanel({ sceneRef }: Props) {
           disabled={!trimmedName}
           title={nameExists ? `Overwrite "${trimmedName}"` : 'Save current script to library'}
         >{saveLabel}</button>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={!nameExists}
-          title={nameExists ? `Delete "${trimmedName}"` : 'Type or load a name to delete'}
-        >Delete</button>
       </div>
-      <Suspense
-        fallback={
-          <textarea
-            className="script-editor"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            spellCheck={false}
-            rows={16}
-            placeholder="// Loading editor…"
+      <div className="script-editor-container">
+        <Suspense
+          fallback={
+            <textarea
+              className="script-editor"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              spellCheck={false}
+              rows={16}
+              placeholder="// Loading editor…"
+            />
+          }
+        >
+          <ScriptCodeEditor value={code} onChange={setCode} onRun={onRun} />
+        </Suspense>
+        {showLibrary && (
+          <ScriptLibraryModal
+            library={library}
+            currentName={currentName}
+            onLoad={onLoad}
+            onDelete={onDeleteByName}
+            onClose={() => setShowLibrary(false)}
           />
-        }
-      >
-        <ScriptCodeEditor value={code} onChange={setCode} onRun={onRun} />
-      </Suspense>
+        )}
+      </div>
       <div className="script-actions">
         <button type="button" className="script-run-btn" onClick={onRun} disabled={running}>
           {running ? 'Running…' : 'Run script'}

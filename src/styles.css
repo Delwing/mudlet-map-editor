@@ -2843,15 +2843,13 @@ html, body, #root {
 
 .script-library {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   margin: 0 0 8px;
 }
 
-.script-library-select,
 .script-library-name {
-  flex: 1 1 140px;
+  flex: 1;
   min-width: 0;
   background: rgba(10, 14, 22, 0.7);
   color: #e6e9ef;
@@ -2862,21 +2860,158 @@ html, body, #root {
   font-size: 12px;
 }
 
-.script-library-select:focus,
 .script-library-name:focus {
   outline: none;
   border-color: rgba(52, 100, 168, 0.7);
   box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.15);
 }
 
-.script-library-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .side-panel .script-library button {
   padding: 3px 10px;
   font-size: 11px;
+}
+
+.script-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Library popover — overlays just the editor area (inside the script panel,
+   not a portal). Uses document-level outside-click close in JS. */
+.script-editor-container {
+  position: relative;
+}
+
+.script-library-popover {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(12, 18, 30, 0.98);
+  border: 1px solid rgba(143, 184, 255, 0.25);
+  border-radius: 4px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.script-library-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(143, 184, 255, 0.12);
+  background: rgba(10, 15, 26, 0.6);
+}
+
+.script-library-popover-title {
+  color: #8fb8ff;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.side-panel .script-library-popover-close {
+  background: transparent;
+  border: none;
+  color: #6a7588;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.side-panel .script-library-popover-close:hover {
+  color: #e6e9ef;
+  background: rgba(143, 184, 255, 0.08);
+}
+
+.script-library-popover-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* Library popover — list of saved scripts */
+.script-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.script-library-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(143, 184, 255, 0.1);
+  border-radius: 4px;
+  background: rgba(10, 15, 26, 0.4);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.script-library-item:hover {
+  border-color: rgba(143, 184, 255, 0.22);
+  background: rgba(10, 15, 26, 0.6);
+}
+
+.script-library-item.current {
+  border-color: rgba(143, 184, 255, 0.32);
+  background: rgba(52, 100, 168, 0.12);
+}
+
+.script-library-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.script-library-item-name {
+  color: #e6e9ef;
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-library-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6a7588;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.script-library-item-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(52, 100, 168, 0.35);
+  border: 1px solid rgba(143, 184, 255, 0.25);
+  color: #cfe1ff;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.script-library-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.side-panel .script-library-item-actions button {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.side-panel .script-library-item-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .script-hint {
