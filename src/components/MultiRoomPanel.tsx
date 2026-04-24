@@ -6,6 +6,7 @@ import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
 import { EnvPicker } from './EnvPicker';
 import { LockIcon } from './icons';
+import { RoomLink } from './panelShared';
 
 interface MultiRoomPanelProps {
   selection: { kind: 'room'; ids: number[] };
@@ -107,6 +108,13 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
     <div className="panel-content">
       <h3>{ids.length} rooms selected</h3>
       <p className="hint">Drag to move all. Delete to remove all. Shift+click/drag to add more. Ctrl+click/drag to toggle. Ctrl+A selects all.</p>
+
+      <div className="multi-room-list">
+        {ids.map((id) => {
+          const room = map.rooms[id];
+          return <RoomLink key={id} id={id} name={room?.name} />;
+        })}
+      </div>
 
       <h4>Bulk Edit</h4>
 
