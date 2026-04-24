@@ -82,6 +82,18 @@ function stringifyReturn(value: unknown): string | undefined {
  * or findRooms()) after any mutation to see the updated state.
  */
 function snapshotRoom(raw: MudletRoom, id: number): Readonly<Record<string, any>> {
+  const customLines: Record<string, Readonly<Record<string, any>>> = {};
+  const linePoints = raw.customLines ?? {};
+  for (const key of Object.keys(linePoints)) {
+    const color = raw.customLinesColor?.[key] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+    customLines[key] = Object.freeze({
+      points: (linePoints[key] ?? []).map((p) => [p[0], p[1]] as [number, number]),
+      color: { ...color },
+      style: raw.customLinesStyle?.[key] ?? 1,
+      arrow: raw.customLinesArrow?.[key] ?? false,
+    });
+  }
+
   const s: Record<string, any> = {
     id,
     x: raw.x, y: raw.y, z: raw.z,
@@ -90,13 +102,14 @@ function snapshotRoom(raw: MudletRoom, id: number): Readonly<Record<string, any>
     environment: raw.environment,
     symbol: raw.symbol ?? '',
     weight: raw.weight,
-    isLocked: !!raw.isLocked,
+    isLocked: raw.isLocked,
     userData: { ...(raw.userData ?? {}) },
     doors: { ...(raw.doors ?? {}) },
     exitWeights: { ...(raw.exitWeights ?? {}) },
     specialExits: { ...(raw.mSpecialExits ?? {}) },
     stubs: [...(raw.stubs ?? [])],
     exitLocks: [...(raw.exitLocks ?? [])],
+    customLines: Object.freeze(customLines),
   };
   for (const d of CARDINAL_DIRECTIONS) s[d] = (raw as any)[d];
   return Object.freeze(s);
@@ -193,6 +206,11 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
     currentAreaId: state.currentAreaId,
     currentZ: state.currentZ,
     DIRS: [...CARDINAL_DIRECTIONS] as readonly Direction[],
+    DIR_SHORT: { ...DIR_SHORT } as Readonly<Record<Direction, string>>,
+    getSelection: (): number[] => {
+      const sel = store.getState().selection;
+      return sel && sel.kind === 'room' ? [...sel.ids] : [];
+    },
     log,
     console: { log },
 
@@ -222,8 +240,8 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
     },
     setRoomLock: (id: number, lock: boolean) => {
       const r = assertRoom(id);
-      if (!!r.isLocked === !!lock) return;
-      push({ kind: 'setRoomLock', id, lock: !!lock });
+      if (r.isLocked === lock) return;
+      push({ kind: 'setRoomLock', id, lock });
     },
     moveRoom: (id: number, x: number, y: number, z: number) => {
       const r = assertRoom(id);
@@ -258,15 +276,15 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
       const r = assertRoom(roomId);
       const idx = DIR_INDEX[dir];
       const was = r.exitLocks?.includes(idx) ?? false;
-      if (was === !!lock) return;
-      push({ kind: 'setExitLock', roomId, dir, lock: !!lock });
+      if (was === lock) return;
+      push({ kind: 'setExitLock', roomId, dir, lock });
     },
     setStub: (roomId: number, dir: Direction, stub: boolean) => {
       const r = assertRoom(roomId);
       const idx = DIR_INDEX[dir];
       const was = r.stubs?.includes(idx) ?? false;
-      if (was === !!stub) return;
-      push({ kind: 'setStub', roomId, dir, stub: !!stub });
+      if (was === stub) return;
+      push({ kind: 'setStub', roomId, dir, stub });
     },
     setUserData: (roomId: number, key: string, value: string | null) => {
       const r = assertRoom(roomId);

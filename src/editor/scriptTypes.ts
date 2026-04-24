@@ -34,6 +34,17 @@ declare interface Room {
   readonly specialExits: Readonly<Record<string, number>>;
   readonly stubs: readonly number[];
   readonly exitLocks: readonly number[];
+  /**
+   * Custom lines on this room, keyed by short cardinal direction ('n', 'ne', …)
+   * or special-exit name. Use DIR_SHORT to map a full Direction to its short key.
+   */
+  readonly customLines: Readonly<Record<string, {
+    readonly points: readonly (readonly [number, number])[];
+    readonly color: { readonly r: number; readonly g: number; readonly b: number; readonly alpha: number; readonly spec: number };
+    /** 1 = solid, 2 = dash, 3 = dot, 4 = dashDot, 5 = dashDotDot. */
+    readonly style: number;
+    readonly arrow: boolean;
+  }>>;
   /** Target room id, or -1. */
   readonly north: number;
   readonly south: number;
@@ -107,6 +118,14 @@ declare const currentAreaId: number | null;
 declare const currentZ: number;
 /** All cardinal directions. */
 declare const DIRS: readonly Direction[];
+/**
+ * Full Direction name → short key used to index room.exitWeights / room.doors /
+ * room.customLines. E.g. DIR_SHORT.north === 'n', DIR_SHORT.northeast === 'ne'.
+ * 'up' / 'down' / 'in' / 'out' map to themselves.
+ */
+declare const DIR_SHORT: Readonly<Record<Direction, string>>;
+/** Ids of rooms currently selected in the editor. Empty array if no rooms are selected. */
+declare function getSelection(): number[];
 
 // ── I/O ────────────────────────────────────────────────────────────────
 
