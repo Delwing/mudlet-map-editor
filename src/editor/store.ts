@@ -93,6 +93,7 @@ export interface EditorState {
   clipboard: RoomClipboard | null;
   sidebarTab: string;
   panelCollapsed: boolean;
+  panelExpanded: boolean;
   contextMenu: ContextMenuState;
   savedUndoLength: number;
   /** When set, the next area/z navigation pans to this map-space point instead of fitting. Consumed and cleared by App. */
@@ -166,6 +167,7 @@ const initial: EditorState = {
   clipboard: null,
   sidebarTab: 'selection',
   panelCollapsed: false,
+  panelExpanded: false,
   contextMenu: null,
   savedUndoLength: 0,
   navigateTo: null,

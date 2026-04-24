@@ -55,5 +55,13 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.8",
     "vite-plugin-node-polyfills": "^0.26.0"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.1",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.1",
+    "@lezer/highlight": "^1.2.3",
+    "codemirror": "^6.0.2"
   }
 }

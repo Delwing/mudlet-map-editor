@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { store, useEditorState } from '../editor/store';
 import type { SceneHandle } from '../editor/scene';
 import type { RoomPanelSection, SidebarTab } from '../editor/plugin';
@@ -5,6 +6,7 @@ import { AreaPanel } from './AreaManagerModal';
 import { EnvPanel } from './EnvManagerModal';
 import { HistoryPanel } from './panels/HistoryPanel';
 import { MapPanel, collectWarnings } from './panels/MapPanel';
+import { ScriptPanel } from './panels/ScriptPanel';
 import { ExitPanel } from './panels/ExitPanel';
 import { StubPanel } from './panels/StubPanel';
 import { CustomLineDrawPanel, CustomLineSelectPanel } from './panels/CustomLinePanel';
@@ -25,6 +27,7 @@ const TABS = [
   { id: 'envs',      label: 'Envs' },
   { id: 'history',   label: 'Hist' },
   { id: 'map',       label: 'Map' },
+  { id: 'script',    label: 'Script' },
 ] as const;
 
 export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }: SidePanelProps) {
@@ -34,6 +37,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   const pending = useEditorState((s) => s.pending);
   const sidebarTab = useEditorState((s) => s.sidebarTab);
   const panelCollapsed = useEditorState((s) => s.panelCollapsed);
+  const panelExpanded = useEditorState((s) => s.panelExpanded);
   const undoCount = useEditorState((s) => s.undo.length);
   useEditorState((s) => s.dataVersion); // subscribe so exit/door/weight mutations re-render
 
@@ -45,7 +49,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
     return <CustomLineDrawPanel pending={pending} sceneRef={sceneRef} />;
   }
 
-  if (panelCollapsed) {
+  if (panelCollapsed && !panelExpanded) {
     return (
       <div className="side-panel side-panel--collapsed">
         <button type="button" className="side-panel-collapse-btn" title="Expand panel" onClick={() => store.setState({ panelCollapsed: false })}>
@@ -74,129 +78,103 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
       <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>Envs{envsCount > 0 && <span className="tab-badge">{envsCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>History{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>Map{warningCount > 0 && <span className="tab-badge tab-badge--warn">{warningCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'script' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'script' })}>Script</button>
       {extraTabs.map((t) => (
         <button key={t.id} type="button" className={`side-panel-tab${sidebarTab === t.id ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: t.id })}>{t.label}</button>
       ))}
-      <button type="button" className="side-panel-tab side-panel-tab--collapse" title="Collapse panel" onClick={() => store.setState({ panelCollapsed: true })}>▶</button>
+      <button
+        type="button"
+        className="side-panel-tab side-panel-tab--expand"
+        title={panelExpanded ? 'Restore panel' : 'Expand panel'}
+        onClick={() => store.setState({ panelExpanded: !panelExpanded })}
+      >
+        {panelExpanded ? '⧉' : '⛶'}
+      </button>
+      {!panelExpanded && (
+        <button type="button" className="side-panel-tab side-panel-tab--collapse" title="Collapse panel" onClick={() => store.setState({ panelCollapsed: true })}>▶</button>
+      )}
     </div>
   );
 
+  let body: ReactNode;
+  let isEmpty = false;
+
   if (sidebarTab === 'areas') {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <AreaPanel sceneRef={sceneRef} />
-      </div>
-    );
-  }
-
-  if (sidebarTab === 'envs') {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <EnvPanel sceneRef={sceneRef} />
-      </div>
-    );
-  }
-
-  if (sidebarTab === 'history') {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <HistoryPanel sceneRef={sceneRef} />
-      </div>
-    );
-  }
-
-  if (sidebarTab === 'map') {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <MapPanel sceneRef={sceneRef} />
-      </div>
-    );
-  }
-
-  const pluginTab = extraTabs.find((t) => t.id === sidebarTab);
-  if (pluginTab) {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <div className="panel-content">{pluginTab.render(sceneRef)}</div>
-      </div>
-    );
-  }
-
-  if (selection?.kind === 'label') {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <LabelPanel selection={selection} sceneRef={sceneRef} />
-      </div>
-    );
-  }
-
-  if (selection?.kind === 'exit' && map) {
-    return (
-      <div className="side-panel">
-        {tabBar}
+    body = <AreaPanel sceneRef={sceneRef} />;
+  } else if (sidebarTab === 'envs') {
+    body = <EnvPanel sceneRef={sceneRef} />;
+  } else if (sidebarTab === 'history') {
+    body = <HistoryPanel sceneRef={sceneRef} />;
+  } else if (sidebarTab === 'map') {
+    body = <MapPanel sceneRef={sceneRef} />;
+  } else if (sidebarTab === 'script') {
+    body = <ScriptPanel sceneRef={sceneRef} />;
+  } else {
+    const pluginTab = extraTabs.find((t) => t.id === sidebarTab);
+    if (pluginTab) {
+      body = <div className="panel-content">{pluginTab.render(sceneRef)}</div>;
+    } else if (selection?.kind === 'label') {
+      body = <LabelPanel selection={selection} sceneRef={sceneRef} />;
+    } else if (selection?.kind === 'exit' && map) {
+      body = (
         <div className="panel-content">
           <ExitPanel selection={selection} map={map} sceneRef={sceneRef} />
         </div>
-      </div>
-    );
-  }
-
-  if (selection?.kind === 'stub' && map) {
-    return (
-      <div className="side-panel">
-        {tabBar}
+      );
+    } else if (selection?.kind === 'stub' && map) {
+      body = (
         <div className="panel-content">
           <StubPanel selection={selection} map={map} sceneRef={sceneRef} />
         </div>
-      </div>
-    );
-  }
-
-  if (selection?.kind === 'customLine' && map) {
-    return (
-      <div className="side-panel">
-        {tabBar}
+      );
+    } else if (selection?.kind === 'customLine' && map) {
+      body = (
         <div className="panel-content">
           <CustomLineSelectPanel selection={selection} map={map} sceneRef={sceneRef} />
         </div>
-      </div>
-    );
+      );
+    } else if (selection?.kind === 'room' && selection.ids.length > 1 && map) {
+      body = <MultiRoomPanel selection={selection} map={map} sceneRef={sceneRef} />;
+    } else {
+      const room = selection?.kind === 'room' && map ? map.rooms[selection.ids[0]] : null;
+      if (!room || !selection || selection.kind !== 'room') {
+        isEmpty = true;
+        body = (
+          <div className="panel-content">
+            <h3>No selection</h3>
+            <p className="hint">Select a room with the Select tool to edit its properties.</p>
+            <ToolHint activeTool={activeTool} />
+          </div>
+        );
+      } else {
+        body = <RoomPanel selection={selection} room={room} map={map!} pluginSections={pluginRoomSections} sceneRef={sceneRef} />;
+      }
+    }
   }
 
-  if (selection?.kind === 'room' && selection.ids.length > 1 && map) {
-    return (
-      <div className="side-panel">
-        {tabBar}
-        <MultiRoomPanel selection={selection} map={map} sceneRef={sceneRef} />
-      </div>
-    );
-  }
+  const classes = ['side-panel'];
+  if (isEmpty) classes.push('empty');
+  if (panelExpanded) classes.push('side-panel--expanded');
 
-  const room = selection?.kind === 'room' && map ? map.rooms[selection.ids[0]] : null;
-
-  if (!room || !selection || selection.kind !== 'room') {
-    return (
-      <div className="side-panel empty">
-        {tabBar}
-        <div className="panel-content">
-          <h3>No selection</h3>
-          <p className="hint">Select a room with the Select tool to edit its properties.</p>
-          <ToolHint activeTool={activeTool} />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="side-panel">
+  const panel = (
+    <div className={classes.join(' ')}>
       {tabBar}
-      <RoomPanel selection={selection} room={room} map={map!} sceneRef={sceneRef} pluginSections={pluginRoomSections} />
+      {body}
     </div>
   );
+
+  if (panelExpanded) {
+    return (
+      <div
+        className="modal-overlay side-panel-modal-overlay"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) store.setState({ panelExpanded: false });
+        }}
+      >
+        {panel}
+      </div>
+    );
+  }
+
+  return panel;
 }

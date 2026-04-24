@@ -195,8 +195,14 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   // Keyboard accelerators.
   useEffect(() => {
     const isTyping = (t: EventTarget | null) => {
-      const tag = (t as HTMLElement | null)?.tagName;
-      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      // CodeMirror and other rich editors use contenteditable divs.
+      if (el.isContentEditable) return true;
+      if (el.closest?.('.cm-editor')) return true;
+      return false;
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -284,6 +290,8 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
           }
           store.setState({ pending: null, activeTool: s.pending.kind === 'customLine' ? 'select' : s.activeTool, status: 'Cancelled.' });
           store.bumpData();
+        } else if (s.panelExpanded) {
+          store.setState({ panelExpanded: false });
         } else if (s.selection) {
           store.setState({ selection: null });
         }
