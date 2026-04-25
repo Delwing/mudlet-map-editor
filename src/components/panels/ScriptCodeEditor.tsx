@@ -11,8 +11,8 @@ import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution'
 // level `typescript` namespace, which IS this module's exports — so skip the
 // attachment dance and talk to it straight.
 import * as tsLang from 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker&inline';
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline';
 import { SCRIPT_TYPES_DTS } from '../../editor/scriptTypes';
 
 // One-time worker + bundler setup. Vite resolves the `?worker` imports to
