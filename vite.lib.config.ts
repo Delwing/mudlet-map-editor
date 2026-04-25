@@ -38,7 +38,7 @@ export default defineConfig({
     outDir: 'dist-lib',
     copyPublicDir: false,
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime', 'konva', 'mudlet-map-renderer', 'mudlet-map-binary-reader'],
+      external: ['react', 'react-dom', 'react/jsx-runtime', /^konva(\/|$)/, 'mudlet-map-renderer', 'mudlet-map-binary-reader'],
     },
   },
   optimizeDeps: {
