@@ -2711,7 +2711,7 @@ html, body, #root {
 
 .warning-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   background: rgba(220, 160, 30, 0.08);
   border: 1px solid rgba(220, 160, 30, 0.25);
@@ -2759,6 +2759,62 @@ html, body, #root {
 
 .warning-go-btn:hover {
   background: rgba(220, 160, 30, 0.28);
+}
+
+.warning-ack-btn {
+  flex-shrink: 0;
+  background: rgba(120, 130, 150, 0.12);
+  border: 1px solid rgba(120, 130, 150, 0.3);
+  border-radius: 3px;
+  color: #8a96aa;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.warning-ack-btn:hover {
+  background: rgba(120, 130, 150, 0.22);
+  color: #b0bac8;
+}
+
+.warning-ack-btn--unack {
+  background: rgba(80, 160, 120, 0.1);
+  border-color: rgba(80, 160, 120, 0.3);
+  color: #7abfa0;
+}
+
+.warning-ack-btn--unack:hover {
+  background: rgba(80, 160, 120, 0.2);
+}
+
+.warning-row--acked {
+  opacity: 0.55;
+}
+
+.warning-row--acked .warning-icon {
+  color: #5a8a6a;
+}
+
+.warnings-acked-section {
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.warnings-acked-toggle {
+  background: none;
+  border: none;
+  color: #6a7585;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.warnings-acked-toggle:hover {
+  color: #8a96aa;
+}
+
+.warnings-list--acked {
+  margin-top: 4px;
 }
 
 /* Script panel */

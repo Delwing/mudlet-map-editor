@@ -1,134 +1,16 @@
+import { useState, useEffect } from 'react';
 import { useEditorState, store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import { UserDataEditor } from '../panelShared';
 import type { SceneHandle } from '../../editor/scene';
-import type { MudletMap } from '../../mapIO';
+import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
+import { type MapWarning, warningKey } from '../../editor/warnings';
+
+export type { MapWarning };
+export { warningKey };
 
 interface MapPanelProps {
   sceneRef: { current: SceneHandle | null };
-}
-
-type MapWarning =
-  | { kind: 'zeroSizeLabel'; labelId: number; areaId: number; areaName: string; z: number; text: string; x: number; y: number }
-  | { kind: 'selfLinkRoom'; roomId: number; dirs: string[] }
-  | { kind: 'orphanRoom'; roomId: number; areaName: string }
-  | { kind: 'danglingExit'; roomId: number; dir: string; targetId: number; areaName: string }
-  | { kind: 'duplicateCoord'; roomIds: number[]; areaId: number; areaName: string; x: number; y: number; z: number };
-
-const CARDINAL_DIRS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'up', 'down', 'in', 'out'] as const;
-
-export function collectWarnings(sceneRef: { current: SceneHandle | null }, map: MudletMap): MapWarning[] {
-  const warnings: MapWarning[] = [];
-
-  // Zero-size labels
-  const reader = sceneRef.current?.reader;
-  if (reader) {
-    for (const area of reader.getAreas()) {
-      const areaId = area.getAreaId();
-      const areaName = area.getAreaName();
-      for (const plane of area.getPlanes()) {
-        for (const label of plane.getLabels()) {
-          if (label.Width <= 0 || label.Height <= 0) {
-            warnings.push({
-              kind: 'zeroSizeLabel',
-              labelId: label.labelId ?? label.id,
-              areaId,
-              areaName,
-              z: label.Z ?? 0,
-              text: label.Text ?? '',
-              x: label.X,
-              y: label.Y,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  // Single-pass scan: inbound counts, self-links, dangling exits.
-  const inbound = new Map<number, number>();
-  const coordBuckets = new Map<string, number[]>();
-  const roomIds = new Set<number>();
-  for (const idStr of Object.keys(map.rooms)) roomIds.add(Number(idStr));
-
-  const danglingWarnings: Extract<MapWarning, { kind: 'danglingExit' }>[] = [];
-
-  for (const [idStr, room] of Object.entries(map.rooms)) {
-    if (!room) continue;
-    const id = Number(idStr);
-    const areaName = map.areaNames[room.area] ?? `Area ${room.area}`;
-    const selfDirs: string[] = [];
-
-    for (const dir of CARDINAL_DIRS) {
-      const target = (room as any)[dir] as number;
-      if (target === id) selfDirs.push(dir);
-      if (target > 0) {
-        if (roomIds.has(target)) {
-          inbound.set(target, (inbound.get(target) ?? 0) + 1);
-        } else {
-          danglingWarnings.push({ kind: 'danglingExit', roomId: id, dir, targetId: target, areaName });
-        }
-      }
-    }
-    for (const [exitName, targetId] of Object.entries(room.mSpecialExits ?? {})) {
-      if (targetId === id) selfDirs.push(exitName);
-      if (targetId > 0) {
-        if (roomIds.has(targetId)) {
-          inbound.set(targetId, (inbound.get(targetId) ?? 0) + 1);
-        } else {
-          danglingWarnings.push({ kind: 'danglingExit', roomId: id, dir: exitName, targetId, areaName });
-        }
-      }
-    }
-
-    if (selfDirs.length > 0) {
-      warnings.push({ kind: 'selfLinkRoom', roomId: id, dirs: selfDirs });
-    }
-
-    const coordKey = `${room.area}|${room.x}|${room.y}|${room.z}`;
-    const bucket = coordBuckets.get(coordKey);
-    if (bucket) bucket.push(id);
-    else coordBuckets.set(coordKey, [id]);
-  }
-
-  // Orphan rooms: no outgoing exits AND no inbound references.
-  for (const [idStr, room] of Object.entries(map.rooms)) {
-    if (!room) continue;
-    const id = Number(idStr);
-    if ((inbound.get(id) ?? 0) > 0) continue;
-    let hasOutgoing = false;
-    for (const dir of CARDINAL_DIRS) {
-      if ((room as any)[dir] > 0) { hasOutgoing = true; break; }
-    }
-    if (!hasOutgoing) {
-      for (const target of Object.values(room.mSpecialExits ?? {})) {
-        if ((target as number) > 0) { hasOutgoing = true; break; }
-      }
-    }
-    if (!hasOutgoing) {
-      warnings.push({ kind: 'orphanRoom', roomId: id, areaName: map.areaNames[room.area] ?? `Area ${room.area}` });
-    }
-  }
-
-  warnings.push(...danglingWarnings);
-
-  // Duplicate coordinates within area.
-  for (const [key, ids] of coordBuckets) {
-    if (ids.length < 2) continue;
-    const [areaStr, xStr, yStr, zStr] = key.split('|');
-    const areaId = Number(areaStr);
-    warnings.push({
-      kind: 'duplicateCoord',
-      roomIds: ids,
-      areaId,
-      areaName: map.areaNames[areaId] ?? `Area ${areaId}`,
-      x: Number(xStr),
-      y: Number(yStr),
-      z: Number(zStr),
-    });
-  }
-
-  return warnings;
 }
 
 function goToLabel(w: Extract<MapWarning, { kind: 'zeroSizeLabel' }>) {
@@ -181,8 +63,17 @@ function goToRoom(roomId: number) {
 
 export function MapPanel({ sceneRef }: MapPanelProps) {
   const map = useEditorState((s) => s.map);
-  useEditorState((s) => s.structureVersion);
-  useEditorState((s) => s.dataVersion);
+  const allWarnings = useEditorState((s) => s.warnings);
+
+  const [ackedKeys, setAckedKeys] = useState<Set<string>>(new Set());
+  const [showAcked, setShowAcked] = useState(false);
+
+  // Recomputed each render; changes only when areas are added/removed.
+  const mapKey = map ? mapAckKey(map) : null;
+  useEffect(() => {
+    setAckedKeys(mapKey ? loadAcks(mapKey) : new Set());
+    setShowAcked(false);
+  }, [mapKey]);
 
   if (!map) {
     return (
@@ -197,7 +88,71 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
   const areaCount = Object.keys(map.areas).length;
   const envCount = Object.keys(map.mCustomEnvColors).length;
 
-  const warnings = collectWarnings(sceneRef, map);
+  const activeWarnings = allWarnings.filter((w) => !ackedKeys.has(warningKey(w)));
+  const ackedWarnings = allWarnings.filter((w) => ackedKeys.has(warningKey(w)));
+
+  function ackWarning(w: MapWarning) {
+    if (!mapKey) return;
+    const next = new Set(ackedKeys);
+    next.add(warningKey(w));
+    setAckedKeys(next);
+    saveAcks(mapKey, next);
+    store.bumpAckVersion();
+  }
+
+  function unackWarning(w: MapWarning) {
+    if (!mapKey) return;
+    const next = new Set(ackedKeys);
+    next.delete(warningKey(w));
+    setAckedKeys(next);
+    saveAcks(mapKey, next);
+    store.bumpAckVersion();
+  }
+
+  function renderWarningContent(w: MapWarning) {
+    if (w.kind === 'zeroSizeLabel') return (
+      <span className="warning-text">
+        <strong>Zero-size label</strong>
+        <span className="warning-detail">{w.text ? `"${w.text}"` : `#${w.labelId}`} · {w.areaName}{w.z !== 0 ? ` z=${w.z}` : ''}</span>
+      </span>
+    );
+    if (w.kind === 'selfLinkRoom') return (
+      <span className="warning-text">
+        <strong>Self-linking room</strong>
+        <span className="warning-detail">#{w.roomId} · {w.dirs.join(', ')}</span>
+      </span>
+    );
+    if (w.kind === 'orphanRoom') return (
+      <span className="warning-text">
+        <strong>Orphan room</strong>
+        <span className="warning-detail">#{w.roomId} · {w.areaName}</span>
+      </span>
+    );
+    if (w.kind === 'danglingExit') return (
+      <span className="warning-text">
+        <strong>Dangling exit</strong>
+        <span className="warning-detail">#{w.roomId} {w.dir} → missing #{w.targetId} · {w.areaName}</span>
+      </span>
+    );
+    if (w.kind === 'duplicateCoord') return (
+      <span className="warning-text">
+        <strong>Duplicate coords</strong>
+        <span className="warning-detail">{w.areaName} ({w.x}, {w.y}, {w.z}) · {w.roomIds.map((id) => `#${id}`).join(', ')}</span>
+      </span>
+    );
+    if (w.kind === 'coordMismatch') return (
+      <span className="warning-text">
+        <strong>Direction mismatch</strong>
+        <span className="warning-detail">#{w.roomId} {w.dir} → #{w.targetId} · {w.areaName}</span>
+      </span>
+    );
+  }
+
+  function goBtn(w: MapWarning) {
+    if (w.kind === 'zeroSizeLabel') return <button type="button" className="warning-go-btn" onClick={() => goToLabel(w)}>Go</button>;
+    if (w.kind === 'duplicateCoord') return <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomIds[0])}>Go</button>;
+    return <button type="button" className="warning-go-btn" onClick={() => goToRoom((w as any).roomId)}>Go</button>;
+  }
 
   return (
     <div className="panel-content">
@@ -218,73 +173,42 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
         }}
       />
 
-      {warnings.length > 0 && (
+      {allWarnings.length > 0 && (
         <>
-          <h4>Warnings <span className="tab-badge">{warnings.length}</span></h4>
-          <div className="warnings-list">
-            {warnings.map((w) => {
-              if (w.kind === 'zeroSizeLabel') {
-                return (
-                  <div key={`label-${w.areaId}-${w.labelId}`} className="warning-row">
-                    <span className="warning-icon">⚠</span>
-                    <span className="warning-text">
-                      <strong>Zero-size label</strong>
-                      <span className="warning-detail">{w.text ? `"${w.text}"` : `#${w.labelId}`} · {w.areaName}{w.z !== 0 ? ` z=${w.z}` : ''}</span>
-                    </span>
-                    <button type="button" className="warning-go-btn" onClick={() => goToLabel(w)}>Go</button>
-                  </div>
-                );
-              }
-              if (w.kind === 'selfLinkRoom') {
-                return (
-                  <div key={`selflink-${w.roomId}`} className="warning-row">
-                    <span className="warning-icon">⚠</span>
-                    <span className="warning-text">
-                      <strong>Self-linking room</strong>
-                      <span className="warning-detail">#{w.roomId} · {w.dirs.join(', ')}</span>
-                    </span>
-                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId)}>Go</button>
-                  </div>
-                );
-              }
-              if (w.kind === 'orphanRoom') {
-                return (
-                  <div key={`orphan-${w.roomId}`} className="warning-row">
-                    <span className="warning-icon">⚠</span>
-                    <span className="warning-text">
-                      <strong>Orphan room</strong>
-                      <span className="warning-detail">#{w.roomId} · {w.areaName}</span>
-                    </span>
-                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId)}>Go</button>
-                  </div>
-                );
-              }
-              if (w.kind === 'danglingExit') {
-                return (
-                  <div key={`dangling-${w.roomId}-${w.dir}`} className="warning-row">
-                    <span className="warning-icon">⚠</span>
-                    <span className="warning-text">
-                      <strong>Dangling exit</strong>
-                      <span className="warning-detail">#{w.roomId} {w.dir} → missing #{w.targetId} · {w.areaName}</span>
-                    </span>
-                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId)}>Go</button>
-                  </div>
-                );
-              }
-              if (w.kind === 'duplicateCoord') {
-                return (
-                  <div key={`dup-${w.areaId}-${w.x}-${w.y}-${w.z}`} className="warning-row">
-                    <span className="warning-icon">⚠</span>
-                    <span className="warning-text">
-                      <strong>Duplicate coords</strong>
-                      <span className="warning-detail">{w.areaName} ({w.x}, {w.y}, {w.z}) · {w.roomIds.map((id) => `#${id}`).join(', ')}</span>
-                    </span>
-                    <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomIds[0])}>Go</button>
-                  </div>
-                );
-              }
-            })}
-          </div>
+          <h4>
+            Warnings{' '}
+            {activeWarnings.length > 0 && <span className="tab-badge tab-badge--warn">{activeWarnings.length}</span>}
+          </h4>
+          {activeWarnings.length > 0 && (
+            <div className="warnings-list">
+              {activeWarnings.map((w) => (
+                <div key={warningKey(w)} className="warning-row">
+                  <span className="warning-icon">⚠</span>
+                  {renderWarningContent(w)}
+                  {goBtn(w)}
+                  <button type="button" className="warning-ack-btn" onClick={() => ackWarning(w)}>Ack</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {ackedWarnings.length > 0 && (
+            <div className="warnings-acked-section">
+              <button type="button" className="warnings-acked-toggle" onClick={() => setShowAcked((p) => !p)}>
+                {showAcked ? '▾' : '▸'} {ackedWarnings.length} acknowledged
+              </button>
+              {showAcked && (
+                <div className="warnings-list warnings-list--acked">
+                  {ackedWarnings.map((w) => (
+                    <div key={warningKey(w)} className="warning-row warning-row--acked">
+                      <span className="warning-icon">✓</span>
+                      {renderWarningContent(w)}
+                      <button type="button" className="warning-ack-btn warning-ack-btn--unack" onClick={() => unackWarning(w)}>Unack</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

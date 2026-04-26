@@ -18,6 +18,7 @@ import type { Command, ToolId } from './editor/types';
 import { saveSession } from './editor/session';
 import { loadFileIntoStore } from './editor/loadFile';
 import type { EditorPlugin, RoomPanelSection } from './editor/plugin';
+import { collectWarnings } from './editor/warnings';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px.
 // Right inset mirrors the current side-panel width (12px offset + panelWidth + 12px gap),
@@ -118,6 +119,15 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       for (const p of plugins) p.onMapClosed?.();
     }
   }, [map]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const undoCount = useEditorState((s) => s.undo.length);
+  const warningAckVersion = useEditorState((s) => s.warningAckVersion);
+  useEffect(() => {
+    if (!map) { store.setState({ warnings: [] }); return; }
+    store.setState({ warnings: collectWarnings(sceneRef, map) });
+  // sceneRef is stable — intentionally omitted
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, undoCount, warningAckVersion]);
 
   // Scene lifecycle: keyed on the raw map reference, so a file load (new MudletMap
   // identity) tears down and recreates the scene, while in-place mutations

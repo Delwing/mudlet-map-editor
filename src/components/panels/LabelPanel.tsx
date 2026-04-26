@@ -6,6 +6,8 @@ import type { MudletColor } from '../../mapIO';
 import type { Command, LabelFont, LabelSnapshot } from '../../editor/types';
 import { generateLabelPixmap } from '../../editor/labelPixmap';
 import { CheckboxField, Field, mudletColorToHex, hexToMudletColor } from '../panelShared';
+import { warningKey } from './MapPanel';
+import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
 import { FontPicker } from '../FontPicker';
 
 const COMMON_FONTS = [
@@ -32,6 +34,8 @@ const PX_PER_UNIT = 64;
 
 export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const dataVersion = useEditorState((s) => s.dataVersion);
+  const map = useEditorState((s) => s.map);
+  const warnings = useEditorState((s) => s.warnings);
   const aspectRatioLocked = useEditorState((s) => s.labelAspectRatioLocked);
   const snap = sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id);
 
@@ -284,9 +288,38 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     color: active ? '#000' : 'inherit',
   });
 
+  const acks = map ? loadAcks(mapAckKey(map)) : new Set<string>();
+  const labelWarnings = warnings.filter(
+    (w) => w.kind === 'zeroSizeLabel' && w.labelId === selection.id && w.areaId === selection.areaId && !acks.has(warningKey(w))
+  );
+
   return (
     <div className="panel-content">
       <h3>Label #{selection.id}</h3>
+      {labelWarnings.length > 0 && (
+        <div className="warnings-list">
+          {labelWarnings.map((w, i) => (
+            <div key={i} className="warning-row">
+              <span className="warning-icon">⚠</span>
+              <span className="warning-text">
+                <span className="warning-detail">zero-size label</span>
+              </span>
+              <button
+                type="button"
+                className="warning-ack-btn"
+                onClick={() => {
+                  if (!map) return;
+                  const key = mapAckKey(map);
+                  const next = new Set(loadAcks(key));
+                  next.add(warningKey(w));
+                  saveAcks(key, next);
+                  store.bumpAckVersion();
+                }}
+              >Ack</button>
+            </div>
+          ))}
+        </div>
+      )}
       <p className="hint" style={{ marginBottom: 8 }}>
         Position: ({snap.pos[0]}, {snap.pos[1]}, {snap.pos[2]}) · Drag to move
       </p>

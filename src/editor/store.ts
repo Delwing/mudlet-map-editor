@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { MudletMap, MudletRoom } from '../mapIO';
 import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
+import type { MapWarning } from './warnings';
 
 export type RoomClipboard = {
   /** Rooms captured at copy time; origId preserved for internal-exit remap. */
@@ -116,6 +117,9 @@ export interface EditorState {
   swatchPaletteOpen: boolean;
   sessionId: string | null;
   spreadShrink: SpreadShrinkState | null;
+  warningAckVersion: number;
+  /** Cached map warnings; recomputed in App after each command lands. */
+  warnings: MapWarning[];
 }
 
 export type ContextMenuState =
@@ -187,6 +191,8 @@ const initial: EditorState = {
   swatchPaletteOpen: false,
   sessionId: null,
   spreadShrink: null,
+  warningAckVersion: 0,
+  warnings: [],
 };
 
 type Listener = (state: EditorState) => void;
@@ -217,6 +223,7 @@ class Store {
       structureVersion: s.structureVersion + 1,
       dataVersion: s.dataVersion + 1,
     }));
+  bumpAckVersion = () => this.setState((s) => ({ warningAckVersion: s.warningAckVersion + 1 }));
 }
 
 export const store = new Store();

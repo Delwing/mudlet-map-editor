@@ -5,7 +5,8 @@ import type { RoomPanelSection, SidebarTab } from '../editor/plugin';
 import { AreaPanel } from './AreaManagerModal';
 import { EnvPanel } from './EnvManagerModal';
 import { HistoryPanel } from './panels/HistoryPanel';
-import { MapPanel, collectWarnings } from './panels/MapPanel';
+import { MapPanel, warningKey } from './panels/MapPanel';
+import { loadAcks, mapAckKey } from '../editor/warningAcks';
 import { ScriptPanel } from './panels/ScriptPanel';
 import { ExitPanel } from './panels/ExitPanel';
 import { StubPanel } from './panels/StubPanel';
@@ -40,11 +41,13 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   const panelExpanded = useEditorState((s) => s.panelExpanded);
   const panelWidth = useEditorState((s) => s.panelWidth);
   const undoCount = useEditorState((s) => s.undo.length);
-  useEditorState((s) => s.dataVersion); // subscribe so exit/door/weight mutations re-render
+  const warnings = useEditorState((s) => s.warnings);
 
   const envsCount = map ? Object.keys(map.mCustomEnvColors).length : 0;
   const areasCount = map ? Object.keys(map.areaNames).length : 0;
-  const warningCount = map ? collectWarnings(sceneRef, map).length : 0;
+  const warningCount = map
+    ? warnings.filter((w) => !loadAcks(mapAckKey(map)).has(warningKey(w))).length
+    : 0;
 
   if (activeTool === 'customLine' && pending?.kind === 'customLine') {
     return <CustomLineDrawPanel pending={pending} sceneRef={sceneRef} />;

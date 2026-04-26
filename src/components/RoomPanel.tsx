@@ -9,6 +9,8 @@ import type { RoomPanelSection } from '../editor/plugin';
 import { EnvPicker } from './EnvPicker';
 import { DoorIcon, LockIcon, WeightIcon, CrosshairIcon, CenterOnRoomIcon } from './icons';
 import { RoomLink, Field, UserDataEditor, hexToMudletColor } from './panelShared';
+import { warningKey } from './panels/MapPanel';
+import { loadAcks, saveAcks, mapAckKey } from '../editor/warningAcks';
 
 const EXIT_DIRS = [
   'north', 'northeast', 'east', 'southeast',
@@ -56,6 +58,7 @@ function lookupRoomHash(map: MudletMap, id: number, room: NonNullable<MudletMap[
 export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] }: RoomPanelProps) {
   const selId = selection.ids[0];
   const pending = useEditorState((s) => s.pending);
+  const warnings = useEditorState((s) => s.warnings);
 
   const [nameDraft, setNameDraft] = useState(room.name ?? '');
   const [weightDraft, setWeightDraft] = useState(String(room.weight ?? 1));
@@ -535,6 +538,51 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
           </button>
         </span>
       </h3>
+
+      {(() => {
+        const mapKey = mapAckKey(map);
+        const acks = loadAcks(mapKey);
+        const ws = warnings.filter((w) =>
+          !acks.has(warningKey(w)) && (
+            (w.kind === 'selfLinkRoom' && w.roomId === selId) ||
+            (w.kind === 'orphanRoom'   && w.roomId === selId) ||
+            (w.kind === 'danglingExit' && w.roomId === selId) ||
+            (w.kind === 'coordMismatch' && w.roomId === selId) ||
+            (w.kind === 'duplicateCoord' && w.roomIds.includes(selId))
+          )
+        );
+        if (ws.length === 0) return null;
+        return (
+          <div className="warnings-list">
+            {ws.map((w, i) => {
+              let detail = '';
+              if (w.kind === 'selfLinkRoom')   detail = `self-link: ${w.dirs.join(', ')}`;
+              if (w.kind === 'orphanRoom')      detail = 'no connections';
+              if (w.kind === 'danglingExit')    detail = `${w.dir} → missing #${w.targetId}`;
+              if (w.kind === 'coordMismatch')   detail = `${w.dir} → #${w.targetId}`;
+              if (w.kind === 'duplicateCoord')  detail = `(${w.x}, ${w.y}, ${w.z}) with ${w.roomIds.filter((id) => id !== selId).map((id) => `#${id}`).join(', ')}`;
+              return (
+                <div key={i} className="warning-row">
+                  <span className="warning-icon">⚠</span>
+                  <span className="warning-text">
+                    <span className="warning-detail">{detail}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="warning-ack-btn"
+                    onClick={() => {
+                      const next = new Set(loadAcks(mapKey));
+                      next.add(warningKey(w));
+                      saveAcks(mapKey, next);
+                      store.bumpAckVersion();
+                    }}
+                  >Ack</button>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       <Field label="Name">
         <input
