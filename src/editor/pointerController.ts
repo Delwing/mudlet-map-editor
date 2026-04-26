@@ -39,7 +39,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
   const onPointerDown = (ev: PointerEvent) => {
     if (ev.button === 1) {
       const rect = container.getBoundingClientRect();
-      ctx.renderer.backend.viewport.startDrag(ev.clientX - rect.left, ev.clientY - rect.top);
+      ctx.renderer.camera.startDrag(ev.clientX - rect.left, ev.clientY - rect.top);
       middleDragPointer = ev.pointerId;
       container.setPointerCapture(ev.pointerId);
       stopAll(ev);
@@ -62,8 +62,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
   const onPointerMove = (ev: PointerEvent) => {
     if (middleDragPointer === ev.pointerId) {
       const rect = container.getBoundingClientRect();
-      ctx.renderer.backend.viewport.updateDrag(ev.clientX - rect.left, ev.clientY - rect.top);
-      ctx.refresh();
+      ctx.renderer.camera.updateDrag(ev.clientX - rect.left, ev.clientY - rect.top);
       stopAll(ev);
       return;
     }
@@ -77,7 +76,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
 
   const onPointerUp = (ev: PointerEvent) => {
     if (middleDragPointer === ev.pointerId) {
-      ctx.renderer.backend.viewport.endDrag();
+      ctx.renderer.camera.endDrag();
       try { container.releasePointerCapture(ev.pointerId); } catch {}
       middleDragPointer = null;
       stopAll(ev);
@@ -92,7 +91,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
 
   const onPointerCancel = (ev: PointerEvent) => {
     if (middleDragPointer === ev.pointerId) {
-      ctx.renderer.backend.viewport.endDrag();
+      ctx.renderer.camera.endDrag();
       middleDragPointer = null;
       return;
     }

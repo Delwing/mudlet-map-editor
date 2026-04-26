@@ -527,7 +527,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             onClick={() => {
               const scene = sceneRef.current;
               if (!scene) return;
-              scene.renderer.backend.viewport.panToMapPoint(room.x, -room.y);
+              scene.renderer.camera.panToMapPoint(room.x, -room.y);
               scene.refresh();
             }}
           >

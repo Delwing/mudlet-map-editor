@@ -86,12 +86,9 @@ export function allHitsAt(
 
   // Rooms: find the primary hit via the renderer spatial index, then collect
   // every room in the area/z that shares the same raw grid cell.
-  const primaryHit = (renderer.backend as any).culling?.findRoomAtMapPoint?.(mapX, mapY) as
-    | { id: number }
-    | null
-    | undefined;
-  if (primaryHit) {
-    const primary = map.rooms[primaryHit.id];
+  const primaryHit = renderer.hitTester.pick(mapX, mapY);
+  if (primaryHit?.kind === 'room') {
+    const primary = map.rooms[primaryHit.id as number];
     if (primary && primary.area === areaId && primary.z === z) {
       for (const [idStr, room] of Object.entries(map.rooms)) {
         if (room && room.area === areaId && room.z === z && room.x === primary.x && room.y === primary.y) {

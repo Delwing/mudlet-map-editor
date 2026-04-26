@@ -11,7 +11,7 @@ export function clientToMap(
   clientY: number,
 ): { x: number; y: number } {
   const rect = container.getBoundingClientRect();
-  const pt = renderer.backend.viewport.clientToMapPoint(clientX, clientY, { left: rect.left, top: rect.top });
+  const pt = renderer.camera.clientToMapPoint(clientX, clientY, { left: rect.left, top: rect.top });
   if (pt) return pt;
   // Fallback if scale is zero (before first layout).
   const v = renderer.getViewportBounds();

@@ -67,21 +67,22 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       if (!area) return false;
       return area.getRooms().every(r => r.z !== s.currentZ);
     },
-    () => renderer.backend.viewport.getViewportBounds(),
+    () => renderer.getViewportBounds(),
   );
 
-  renderer.addLiveEffect('editor.marquee', marquee);
-  renderer.addLiveEffect('editor.selection', selectionHalo);
-  renderer.addLiveEffect('editor.hover', hoverHalo);
-  renderer.addLiveEffect('editor.rubberband', rubberBand);
-  renderer.addLiveEffect('editor.snap', snapIndicator);
-  renderer.addLiveEffect('editor.connectHandles', connectHandles);
-  renderer.addLiveEffect('editor.customLinePreview', customLinePreview);
-  renderer.addLiveEffect('editor.selectedLink', selectedLink);
-  renderer.addLiveEffect('editor.labelHalo', labelHalo);
-  renderer.addLiveEffect('editor.selectionCenter', selectionCenter);
-  renderer.addLiveEffect('editor.ghostRooms', ghostRooms);
-  renderer.addLiveEffect('editor.gridOverlay', gridOverlay);
+  const konva = renderer.konvaBackend!;
+  konva.addLiveEffect('editor.marquee', marquee);
+  konva.addLiveEffect('editor.selection', selectionHalo);
+  konva.addLiveEffect('editor.hover', hoverHalo);
+  konva.addLiveEffect('editor.rubberband', rubberBand);
+  konva.addLiveEffect('editor.snap', snapIndicator);
+  konva.addLiveEffect('editor.connectHandles', connectHandles);
+  konva.addLiveEffect('editor.customLinePreview', customLinePreview);
+  konva.addLiveEffect('editor.selectedLink', selectedLink);
+  konva.addLiveEffect('editor.labelHalo', labelHalo);
+  konva.addLiveEffect('editor.selectionCenter', selectionCenter);
+  konva.addLiveEffect('editor.ghostRooms', ghostRooms);
+  konva.addLiveEffect('editor.gridOverlay', gridOverlay);
 
   const handle: SceneHandle = {
     renderer,
@@ -93,7 +94,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       const area = reader.getArea(areaId);
       const isEmpty = !area || area.getRooms().every(r => r.z !== z);
       if (isEmpty) {
-        renderer.backend.viewport.panToMapPoint(0, 0);
+        renderer.camera.panToMapPoint(0, 0);
       } else {
         renderer.fitArea(insets);
       }
@@ -103,37 +104,37 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
     },
     setAreaAt(areaId, z, mapX, mapY) {
       renderer.drawArea(areaId, z);
-      renderer.backend.viewport.panToMapPoint(mapX, mapY);
+      renderer.camera.panToMapPoint(mapX, mapY);
       gridOverlay.syncVisibility();
     },
     refresh() { renderer.refresh(); selectionHalo.syncPositions(); labelHalo.syncPositions(); selectionCenter.syncPositions(); ghostRooms.syncPositions(); },
     destroy() {
       delete container.dataset.editorCursor;
       detach();
-      renderer.removeLiveEffect('editor.selection');
-      renderer.removeLiveEffect('editor.hover');
-      renderer.removeLiveEffect('editor.rubberband');
-      renderer.removeLiveEffect('editor.snap');
-      renderer.removeLiveEffect('editor.connectHandles');
+      konva.removeLiveEffect('editor.selection');
+      konva.removeLiveEffect('editor.hover');
+      konva.removeLiveEffect('editor.rubberband');
+      konva.removeLiveEffect('editor.snap');
+      konva.removeLiveEffect('editor.connectHandles');
       marquee.destroy();
-      renderer.removeLiveEffect('editor.marquee');
+      konva.removeLiveEffect('editor.marquee');
       selectionHalo.destroy();
       hoverHalo.destroy();
       rubberBand.destroy();
       snapIndicator.destroy();
       connectHandles.destroy();
       customLinePreview.destroy();
-      renderer.removeLiveEffect('editor.customLinePreview');
+      konva.removeLiveEffect('editor.customLinePreview');
       selectedLink.destroy();
-      renderer.removeLiveEffect('editor.selectedLink');
+      konva.removeLiveEffect('editor.selectedLink');
       labelHalo.destroy();
-      renderer.removeLiveEffect('editor.labelHalo');
+      konva.removeLiveEffect('editor.labelHalo');
       selectionCenter.destroy();
-      renderer.removeLiveEffect('editor.selectionCenter');
+      konva.removeLiveEffect('editor.selectionCenter');
       ghostRooms.destroy();
-      renderer.removeLiveEffect('editor.ghostRooms');
+      konva.removeLiveEffect('editor.ghostRooms');
       gridOverlay.destroy();
-      renderer.removeLiveEffect('editor.gridOverlay');
+      konva.removeLiveEffect('editor.gridOverlay');
       renderer.destroy();
     },
   };
@@ -144,7 +145,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
     renderer,
     container,
     settings,
-    refresh: () => renderer.refresh(),
+    refresh: () => handle.refresh(),
     scene: handle,
   });
 

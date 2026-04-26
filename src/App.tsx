@@ -155,7 +155,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   useEffect(() => {
     if (!panRequest || !sceneRef.current) return;
     store.setState({ panRequest: null });
-    sceneRef.current.renderer.backend.viewport.panToMapPoint(panRequest.mapX, panRequest.mapY);
+    sceneRef.current.renderer.camera.panToMapPoint(panRequest.mapX, panRequest.mapY);
     sceneRef.current.refresh();
   }, [panRequest]);
 

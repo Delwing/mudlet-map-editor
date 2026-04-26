@@ -62,17 +62,14 @@ function activeContext() {
 function roomUnder(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
   if (!activeContext()) return null;
   const rect = ctx.container.getBoundingClientRect();
-  const pt = ctx.renderer.backend.viewport.clientToMapPoint(ev.clientX, ev.clientY, {
+  const pt = ctx.renderer.camera.clientToMapPoint(ev.clientX, ev.clientY, {
     left: rect.left,
     top: rect.top,
   });
   if (!pt) return null;
-  const hit = (ctx.renderer.backend as any).culling?.findRoomAtMapPoint?.(pt.x, pt.y) as
-    | { id: number }
-    | null
-    | undefined;
-  if (!hit) return null;
-  return ctx.scene.getRenderRoom(hit.id) ?? null;
+  const hit = ctx.renderer.hitTester.pick(pt.x, pt.y);
+  if (!hit || hit.kind !== 'room') return null;
+  return ctx.scene.getRenderRoom(hit.id as number) ?? null;
 }
 
 /** Minimum render-space travel before an empty-space drag becomes a marquee (not a click). */
@@ -189,8 +186,8 @@ export const selectTool: Tool = {
         if (rawLabel) {
           const bounds = { x: rawLabel.pos[0], y: -rawLabel.pos[1], w: rawLabel.size[0], h: rawLabel.size[1] };
           const rect = ctx.container.getBoundingClientRect();
-          const pt0 = ctx.renderer.backend.viewport.clientToMapPoint(0, 0, { left: rect.left, top: rect.top });
-          const pt1 = ctx.renderer.backend.viewport.clientToMapPoint(8, 0, { left: rect.left, top: rect.top });
+          const pt0 = ctx.renderer.camera.clientToMapPoint(0, 0, { left: rect.left, top: rect.top });
+          const pt1 = ctx.renderer.camera.clientToMapPoint(8, 0, { left: rect.left, top: rect.top });
           const hitRadius = (pt0 && pt1) ? Math.abs(pt1.x - pt0.x) : 0.25;
           const handle = labelResizeHandleAt(bounds, c.x, c.y, hitRadius);
           if (handle) {
@@ -358,7 +355,7 @@ export const selectTool: Tool = {
       const maxX = Math.max(p.startX, c.x);
       const minY = Math.min(p.startY, c.y);
       const maxY = Math.max(p.startY, c.y);
-      const hit = roomsInRect(minX, maxX, minY, maxY);
+      const hit = roomsInRect(minX, maxX, minY, maxY, ctx);
       let newIds: number[];
       if (p.ctrlHeld) {
         const pre = new Set(p.preExistingIds);
@@ -726,16 +723,14 @@ export const selectTool: Tool = {
 };
 
 /** Return IDs of rooms in the current area/z whose render-space centre falls within the given render-space rect. */
-function roomsInRect(minX: number, maxX: number, minY: number, maxY: number): number[] {
+function roomsInRect(minX: number, maxX: number, minY: number, maxY: number, ctx: ToolContext): number[] {
   const s = store.getState();
-  if (!s.map || s.currentAreaId == null) return [];
+  if (s.currentAreaId == null) return [];
+  const rooms = ctx.scene.reader.getArea(s.currentAreaId)?.getPlane(s.currentZ)?.getRooms() ?? [];
   const ids: number[] = [];
-  for (const [key, room] of Object.entries(s.map.rooms)) {
-    if (!room || room.area !== s.currentAreaId || room.z !== s.currentZ) continue;
-    // Raw storage: x same, y negated relative to render space.
-    const rx = room.x;
-    const ry = -room.y;
-    if (rx >= minX && rx <= maxX && ry >= minY && ry <= maxY) ids.push(Number(key));
+  for (const room of rooms) {
+    // LiveRoom.x/.y are already render-space (y flipped).
+    if (room.x >= minX && room.x <= maxX && room.y >= minY && room.y <= maxY) ids.push(room.id);
   }
   return ids;
 }
@@ -1185,7 +1180,7 @@ export const panTool: Tool = {
   cursor: 'grab',
   onPointerDown(ev, ctx) {
     if (ev.button !== 0 || ev.pointerType !== 'mouse') return false;
-    ctx.renderer.backend.viewport.startDrag(ev.clientX, ev.clientY);
+    ctx.renderer.camera.startDrag(ev.clientX, ev.clientY);
     panDragging = true;
     return true;
   },
@@ -1194,22 +1189,21 @@ export const panTool: Tool = {
     if (!panDragging) {
       // Space was held mid-drag from another tool — lazy-start if a button is held.
       if (ev.buttons === 0) return;
-      ctx.renderer.backend.viewport.startDrag(ev.clientX, ev.clientY);
+      ctx.renderer.camera.startDrag(ev.clientX, ev.clientY);
       panDragging = true;
     }
-    ctx.renderer.backend.viewport.updateDrag(ev.clientX, ev.clientY);
-    ctx.refresh();
+    ctx.renderer.camera.updateDrag(ev.clientX, ev.clientY);
     return true;
   },
   onPointerUp(_ev, ctx) {
     if (!panDragging) return false;
-    ctx.renderer.backend.viewport.endDrag();
+    ctx.renderer.camera.endDrag();
     panDragging = false;
     return true;
   },
   onCancel(ctx) {
     if (panDragging) {
-      ctx.renderer.backend.viewport.endDrag();
+      ctx.renderer.camera.endDrag();
       panDragging = false;
     }
   },
