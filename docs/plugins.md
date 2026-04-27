@@ -221,6 +221,9 @@ The `sceneRef` argument gives access to the `EditorMapReader` (via `sceneRef.cur
 
 ```typescript
 import type { EditorPlugin, PluginCheckResult } from '../../editor/plugin';
+import type { MudletMap } from '../../mapIO';
+// or from the package root when using library mode:
+// import type { EditorPlugin, PluginCheckResult, MudletMap } from 'mudlet-map-editor';
 
 export default {
   id: 'my-checks',

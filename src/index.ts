@@ -1,6 +1,7 @@
 import './styles.css';
 export { default as App } from './App';
 export type { EditorPlugin, SidebarTab, RoomPanelSection, RoomSectionProps, PluginCheckResult } from './editor/plugin';
+export type { MudletMap, MudletRoom, MudletColor } from './mapIO';
 export type { SwatchSet, Swatch } from './editor/types';
 export { loadUrlIntoStore } from './editor/loadFile';
 export { getMapBytes } from './editor/mapBytes';
