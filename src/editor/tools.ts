@@ -1296,7 +1296,7 @@ export function restorePendingCustomLine(
   scene.refresh();
 }
 
-export function finishCustomLine(pending: import('./types').PendingCustomLine, ctx?: ToolContext): void {
+export function finishCustomLine(pending: import('./types').PendingCustomLine, _ctx?: ToolContext): void {
   if (!store.getState().map) return;
 
 
