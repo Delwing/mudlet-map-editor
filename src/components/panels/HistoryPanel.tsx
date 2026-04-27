@@ -1,64 +1,93 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../../editor/store';
 import { undoOnce, redoOnce } from '../../editor/commands';
 import type { Command } from '../../editor/types';
 import type { SceneHandle } from '../../editor/scene';
 
+type CmdT = (key: string, opts?: Record<string, unknown>) => string;
+
 const COLLAPSED_SUBS = 5;
 
-export function commandLabel(cmd: Command): string {
+export function commandLabel(cmd: Command, t: CmdT): string {
   switch (cmd.kind) {
-    case 'moveRoom': return `Move room #${cmd.id}`;
-    case 'addRoom': return `Add room #${cmd.id}`;
-    case 'deleteRoom': return `Delete room #${cmd.id}`;
-    case 'addExit': return `Add exit #${cmd.fromId} ${cmd.dir} ${cmd.reverse ? '↔' : '→'} #${cmd.toId}`;
-    case 'removeExit': return `Remove exit #${cmd.fromId} ${cmd.dir}`;
-    case 'removeAllExits': return `Remove all exits from #${cmd.roomId}`;
-    case 'setRoomField': return `Set ${cmd.field} on #${cmd.id}`;
-    case 'setRoomHash': return cmd.to === null ? `Clear hash on #${cmd.id}` : `Set hash on #${cmd.id}`;
-    case 'addArea': return `Add area "${cmd.name}"`;
-    case 'deleteArea': return `Delete area "${cmd.name}"`;
-    case 'deleteAreaWithRooms': return `Delete area "${cmd.areaName}" + rooms`;
-    case 'renameArea': return `Rename area → "${cmd.to}"`;
-    case 'setCustomEnvColor': return `Set env #${cmd.envId} color`;
-    case 'addSpecialExit': return `Add special exit "${cmd.name}" on #${cmd.roomId}`;
-    case 'removeSpecialExit': return `Remove special exit "${cmd.name}" on #${cmd.roomId}`;
-    case 'setCustomLine': return `Set custom line "${cmd.exitName}" on #${cmd.roomId}`;
-    case 'removeCustomLine': return `Remove custom line "${cmd.exitName}"`;
-    case 'moveRoomsToArea': return `Move ${cmd.roomIds.length} room${cmd.roomIds.length === 1 ? '' : 's'} to area`;
-    case 'setRoomLock': return `${cmd.lock ? 'Lock' : 'Unlock'} room #${cmd.id}`;
-    case 'setDoor': return `Set door on #${cmd.roomId} ${cmd.dir}`;
-    case 'setExitWeight': return `Set exit weight on #${cmd.roomId} ${cmd.dir}`;
-    case 'setExitLock': return `${cmd.lock ? 'Lock' : 'Unlock'} exit on #${cmd.roomId} ${cmd.dir}`;
-    case 'setStub': return `${cmd.stub ? 'Add' : 'Remove'} stub on #${cmd.roomId} ${cmd.dir}`;
-    case 'setUserDataEntry': return cmd.from === null ? `Add user data "${cmd.key}" on #${cmd.roomId}` : cmd.to === null ? `Remove user data "${cmd.key}" on #${cmd.roomId}` : `Edit user data "${cmd.key}" on #${cmd.roomId}`;
-    case 'setAreaUserDataEntry': return cmd.from === null ? `Add area user data "${cmd.key}" on area #${cmd.areaId}` : cmd.to === null ? `Remove area user data "${cmd.key}" on area #${cmd.areaId}` : `Edit area user data "${cmd.key}" on area #${cmd.areaId}`;
-    case 'setMapUserDataEntry': return cmd.from === null ? `Add map user data "${cmd.key}"` : cmd.to === null ? `Remove map user data "${cmd.key}"` : `Edit map user data "${cmd.key}"`;
-
-    case 'setSpecialExitDoor': return `Set door on special exit "${cmd.name}"`;
-    case 'setSpecialExitWeight': return `Set weight on special exit "${cmd.name}"`;
-    case 'addLabel': return `Add label #${cmd.label.id}`;
-    case 'deleteLabel': return `Delete label #${cmd.label.id}`;
-    case 'moveLabel': return `Move label #${cmd.id}`;
-    case 'setLabelText': return `Set label #${cmd.id} text`;
-    case 'setLabelSize': return `Resize label #${cmd.id}`;
-    case 'setLabelColors': return `Set label #${cmd.id} colors`;
-    case 'setLabelFont': return `Set font on label #${cmd.id}`;
-    case 'setLabelOutlineColor': return `Set outline color on label #${cmd.id}`;
-    case 'setLabelPixmap': return `Update pixmap on label #${cmd.id}`;
-    case 'setLabelImageSrc': return `Set image source on label #${cmd.id}`;
-    case 'setLabelNoScaling': return `${cmd.to ? 'Disable' : 'Enable'} zoom scaling on label #${cmd.id}`;
-    case 'setLabelShowOnTop': return `Set label #${cmd.id} ${cmd.to ? 'foreground' : 'background'}`;
-    case 'resizeLabel': return `Resize label #${cmd.id}`;
-    case 'batch': return commandLabel(cmd.cmds[0]);
+    case 'moveRoom': return t('history.cmd.moveRoom', { id: cmd.id });
+    case 'addRoom': return t('history.cmd.addRoom', { id: cmd.id });
+    case 'deleteRoom': return t('history.cmd.deleteRoom', { id: cmd.id });
+    case 'addExit': return cmd.reverse
+      ? t('history.cmd.addExitBidi', { from: cmd.fromId, dir: cmd.dir, to: cmd.toId })
+      : t('history.cmd.addExitUni', { from: cmd.fromId, dir: cmd.dir, to: cmd.toId });
+    case 'removeExit': return t('history.cmd.removeExit', { from: cmd.fromId, dir: cmd.dir });
+    case 'removeAllExits': return t('history.cmd.removeAllExits', { id: cmd.roomId });
+    case 'setRoomField': return t('history.cmd.setField', { field: cmd.field, id: cmd.id });
+    case 'setRoomHash': return cmd.to === null
+      ? t('history.cmd.clearHash', { id: cmd.id })
+      : t('history.cmd.setHash', { id: cmd.id });
+    case 'addArea': return t('history.cmd.addArea', { name: cmd.name });
+    case 'deleteArea': return t('history.cmd.deleteArea', { name: cmd.name });
+    case 'deleteAreaWithRooms': return t('history.cmd.deleteAreaWithRooms', { name: cmd.areaName });
+    case 'renameArea': return t('history.cmd.renameArea', { name: cmd.to });
+    case 'setCustomEnvColor': return t('history.cmd.setEnvColor', { id: cmd.envId });
+    case 'addSpecialExit': return t('history.cmd.addSpecialExit', { name: cmd.name, id: cmd.roomId });
+    case 'removeSpecialExit': return t('history.cmd.removeSpecialExit', { name: cmd.name, id: cmd.roomId });
+    case 'setCustomLine': return t('history.cmd.setCustomLine', { name: cmd.exitName, id: cmd.roomId });
+    case 'removeCustomLine': return t('history.cmd.removeCustomLine', { name: cmd.exitName });
+    case 'moveRoomsToArea': return t('history.cmd.moveRoomsToArea', { count: cmd.roomIds.length });
+    case 'setRoomLock': return cmd.lock
+      ? t('history.cmd.lockRoom', { id: cmd.id })
+      : t('history.cmd.unlockRoom', { id: cmd.id });
+    case 'setDoor': return t('history.cmd.setDoor', { id: cmd.roomId, dir: cmd.dir });
+    case 'setExitWeight': return t('history.cmd.setExitWeight', { id: cmd.roomId, dir: cmd.dir });
+    case 'setExitLock': return cmd.lock
+      ? t('history.cmd.lockExit', { id: cmd.roomId, dir: cmd.dir })
+      : t('history.cmd.unlockExit', { id: cmd.roomId, dir: cmd.dir });
+    case 'setStub': return cmd.stub
+      ? t('history.cmd.addStub', { id: cmd.roomId, dir: cmd.dir })
+      : t('history.cmd.removeStub', { id: cmd.roomId, dir: cmd.dir });
+    case 'setUserDataEntry': return cmd.from === null
+      ? t('history.cmd.addUserData', { key: cmd.key, id: cmd.roomId })
+      : cmd.to === null
+        ? t('history.cmd.removeUserData', { key: cmd.key, id: cmd.roomId })
+        : t('history.cmd.editUserData', { key: cmd.key, id: cmd.roomId });
+    case 'setAreaUserDataEntry': return cmd.from === null
+      ? t('history.cmd.addAreaUserData', { key: cmd.key, id: cmd.areaId })
+      : cmd.to === null
+        ? t('history.cmd.removeAreaUserData', { key: cmd.key, id: cmd.areaId })
+        : t('history.cmd.editAreaUserData', { key: cmd.key, id: cmd.areaId });
+    case 'setMapUserDataEntry': return cmd.from === null
+      ? t('history.cmd.addMapUserData', { key: cmd.key })
+      : cmd.to === null
+        ? t('history.cmd.removeMapUserData', { key: cmd.key })
+        : t('history.cmd.editMapUserData', { key: cmd.key });
+    case 'setSpecialExitDoor': return t('history.cmd.setSpecialDoor', { name: cmd.name });
+    case 'setSpecialExitWeight': return t('history.cmd.setSpecialWeight', { name: cmd.name });
+    case 'addLabel': return t('history.cmd.addLabel', { id: cmd.label.id });
+    case 'deleteLabel': return t('history.cmd.deleteLabel', { id: cmd.label.id });
+    case 'moveLabel': return t('history.cmd.moveLabel', { id: cmd.id });
+    case 'setLabelText': return t('history.cmd.setLabelText', { id: cmd.id });
+    case 'setLabelSize': return t('history.cmd.setLabelSize', { id: cmd.id });
+    case 'setLabelColors': return t('history.cmd.setLabelColors', { id: cmd.id });
+    case 'setLabelFont': return t('history.cmd.setLabelFont', { id: cmd.id });
+    case 'setLabelOutlineColor': return t('history.cmd.setLabelOutlineColor', { id: cmd.id });
+    case 'setLabelPixmap': return t('history.cmd.setLabelPixmap', { id: cmd.id });
+    case 'setLabelImageSrc': return t('history.cmd.setLabelImageSrc', { id: cmd.id });
+    case 'setLabelNoScaling': return cmd.to
+      ? t('history.cmd.disableZoomScaling', { id: cmd.id })
+      : t('history.cmd.enableZoomScaling', { id: cmd.id });
+    case 'setLabelShowOnTop': return cmd.to
+      ? t('history.cmd.setLabelForeground', { id: cmd.id })
+      : t('history.cmd.setLabelBackground', { id: cmd.id });
+    case 'resizeLabel': return t('history.cmd.resizeLabel', { id: cmd.id });
+    case 'batch': return commandLabel(cmd.cmds[0], t);
   }
 }
 
-function HistoryEntry({ cmd, className, onClick, title }: {
+function HistoryEntry({ cmd, className, onClick, title, t }: {
   cmd: Command;
   className: string;
   onClick: () => void;
   title: string;
+  t: CmdT;
 }) {
   const [expanded, setExpanded] = useState(false);
   const subs = cmd.kind === 'batch' ? cmd.cmds.slice(1) : [];
@@ -75,18 +104,18 @@ function HistoryEntry({ cmd, className, onClick, title }: {
       role="button"
       tabIndex={0}
     >
-      <span className="history-label">{commandLabel(cmd)}</span>
+      <span className="history-label">{commandLabel(cmd, t)}</span>
       {visibleSubs.map((sub, i) => (
-        <span key={i} className="history-sub">{commandLabel(sub)}</span>
+        <span key={i} className="history-sub">{commandLabel(sub, t)}</span>
       ))}
       {showToggle && (
         <button
           type="button"
           className="history-expand"
           onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-          title={expanded ? 'Collapse' : `Show ${hiddenCount} more`}
+          title={expanded ? t('history.collapse') : t('history.showMore', { count: hiddenCount })}
         >
-          {expanded ? '− collapse' : `+ ${hiddenCount} more`}
+          {expanded ? `− ${t('history.collapse')}` : t('history.showMore', { count: hiddenCount })}
         </button>
       )}
     </div>
@@ -94,6 +123,7 @@ function HistoryEntry({ cmd, className, onClick, title }: {
 }
 
 export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | null } }) {
+  const { t } = useTranslation('panels');
   const undo = useEditorState((s) => s.undo);
   const redo = useEditorState((s) => s.redo);
 
@@ -113,7 +143,7 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
     scene?.refresh();
     if (structural) store.bumpStructure();
     else store.bumpData();
-    store.setState({ status: undoSteps > 0 ? `Undone ${undoSteps}×` : `Redone ${redoSteps}×` });
+    store.setState({ status: undoSteps > 0 ? t('history.undoneCount', { count: undoSteps }) : t('history.redoneCoutn', { count: redoSteps }) });
   };
 
   const undoReversed = [...undo].reverse();
@@ -127,12 +157,13 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
             cmd={cmd}
             className="history-item history-undone"
             onClick={() => jumpTo(0, redo.length - i)}
-            title={`Redo ${redo.length - i} step${redo.length - i === 1 ? '' : 's'}`}
+            title={redo.length - i === 1 ? t('history.redoStep', { count: redo.length - i }) : t('history.redoSteps', { count: redo.length - i })}
+            t={t}
           />
         ))}
         <div className="history-item history-current">
           <span className="history-marker">▶</span>
-          <span className="history-label">Current state</span>
+          <span className="history-label">{t('history.currentState')}</span>
         </div>
         {undoReversed.map((cmd, i) => (
           <HistoryEntry
@@ -140,11 +171,12 @@ export function HistoryPanel({ sceneRef }: { sceneRef: { current: SceneHandle | 
             cmd={cmd}
             className="history-item history-done"
             onClick={() => jumpTo(i + 1, 0)}
-            title={`Undo ${i + 1} step${i === 0 ? '' : 's'}`}
+            title={i === 0 ? t('history.undoStep', { count: i + 1 }) : t('history.undoSteps', { count: i + 1 })}
+            t={t}
           />
         ))}
         {undo.length === 0 && redo.length === 0 && (
-          <p className="hint" style={{ marginTop: 8 }}>No history yet.</p>
+          <p className="hint" style={{ marginTop: 8 }}>{t('history.noHistory')}</p>
         )}
       </div>
     </div>

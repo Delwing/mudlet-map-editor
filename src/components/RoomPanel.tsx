@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { registerSpecialExitPickCb } from '../editor/tools';
 import { pushCommand, pushBatch } from '../editor/commands';
@@ -35,9 +36,6 @@ const DIR_ABBREV: Record<string, string> = {
   up: 'Up', down: 'Dn', in: 'In', out: 'Out',
 };
 
-const DOOR_TITLES = ['No door (click to set)', 'Open door', 'Closed door', 'Locked door'];
-const DOOR_CLASSES = ['', 'door-open', 'door-closed', 'door-locked'];
-
 interface RoomPanelProps {
   selection: { kind: 'room'; ids: number[] };
   room: NonNullable<MudletMap['rooms'][number]>;
@@ -56,6 +54,7 @@ function lookupRoomHash(map: MudletMap, id: number, room: NonNullable<MudletMap[
 }
 
 export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] }: RoomPanelProps) {
+  const { t } = useTranslation('panels');
   const selId = selection.ids[0];
   const pending = useEditorState((s) => s.pending);
   const warnings = useEditorState((s) => s.warnings);
@@ -75,8 +74,6 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   const [clArrow, setClArrow] = useState(false);
   const [clBothWays, setClBothWays] = useState(false);
 
-  // Register a direct callback so pickSpecialExit can fill the target field
-  // synchronously without going through the React effect cycle.
   const setSpecialExitTargetRef = useRef(setSpecialExitTarget);
   setSpecialExitTargetRef.current = setSpecialExitTarget;
   useEffect(() => {
@@ -151,7 +148,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'setRoomField', id: selId, field, from: current, to: next }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Updated ${field} on room ${selId}` });
+    store.setState({ status: t('room.updatedField', { field, id: selId }) });
   };
 
   const commitHash = (raw: string) => {
@@ -161,7 +158,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'setRoomHash', id: selId, from: current || null, to: next || null }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: next ? `Room ${selId} hash → ${next}` : `Room ${selId} hash cleared` });
+    store.setState({ status: next ? t('room.hashSet', { id: selId, hash: next }) : t('room.hashCleared', { id: selId }) });
   };
 
   const handleEnvSelect = (envId: number) => {
@@ -169,7 +166,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'setRoomField', id: selId, field: 'environment', from: room.environment, to: envId }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Room ${selId} environment → ${envId}` });
+    store.setState({ status: t('room.envChanged', { id: selId, env: envId }) });
   };
 
   const commitSymbolColor = (hex: string | null) => {
@@ -188,7 +185,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'addExit', fromId: selId, dir, toId, previous, reverse: null }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Exit ${dir} → room ${toId} added.` });
+    store.setState({ status: t('room.exitAdded', { dir, id: toId }) });
   };
 
   const changeDoor = (dir: Direction, from: number, to: number) => {
@@ -242,7 +239,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'addSpecialExit', roomId: selId, name, toId }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Special exit '${name}' → ${toId} added` });
+    store.setState({ status: t('room.specialExitAdded', { name, id: toId }) });
     setSpecialExitName('');
     setSpecialExitTarget('');
   };
@@ -251,7 +248,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'removeSpecialExit', roomId: selId, name, toId }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Special exit '${name}' removed` });
+    store.setState({ status: t('room.specialExitRemoved', { name }) });
   };
 
   const changeSpecialDoor = (name: string, from: number, to: number) => {
@@ -283,12 +280,12 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Custom line '${exitName}' removed` });
+    store.setState({ status: t('room.customLineRemoved', { name: exitName }) });
   };
 
   const startDrawingCustomLine = (rawExitName: string) => {
     const name = rawExitName.trim();
-    if (!name) { store.setState({ status: 'Enter exit name first.' }); return; }
+    if (!name) { store.setState({ status: t('room.enterExitNameFirst') }); return; }
     const scene = sceneRef.current;
     const renderRoom = scene?.reader.getRoom(selId);
     if (!scene || !renderRoom) return;
@@ -343,7 +340,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         previousSnapshot,
         companion,
       },
-      status: 'Click canvas to add waypoints · double-click or Enter to finish · Esc cancels',
+      status: t('customLine.startStatus'),
     });
     store.bumpData();
     setLineFormFor(null);
@@ -351,7 +348,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
   const drawEmptyCustomLine = (rawExitName: string) => {
     const name = rawExitName.trim();
-    if (!name) { store.setState({ status: 'Enter exit name first.' }); return; }
+    if (!name) { store.setState({ status: t('room.enterExitNameFirst') }); return; }
     const scene = sceneRef.current;
     if (!scene) return;
     const key = normalizeCustomLineKey(name);
@@ -422,35 +419,43 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     setLineFormFor(rawName);
   };
 
+  const DOOR_TITLES = [
+    t('room.doorNone'),
+    t('room.doorOpen'),
+    t('room.doorClosed'),
+    t('room.doorLocked'),
+  ];
+  const DOOR_CLASSES = ['', 'door-open', 'door-closed', 'door-locked'];
+
   const renderLineForm = (exitName: string) => (
     <div className="cl-form cl-form-inline">
       <div className="cl-form-row">
-        <label className="cl-form-label">Color</label>
+        <label className="cl-form-label">{t('room.clColor')}</label>
         <input type="color" value={clColor} onChange={(e) => setClColor(e.target.value)} />
         <select value={clStyle} onChange={(e) => setClStyle(Number(e.target.value))} style={{ flex: 1, marginLeft: 6 }}>
-          <option value={1}>Solid</option>
-          <option value={2}>Dash</option>
-          <option value={3}>Dot</option>
-          <option value={4}>Dash-Dot</option>
-          <option value={5}>Dash-Dot-Dot</option>
+          <option value={1}>{t('room.solid')}</option>
+          <option value={2}>{t('room.dash')}</option>
+          <option value={3}>{t('room.dot')}</option>
+          <option value={4}>{t('room.dashDot')}</option>
+          <option value={5}>{t('room.dashDotDot')}</option>
         </select>
       </div>
       <div className="cl-form-row">
-        <label className="cl-form-label">Arrow</label>
+        <label className="cl-form-label" style={{ width: 'auto', whiteSpace: 'nowrap' }}>{t('room.clArrow')}</label>
         <input type="checkbox" checked={clArrow} onChange={(e) => setClArrow(e.target.checked)} />
       </div>
-      <div className="cl-form-row" title="Also hide the default line on the partner room (only applies to reciprocal cardinal exits)">
-        <label className="cl-form-label">Both ways</label>
+      <div className="cl-form-row" title={t('room.clBothWaysHint')}>
+        <label className="cl-form-label" style={{ width: 'auto', whiteSpace: 'nowrap' }}>{t('room.clBothWays')}</label>
         <input type="checkbox" checked={clBothWays} onChange={(e) => setClBothWays(e.target.checked)} />
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
         <button type="button" onClick={() => startDrawingCustomLine(exitName)} style={{ flex: 1 }}>
-          Start Drawing
+          {t('room.startDrawing')}
         </button>
         <button type="button" onClick={() => drawEmptyCustomLine(exitName)} style={{ flex: 1 }}>
-          Draw empty
+          {t('room.drawEmpty')}
         </button>
-        <button type="button" onClick={() => setLineFormFor(null)}>Cancel</button>
+        <button type="button" onClick={() => setLineFormFor(null)}>{t('room.cancel')}</button>
       </div>
     </div>
   );
@@ -476,7 +481,6 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         lineFormFor === dir ? 'active' : '',
         isPicking ? 'picking-exit' : '',
       ].filter(Boolean).join(' ')}>
-        {/* Line 1: badge · [room link | stub badge | room input] · [delete | pick] */}
         <div className="cc-header">
           <span className="cc-label">{DIR_ABBREV[dir]}</span>
           {hasExit && <RoomLink id={v} className="cc-target" />}
@@ -500,14 +504,14 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               <button
                 type="button"
                 className="cc-icon-btn cc-delete-btn"
-                title={hasExit ? 'Remove exit' : 'Remove stub'}
+                title={hasExit ? t('room.removeExit') : t('room.removeStub')}
                 onClick={() => deleteExit(d, hasExit, v, isStub)}
               >X</button>
             ) : (
               <button
                 type="button"
                 className={`cc-pick-btn${isPicking ? ' picking' : ''}`}
-                title={isPicking ? 'Click a room on the map (Esc to cancel)' : 'Pick target room from map'}
+                title={isPicking ? t('room.pickTargetCancel') : t('room.pickTarget')}
                 onClick={() => store.setState(isPicking ? { pending: null } : { pending: { kind: 'pickExit', fromId: selId, dir: d } })}
               >
                 <CrosshairIcon />
@@ -521,12 +525,12 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               type="button"
               className={`exit-line-btn${hasCustomLine ? '' : ' no-line'}`}
               onClick={() => handleLineButton(dir)}
-              title={hasCustomLine ? 'Edit custom line' : 'Draw custom line'}
+              title={hasCustomLine ? t('room.editCustomLine') : t('room.drawCustomLine')}
             >
               {hasCustomLine
-  ? (() => { const c = room.customLinesColor?.[dirKey]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <><span className="cl-swatch" style={{ background: rgb }} /><span className="exit-line-label">Custom line</span></>; })()
-  : <><span className="cl-placeholder">∿</span><span className="exit-line-label">Custom line</span></>
-}
+                ? (() => { const c = room.customLinesColor?.[dirKey]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <><span className="cl-swatch" style={{ background: rgb }} /><span className="exit-line-label">{t('room.customLine')}</span></>; })()
+                : <><span className="cl-placeholder">∿</span><span className="exit-line-label">{t('room.customLine')}</span></>
+              }
             </button>
           </div>
         )}
@@ -543,13 +547,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             <button
               type="button"
               className="cc-icon-btn cc-stub-btn"
-              title="Convert to stub"
+              title={t('room.convertToStub')}
               onClick={() => toggleStub(d, false, v)}
             >STUB</button>
             <button
               type="button"
               className={`cc-icon-btn${isLocked ? ' lock-active' : ''}`}
-              title={isLocked ? 'Locked — click to unlock' : 'Unlocked — click to lock'}
+              title={isLocked ? t('room.exitLocked') : t('room.exitUnlocked')}
               onClick={() => toggleExitLock(d, isLocked)}
             ><LockIcon locked={isLocked} /></button>
             <span className="cc-weight-wrap">
@@ -560,7 +564,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                 className="cc-weight"
                 min={1}
                 defaultValue={exitWeight}
-                title="Exit weight"
+                title={t('room.exitWeight')}
                 onBlur={(e) => changeWeight(d, exitWeight, Math.max(1, parseInt(e.target.value, 10) || 1))}
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               />
@@ -572,7 +576,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             <button
               type="button"
               className="cc-icon-btn cc-stub-btn"
-              title="Mark as stub — exit direction exists but destination is unknown"
+              title={t('room.markAsStub')}
               onClick={() => toggleStub(d, false, v)}
             >STUB</button>
           </div>
@@ -588,13 +592,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   return (
     <div className="panel-content">
       <h3 className="room-heading">
-        <span>Room #{selId}</span>
+        <span>{t('room.heading', { id: selId })}</span>
         <span className="room-heading-right">
           <span className="room-coords">({room.x}, {room.y}, {room.z})</span>
           <button
             type="button"
             className="room-center-btn"
-            title="Center view on room"
+            title={t('room.centerView')}
             onClick={() => {
               const scene = sceneRef.current;
               if (!scene) return;
@@ -644,7 +648,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                       saveAcks(mapKey, next);
                       store.bumpAckVersion();
                     }}
-                  >Ack</button>
+                  >{t('room.ack')}</button>
                 </div>
               );
             })}
@@ -652,7 +656,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         );
       })()}
 
-      <Field label="Name">
+      <Field label={t('room.name')}>
         <input
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
@@ -661,10 +665,10 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         />
       </Field>
 
-      <Field label="Hash">
+      <Field label={t('room.hash')}>
         <input
           value={hashDraft}
-          placeholder="(none)"
+          placeholder={t('room.hashNone')}
           spellCheck={false}
           onChange={(e) => setHashDraft(e.target.value)}
           onBlur={() => commitHash(hashDraft)}
@@ -674,7 +678,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
       <div className="env-symbol-row">
         <div className="field env-field">
-          <span className="label">Environment</span>
+          <span className="label">{t('room.environment')}</span>
           <div className="env-field-row">
             <button
               type="button"
@@ -695,7 +699,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             )}
           </div>
         </div>
-        <Field label="Symbol">
+        <Field label={t('room.symbol')}>
           <div className="symbol-row">
             <input
               value={symbolDraft}
@@ -707,7 +711,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               type="color"
               className="symbol-color-input"
               value={symbolColor ?? '#ffffff'}
-              title="Symbol color (stored in userData as system.fallback_symbol_color)"
+              title={t('room.symbolColorTitle')}
               onChange={(e) => setSymbolColor(e.target.value)}
               onBlur={() => { if (symbolColor !== null) commitSymbolColor(symbolColor); }}
             />
@@ -715,14 +719,14 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               type="button"
               className="symbol-color-clear"
               style={{ visibility: symbolColor !== null ? 'visible' : 'hidden' }}
-              title="Clear symbol color"
+              title={t('room.clearSymbolColor')}
               onClick={() => { setSymbolColor(null); commitSymbolColor(null); }}
             >X</button>
           </div>
         </Field>
       </div>
 
-      <h4>Exits</h4>
+      <h4>{t('room.exits')}</h4>
       <div className="compass-rose">
         {COMPASS_GRID.flat().map((dir, i) =>
           dir === null
@@ -731,7 +735,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                 <button
                   type="button"
                   className={`cc-room-lock-btn${room.isLocked ? ' lock-active' : ''}`}
-                  title={room.isLocked ? 'Room locked — click to unlock' : 'Room unlocked — click to lock'}
+                  title={room.isLocked ? t('room.roomLocked') : t('room.roomUnlocked')}
                   onClick={() => {
                     pushCommand({ kind: 'setRoomLock', id: selId, lock: !room.isLocked }, sceneRef.current);
                     sceneRef.current?.refresh();
@@ -744,7 +748,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                   className="cc-room-weight"
                   min={1}
                   value={weightDraft}
-                  title="Room weight"
+                  title={t('room.roomWeight')}
                   onChange={(e) => setWeightDraft(e.target.value)}
                   onBlur={() => commit('weight', weightDraft)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
@@ -763,7 +767,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
       </div>
       {lineFormFor !== null && EXIT_DIRS.includes(lineFormFor as any) && renderLineForm(lineFormFor)}
 
-      <h4>Special Exits</h4>
+      <h4>{t('room.specialExits')}</h4>
       <div className="special-exits-list">
         {specialExits.map(([name, toId]) => {
           const doorState = room.doors?.[name] ?? 0;
@@ -778,7 +782,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                   <button
                     type="button"
                     className="cc-icon-btn cc-delete-btn"
-                    title="Remove special exit"
+                    title={t('room.removeSpecialExit')}
                     onClick={() => removeSpecialExit(name, toId)}
                   >X</button>
                 </div>
@@ -795,11 +799,11 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                     type="button"
                     className={`exit-line-btn se-line-btn${hasCustomLine ? '' : ' no-line'}`}
                     onClick={() => handleLineButton(name)}
-                    title={hasCustomLine ? 'Edit custom line' : 'Draw custom line'}
+                    title={hasCustomLine ? t('room.editCustomLine') : t('room.drawCustomLine')}
                   >
                     {hasCustomLine
-                      ? (() => { const c = room.customLinesColor?.[name]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <><span className="cl-swatch" style={{ background: rgb }} /><span className="exit-line-label">Custom line</span></>; })()
-                      : <><span className="cl-placeholder">∿</span><span className="exit-line-label">Custom line</span></>
+                      ? (() => { const c = room.customLinesColor?.[name]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <><span className="cl-swatch" style={{ background: rgb }} /><span className="exit-line-label">{t('room.customLine')}</span></>; })()
+                      : <><span className="cl-placeholder">∿</span><span className="exit-line-label">{t('room.customLine')}</span></>
                     }
                   </button>
                   <span className="cc-weight-wrap">
@@ -810,7 +814,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                       className="cc-weight"
                       min={1}
                       defaultValue={exitWeight}
-                      title="Exit weight"
+                      title={t('room.exitWeight')}
                       onBlur={(e) => changeSpecialWeight(name, exitWeight, Math.max(1, parseInt(e.target.value, 10) || 1))}
                       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                     />
@@ -823,7 +827,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         })}
 
         <div className="special-exit-add">
-          <input placeholder="exit name" value={specialExitName} onChange={(e) => setSpecialExitName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && specialExitTarget && addSpecialExit()} />
+          <input placeholder={t('room.specialExitPlaceholder')} value={specialExitName} onChange={(e) => setSpecialExitName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && specialExitTarget && addSpecialExit()} />
           <div className="cc-exit-add">
             <input
               type="number"
@@ -836,7 +840,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             <button
               type="button"
               className={`cc-pick-btn${pending?.kind === 'pickSpecialExit' && pending.fromId === selId ? ' picking' : ''}`}
-              title={pending?.kind === 'pickSpecialExit' && pending.fromId === selId ? 'Click a room on the map (Esc to cancel)' : 'Pick target room from map'}
+              title={pending?.kind === 'pickSpecialExit' && pending.fromId === selId ? t('room.pickTargetCancel') : t('room.pickTarget')}
               onClick={() => {
                 const isPicking = pending?.kind === 'pickSpecialExit' && pending.fromId === selId;
                 store.setState({ pending: isPicking ? null : { kind: 'pickSpecialExit', fromId: selId } });
@@ -845,13 +849,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               <CrosshairIcon />
             </button>
           </div>
-          <button type="button" onClick={addSpecialExit} disabled={!specialExitName.trim() || !specialExitTarget}>Add</button>
+          <button type="button" onClick={addSpecialExit} disabled={!specialExitName.trim() || !specialExitTarget}>{t('room.addButton')}</button>
         </div>
       </div>
 
       {customLineEntries.length > 0 && (
         <>
-          <h4>Custom Lines</h4>
+          <h4>{t('room.customLines')}</h4>
           <div className="exit-list">
             {customLineEntries.map(([name, pts]) => {
               const color = room.customLinesColor?.[name];
@@ -872,7 +876,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
       {pluginSections.map((s) => (
         <Fragment key={s.id}>{s.render({ roomId: selId, room, map, sceneRef })}</Fragment>
       ))}
-      <h4>User Data</h4>
+      <h4>{t('room.userData')}</h4>
       <UserDataEditor
         data={room.userData}
         onCommit={(key, from, to) => {

@@ -1,4 +1,5 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState, saveUserSettings } from '../editor/store';
 import type { SceneHandle } from '../editor/scene';
 import type { RoomPanelSection, SidebarTab } from '../editor/plugin';
@@ -22,16 +23,8 @@ interface SidePanelProps {
   pluginRoomSections?: RoomPanelSection[];
 }
 
-const TABS = [
-  { id: 'selection', label: 'Sel' },
-  { id: 'areas',     label: 'Areas' },
-  { id: 'envs',      label: 'Envs' },
-  { id: 'history',   label: 'Hist' },
-  { id: 'map',       label: 'Map' },
-  { id: 'script',    label: 'Script' },
-] as const;
-
 export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }: SidePanelProps) {
+  const { t } = useTranslation('panels');
   const selection = useEditorState((s) => s.selection);
   const map = useEditorState((s) => s.map);
   const activeTool = useEditorState((s) => s.activeTool);
@@ -54,20 +47,28 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   }
 
   if (panelCollapsed && !panelExpanded) {
+    const collapsedTabs = [
+      { id: 'selection', label: t('sidebar.selectionShort') },
+      { id: 'areas',     label: t('sidebar.areas') },
+      { id: 'envs',      label: t('sidebar.envs') },
+      { id: 'history',   label: t('sidebar.historyShort') },
+      { id: 'map',       label: t('sidebar.map') },
+      { id: 'script',    label: t('sidebar.script') },
+    ];
     return (
       <div className="side-panel side-panel--collapsed">
-        <button type="button" className="side-panel-collapse-btn" title="Expand panel" onClick={() => store.setState({ panelCollapsed: false })}>
+        <button type="button" className="side-panel-collapse-btn" title={t('sidebar.expandPanel')} onClick={() => store.setState({ panelCollapsed: false })}>
           ◀
         </button>
         <div className="side-panel-tabs side-panel-tabs--vert">
-          {[...TABS, ...extraTabs].map((t) => (
+          {[...collapsedTabs, ...extraTabs].map((tab) => (
             <button
-              key={t.id}
+              key={tab.id}
               type="button"
-              className={`side-panel-tab${sidebarTab === t.id ? ' active' : ''}`}
-              onClick={() => store.setState({ sidebarTab: t.id, panelCollapsed: false })}
+              className={`side-panel-tab${sidebarTab === tab.id ? ' active' : ''}`}
+              onClick={() => store.setState({ sidebarTab: tab.id, panelCollapsed: false })}
             >
-              {t.label}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -77,25 +78,25 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
 
   const tabBar = (
     <div className="side-panel-tabs">
-      <button type="button" className={`side-panel-tab${sidebarTab === 'selection' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'selection' })}>Selection</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'areas' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'areas' })}>Areas{areasCount > 0 && <span className="tab-badge">{areasCount}</span>}</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>Envs{envsCount > 0 && <span className="tab-badge">{envsCount}</span>}</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>History{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>Map{warningCount > 0 && <span className="tab-badge tab-badge--warn">{warningCount}</span>}</button>
-      <button type="button" className={`side-panel-tab${sidebarTab === 'script' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'script' })}>Script</button>
-      {extraTabs.map((t) => (
-        <button key={t.id} type="button" className={`side-panel-tab${sidebarTab === t.id ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: t.id })}>{t.label}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'selection' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'selection' })}>{t('sidebar.selection')}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'areas' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'areas' })}>{t('sidebar.areas')}{areasCount > 0 && <span className="tab-badge">{areasCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'envs' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'envs' })}>{t('sidebar.envs')}{envsCount > 0 && <span className="tab-badge">{envsCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>{t('sidebar.history')}{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>{t('sidebar.map')}{warningCount > 0 && <span className="tab-badge tab-badge--warn">{warningCount}</span>}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'script' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'script' })}>{t('sidebar.script')}</button>
+      {extraTabs.map((tab) => (
+        <button key={tab.id} type="button" className={`side-panel-tab${sidebarTab === tab.id ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: tab.id })}>{tab.label}</button>
       ))}
       <button
         type="button"
         className="side-panel-tab side-panel-tab--expand"
-        title={panelExpanded ? 'Restore panel' : 'Expand panel'}
+        title={panelExpanded ? t('sidebar.restorePanel') : t('sidebar.expandPanel')}
         onClick={() => store.setState({ panelExpanded: !panelExpanded })}
       >
         {panelExpanded ? '⧉' : '⛶'}
       </button>
       {!panelExpanded && (
-        <button type="button" className="side-panel-tab side-panel-tab--collapse" title="Collapse panel" onClick={() => store.setState({ panelCollapsed: true })}>▶</button>
+        <button type="button" className="side-panel-tab side-panel-tab--collapse" title={t('sidebar.collapsePanel')} onClick={() => store.setState({ panelCollapsed: true })}>▶</button>
       )}
     </div>
   );
@@ -114,7 +115,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   } else if (sidebarTab === 'script') {
     body = <ScriptPanel sceneRef={sceneRef} />;
   } else {
-    const pluginTab = extraTabs.find((t) => t.id === sidebarTab);
+    const pluginTab = extraTabs.find((tab) => tab.id === sidebarTab);
     if (pluginTab) {
       body = <div className="panel-content">{pluginTab.render(sceneRef)}</div>;
     } else if (selection?.kind === 'label') {
@@ -145,8 +146,8 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
         isEmpty = true;
         body = (
           <div className="panel-content">
-            <h3>No selection</h3>
-            <p className="hint">Select a room with the Select tool to edit its properties.</p>
+            <h3>{t('sidebar.noSelection')}</h3>
+            <p className="hint">{t('sidebar.noSelectionHint')}</p>
             <ToolHint activeTool={activeTool} />
           </div>
         );
@@ -160,8 +161,6 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
   if (isEmpty) classes.push('empty');
   if (panelExpanded) classes.push('side-panel--expanded');
 
-  // Only the normal (docked) state honours panelWidth — collapsed is 48px and
-  // modal-expanded is centered with its own width.
   const inlineStyle = panelCollapsed || panelExpanded ? undefined : { width: panelWidth };
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -189,7 +188,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
         <div
           className="side-panel-resize-handle"
           onPointerDown={startResize}
-          title="Drag to resize"
+          title={t('sidebar.dragToResize')}
         />
       )}
       {tabBar}

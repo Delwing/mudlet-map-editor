@@ -1,12 +1,16 @@
 import { useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { modKey } from '../platform';
 import { store, useEditorState, saveUserSettings } from '../editor/store';
 import { createEmptyMap, writeMapToBytes } from '../mapIO';
 import { loadFileIntoStore } from '../editor/loadFile';
 import { DropdownSelect } from './DropdownSelect';
-import { TOOL_BUTTONS } from './HelpModal';
+import { useToolButtons } from './HelpModal';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick }: { title?: string; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void; onSettingsClick?: () => void }) {
+  const { t } = useTranslation('editor');
+  const toolButtons = useToolButtons();
   const activeTool = useEditorState((s) => s.activeTool);
   const map = useEditorState((s) => s.map);
   const mapLoaded = map != null;
@@ -51,7 +55,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
     if (!s.map) return;
     const room = s.map.rooms[id];
     if (!room) {
-      store.setState({ status: `Room #${id} not found` });
+      store.setState({ status: t('status.roomNotFound', { id }) });
       return;
     }
     store.setState({
@@ -78,7 +82,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
       undo: [],
       redo: [],
       savedUndoLength: 0,
-      status: 'New map created · 0 rooms · 1 area',
+      status: t('status.newMapCreated'),
       sessionId: null,
     });
     store.bumpStructure();
@@ -101,10 +105,10 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      store.setState((s) => ({ savedUndoLength: s.undo.length, status: `Saved ${a.download}` }));
+      store.setState((s) => ({ savedUndoLength: s.undo.length, status: t('status.saved', { filename: a.download }) }));
       onSave?.(bytes);
     } catch (err) {
-      store.setState({ status: `Save failed: ${(err as Error).message}` });
+      store.setState({ status: t('status.saveFailed', { error: (err as Error).message }) });
       console.error(err);
     }
   };
@@ -116,7 +120,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
         <img src={`logo.png`} alt="Mudlet logo" id={"logo"}/>
         <h1>{title}</h1>
 
-        <button type="button" title="New Map" onClick={handleNewMap}>
+        <button type="button" title={t('toolbar.newMap')} onClick={handleNewMap}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
             <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
@@ -124,7 +128,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
           </svg>
         </button>
 
-        <label className="file-button" title="Load .dat">
+        <label className="file-button" title={t('toolbar.loadDat')}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path d="M1 5h14v9H1V5z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
             <path d="M1 5l2-3h4l1 1h7" stroke="currentColor" strokeWidth="1.2" fill="none"/>
@@ -143,7 +147,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
           />
         </label>
 
-        <button type="button" title="Load .dat from URL" onClick={onLoadFromUrl}>
+        <button type="button" title={t('toolbar.loadFromUrl')} onClick={onLoadFromUrl}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
             <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
@@ -152,7 +156,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
           </svg>
         </button>
 
-        <button type="button" title="Save .dat" onClick={handleSave} disabled={!mapLoaded} style={{ position: 'relative', ...(dirty ? { color: '#ffd080' } : {}) }}>
+        <button type="button" title={t('toolbar.saveDat')} onClick={handleSave} disabled={!mapLoaded} style={{ position: 'relative', ...(dirty ? { color: '#ffd080' } : {}) }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path d="M2 2h9l3 3v9H2V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
             <rect x="5" y="2" width="5" height="4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
@@ -166,7 +170,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
             <div className="toolbar-sep" />
 
             <DropdownSelect
-              label="Area"
+              label={t('toolbar.area')}
               value={currentAreaId}
               options={areaOptions.map((a) => ({ value: a.id, label: `${a.name} (#${a.id})` }))}
               onChange={(id) => {
@@ -178,7 +182,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
             />
 
             <DropdownSelect
-              label="Level"
+              label={t('toolbar.level')}
               value={currentZ}
               options={zLevels.map((z) => ({ value: z, label: String(z) }))}
               onChange={(z) => {
@@ -189,8 +193,8 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
 
             <div className="toolbar-sep" />
 
-            <div className="toolbar-goto" title="Go to room by ID">
-              <label className="toolbar-goto-label" htmlFor="toolbar-goto-input">Room</label>
+            <div className="toolbar-goto" title={t('toolbar.goToRoomTitle')}>
+              <label className="toolbar-goto-label" htmlFor="toolbar-goto-input">{t('toolbar.room')}</label>
               <input
                 id="toolbar-goto-input"
                 className="toolbar-goto-input"
@@ -207,41 +211,41 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
                 onClick={handleGotoRoom}
                 disabled={gotoInput === ''}
               >
-                Go
+                {t('toolbar.go')}
               </button>
             </div>
 
             <button
               type="button"
               className="tool-btn"
-              title="Fit area to view (F)"
+              title={t('toolbar.fitTitle')}
               onClick={() => window.dispatchEvent(new CustomEvent('editor:fit'))}
             >
               <span className="tool-key">F</span>
-              <span>Fit</span>
+              <span>{t('toolbar.fit')}</span>
             </button>
 
             <button
               type="button"
               className="tool-btn"
-              title="Search rooms and labels (Ctrl+F)"
+              title={t('toolbar.searchTitle', { modKey })}
               onClick={onSearchClick}
             >
               <span className="tool-key">^F</span>
-              <span>Search</span>
+              <span>{t('toolbar.search')}</span>
             </button>
           </>
         )}
 
         <span className="status">
           {loaded && <span className="status-file">[{loaded.fileName}]</span>}
-          <span className="status-action">{status}</span>
+          <span className="status-action">{status ?? t('status.initialStatus')}</span>
         </span>
 
         <button
           type="button"
           className="help-btn"
-          title="Renderer settings"
+          title={t('toolbar.rendererSettings')}
           onClick={mapLoaded ? onSettingsClick : undefined}
           style={!mapLoaded ? { opacity: 0.35, cursor: 'default' } : undefined}
         >
@@ -251,27 +255,29 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
           </svg>
         </button>
 
-        <button type="button" className="help-btn" title="Help (keyboard shortcuts)" onClick={onHelpClick}>
+        <button type="button" className="help-btn" title={t('toolbar.helpTitle')} onClick={onHelpClick}>
           ?
         </button>
+
+        <LanguageSwitcher />
       </div>
 
       {/* Row 2: tools (only when map loaded) */}
       {mapLoaded && (
         <div className="toolbar-row toolbar-row-tools">
           <div className="tool-group">
-            {TOOL_BUTTONS.map((t) => (
+            {toolButtons.map((tb) => (
               <button
-                key={t.id}
+                key={tb.id}
                 type="button"
-                className={`tool-btn${activeTool === t.id ? ' active' : ''}`}
-                title={`${t.label} (${t.key}) — ${t.hint}`}
+                className={`tool-btn${activeTool === tb.id ? ' active' : ''}`}
+                title={`${tb.label} (${tb.key}) — ${tb.hint}`}
                 onClick={() => {
-                  store.setState({ activeTool: t.id, pending: null });
+                  store.setState({ activeTool: tb.id, pending: null });
                 }}
               >
-                <span className="tool-key">{t.key}</span>
-                <span>{t.label}</span>
+                <span className="tool-key">{tb.key}</span>
+                <span>{tb.label}</span>
               </button>
             ))}
           </div>
@@ -280,19 +286,19 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
 
           <button
             type="button"
-            title="Undo (Ctrl+Z)"
+            title={t('toolbar.undoTitle', { modKey })}
             disabled={undoLen === 0}
             onClick={() => window.dispatchEvent(new CustomEvent('editor:undo'))}
           >
-            ↶ Undo
+            {t('toolbar.undo')}
           </button>
           <button
             type="button"
-            title="Redo (Ctrl+Shift+Z)"
+            title={t('toolbar.redoTitle', { modKey })}
             disabled={redoLen === 0}
             onClick={() => window.dispatchEvent(new CustomEvent('editor:redo'))}
           >
-            ↷ Redo
+            {t('toolbar.redo')}
           </button>
 
           <div className="toolbar-sep" />
@@ -300,75 +306,75 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
           <button
             type="button"
             className={`tool-btn toolbar-snap-btn${snapToGrid ? ' active' : ''}`}
-            title="Snap to grid (G)"
+            title={t('toolbar.snapTitle')}
             onClick={() => { saveUserSettings({ snapToGrid: !snapToGrid }); store.setState({ snapToGrid: !snapToGrid }); }}
           >
             <span className="tool-key">G</span>
-            <span>Snap</span>
+            <span>{t('toolbar.snap')}</span>
           </button>
 
           <button
             type="button"
             className={`tool-btn${swatchPaletteOpen ? ' active' : ''}`}
-            title="Room swatches palette"
+            title={t('toolbar.swatchesTitle')}
             onClick={() => store.setState({ swatchPaletteOpen: !swatchPaletteOpen })}
           >
             {activeSwatch
               ? <><span className="tool-key">8↴</span><span>{activeSwatch.name}</span></>
-              : <><span className="tool-key">8↴</span><span>Swatches</span></>
+              : <><span className="tool-key">8↴</span><span>{t('toolbar.swatches')}</span></>
             }
           </button>
 
           {!pending && activeTool === 'paint' && (
             <span className="toolbar-pending-hint">
               {activeSwatch
-                ? `Painting "${activeSwatch.name}" (env ${activeSwatch.environment}${activeSwatch.symbol ? `, symbol "${activeSwatch.symbol}"` : ''}) · click or drag rooms`
-                : 'No swatch selected — open Swatches palette and pick one'}
+                ? t('hints.paintActive', { name: activeSwatch.name, env: activeSwatch.environment, symbol: activeSwatch.symbol ? `, symbol "${activeSwatch.symbol}"` : '' })
+                : t('hints.paintNoSwatch')}
             </span>
           )}
           {pending?.kind === 'marquee' && (
             <span className="toolbar-pending-hint">
-              Hold Ctrl to toggle selection
+              {t('hints.marquee')}
             </span>
           )}
           {pending?.kind === 'connect' && (
             <span className="toolbar-pending-hint">
-              Pick target · Shift = one-way · Esc cancels
+              {t('hints.connect')}
             </span>
           )}
           {pending?.kind === 'customLine' && (
             <span className="toolbar-pending-hint">
-              Click to add waypoints · right-click or Enter to finish · Esc cancels
+              {t('hints.customLine')}
             </span>
           )}
           {!pending && activeTool === 'select' && (
             <span className="toolbar-pending-hint">
-              Click to select · Shift+click/drag to add · Ctrl+click/drag to toggle · drag selected rooms to move · MMB or Space to pan
+              {t('hints.select')}
             </span>
           )}
           {!pending && activeTool === 'unlink' && (
             <span className="toolbar-pending-hint">
-              Click a room to remove all its exits · click an exit or custom line to remove just that one
+              {t('hints.unlink')}
             </span>
           )}
           {!pending && activeTool === 'addRoom' && (
             <span className="toolbar-pending-hint">
-              {`Click an empty grid cell to place a room · ${modKey}+click to place without selecting`}
+              {t('hints.addRoom', { modKey })}
             </span>
           )}
           {!pending && activeTool === 'addLabel' && (
             <span className="toolbar-pending-hint">
-              Click to place a label · select to move/edit · Delete to remove
+              {t('hints.addLabel')}
             </span>
           )}
           {pending?.kind === 'paint' && (
             <span className="toolbar-pending-hint">
-              Drag to paint multiple rooms · release to commit
+              {t('hints.paintDrag')}
             </span>
           )}
           {pending?.kind === 'pickSwatch' && (
             <span className="toolbar-pending-hint" style={{ color: '#ffd080' }}>
-              Click a room to copy its symbol &amp; environment · Esc to cancel
+              {t('hints.pickSwatch')}
             </span>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Toolbar } from './components/Toolbar';
 import { HelpModal } from './components/HelpModal';
 import { RendererSettingsModal, loadRendererSettings, applyRendererSettings } from './components/RendererSettingsModal';
@@ -48,21 +49,25 @@ const NUDGE: Record<string, { dx: number; dy: number }> = {
   ArrowDown:  { dx:  0, dy: -1 },
 };
 
+import i18n from './i18n';
+
 function buildPasteStatus(
-  verb: string,
+  verbKey: string,
   result: { count: number; externalExitsStubbed: number; externalSpecialExitsDropped: number },
 ): string {
-  const parts = [`${verb} ${result.count} room${result.count === 1 ? '' : 's'}`];
+  const t = i18n.t.bind(i18n);
+  const parts = [t(`editor:status.${verbKey}`, { count: result.count })];
   if (result.externalExitsStubbed > 0) {
-    parts.push(`${result.externalExitsStubbed} external exit${result.externalExitsStubbed === 1 ? '' : 's'} → stub`);
+    parts.push(t('editor:status.externalExitsStubbed', { count: result.externalExitsStubbed }));
   }
   if (result.externalSpecialExitsDropped > 0) {
-    parts.push(`${result.externalSpecialExitsDropped} special exit${result.externalSpecialExitsDropped === 1 ? '' : 's'} dropped`);
+    parts.push(t('editor:status.specialExitsDropped', { count: result.externalSpecialExitsDropped }));
   }
   return parts.join(' · ');
 }
 
 export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plugins?: EditorPlugin[]; title?: string }) {
+  const { t } = useTranslation('editor');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
 
@@ -283,7 +288,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         if (!s.map || s.selection?.kind !== 'room') return;
         e.preventDefault();
         const n = copyRoomsToClipboard(s.map, s.selection.ids);
-        if (n > 0) store.setState({ status: `Copied ${n} room${n === 1 ? '' : 's'}` });
+        if (n > 0) store.setState({ status: t('status.copied', { count: n }) });
         return;
       }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'v') {
@@ -307,7 +312,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         store.bumpStructure();
         store.setState({
           selection: { kind: 'room', ids: result.newIds },
-          status: buildPasteStatus('Duplicated', result),
+          status: buildPasteStatus('duplicated', result),
         });
         return;
       }
@@ -324,7 +329,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
           if (s.pending.kind === 'customLine' && sceneRef.current) {
             restorePendingCustomLine(s.pending, sceneRef.current);
           }
-          store.setState({ pending: null, activeTool: s.pending.kind === 'customLine' ? 'select' : s.activeTool, status: 'Cancelled.' });
+          store.setState({ pending: null, activeTool: s.pending.kind === 'customLine' ? 'select' : s.activeTool, status: t('status.cancelled') });
           store.bumpData();
         } else if (s.panelExpanded) {
           store.setState({ panelExpanded: false });
@@ -390,7 +395,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
           store.setState((st) => ({ undo: [...st.undo, { kind: 'moveLabel', areaId, id, from, to }], redo: [] }));
           sceneRef.current?.refresh();
           store.bumpData();
-          store.setState({ status: `Moved label ${id}` });
+          store.setState({ status: t('status.movedLabel', { id }) });
           return;
         }
 
@@ -421,7 +426,9 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         sceneRef.current?.refresh();
         store.bumpData();
         const { ids } = s.selection;
-        store.setState({ status: ids.length === 1 ? `Moved room ${ids[0]} → (${s.map.rooms[ids[0]]?.x}, ${s.map.rooms[ids[0]]?.y}, ${s.map.rooms[ids[0]]?.z})` : `Moved ${ids.length} rooms` });
+        store.setState({ status: ids.length === 1
+          ? t('status.movedRoom', { id: ids[0], x: s.map.rooms[ids[0]]?.x, y: s.map.rooms[ids[0]]?.y, z: s.map.rooms[ids[0]]?.z })
+          : t('status.movedRooms', { count: ids.length }) });
       }
     };
     window.addEventListener('keydown', onKey);
@@ -483,7 +490,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         if (cmds.length === 0) return;
         pushCommand({ kind: 'batch', cmds }, sceneRef.current);
         sceneRef.current?.refresh();
-        store.setState({ selection: null, status: `Deleted ${cmds.length} rooms` });
+        store.setState({ selection: null, status: t('status.deletedRooms', { count: cmds.length }) });
         store.bumpStructure();
         return;
       }
@@ -500,7 +507,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         neighborEdits,
       }, sceneRef.current);
       sceneRef.current?.refresh();
-      store.setState({ selection: null, status: `Deleted room ${id}` });
+      store.setState({ selection: null, status: t('status.deletedRoom', { id }) });
       store.bumpStructure();
       return;
     }
@@ -525,7 +532,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       }, sceneRef.current);
       sceneRef.current?.refresh();
       store.bumpData();
-      store.setState({ selection: null, status: `Removed exit ${sel.fromId} → ${sel.toId}` });
+      store.setState({ selection: null, status: t('status.removedExit', { from: sel.fromId, to: sel.toId }) });
       return;
     }
 
@@ -553,7 +560,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         store.bumpData();
         store.setState({
           selection: { kind: 'customLine', roomId: sel.roomId, exitName: sel.exitName },
-          status: `Removed waypoint from '${sel.exitName}' on room ${sel.roomId}`,
+          status: t('status.removedWaypoint', { exit: sel.exitName, id: sel.roomId }),
         });
         return;
       }
@@ -566,7 +573,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       }, sceneRef.current);
       sceneRef.current?.refresh();
       store.bumpData();
-      store.setState({ selection: null, status: `Removed custom line '${sel.exitName}'` });
+      store.setState({ selection: null, status: t('status.removedCustomLine', { exit: sel.exitName }) });
       return;
     }
 
@@ -576,7 +583,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       pushCommand({ kind: 'deleteLabel', areaId: sel.areaId, label: snap }, sceneRef.current);
       sceneRef.current?.refresh();
       store.bumpData();
-      store.setState({ selection: null, status: `Deleted label ${sel.id}` });
+      store.setState({ selection: null, status: t('status.deletedLabel', { id: sel.id }) });
       return;
     }
 
@@ -584,7 +591,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       pushCommand({ kind: 'setStub', roomId: sel.roomId, dir: sel.dir, stub: false }, sceneRef.current);
       sceneRef.current?.refresh();
       store.bumpData();
-      store.setState({ selection: null, status: `Removed stub ${sel.dir} on room ${sel.roomId}` });
+      store.setState({ selection: null, status: t('status.removedStub', { dir: sel.dir, id: sel.roomId }) });
       return;
     }
   };
@@ -626,7 +633,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     store.bumpStructure();
     store.setState({
       selection: { kind: 'room', ids: result.newIds },
-      status: buildPasteStatus('Pasted', result),
+      status: buildPasteStatus('pasted', result),
     });
   };
 
@@ -636,7 +643,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     sceneRef.current?.refresh();
     if (structural) store.bumpStructure();
     else store.bumpData();
-    store.setState({ status: 'Undone' });
+    store.setState({ status: t('status.undone') });
   };
 
   const performRedo = () => {
@@ -645,7 +652,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     sceneRef.current?.refresh();
     if (structural) store.bumpStructure();
     else store.bumpData();
-    store.setState({ status: 'Redone' });
+    store.setState({ status: t('status.redone') });
   };
 
   return (

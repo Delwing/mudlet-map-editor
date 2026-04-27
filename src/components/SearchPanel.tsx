@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 
 type SearchMode = 'rooms' | 'labels';
@@ -33,6 +34,7 @@ function truncate(s: string, max = 40): string {
 }
 
 export function SearchPanel({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation('search');
   const map = useEditorState((s) => s.map);
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('rooms');
@@ -187,17 +189,17 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
             className={`search-tab${mode === 'rooms' ? ' active' : ''}`}
             onClick={() => handleModeChange('rooms')}
           >
-            Rooms
+            {t('tabRooms')}
           </button>
           <button
             type="button"
             className={`search-tab${mode === 'labels' ? ' active' : ''}`}
             onClick={() => handleModeChange('labels')}
           >
-            Labels
+            {t('tabLabels')}
           </button>
         </div>
-        <button type="button" className="modal-close" onClick={onClose} title="Close (Esc)">✕</button>
+        <button type="button" className="modal-close" onClick={onClose} title={t('closeTitle')}>✕</button>
       </div>
       <div className="search-panel-input-wrap">
         <svg className="search-panel-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -208,18 +210,18 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
           ref={inputRef}
           className="search-panel-input"
           type="text"
-          placeholder={mode === 'rooms' ? 'name, ID, or user data… (Tab to switch)' : 'label text… (Tab to switch)'}
+          placeholder={mode === 'rooms' ? t('placeholderRooms') : t('placeholderLabels')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         {query && (
-          <button type="button" className="search-panel-clear" onClick={() => { setQuery(''); inputRef.current?.focus(); }} title="Clear">✕</button>
+          <button type="button" className="search-panel-clear" onClick={() => { setQuery(''); inputRef.current?.focus(); }} title={t('clearTitle')}>✕</button>
         )}
       </div>
       {query.trim().length > 0 && (
         <ul className="search-panel-results" ref={listRef}>
           {results.length === 0 ? (
-            <li className="search-panel-empty">No matches</li>
+            <li className="search-panel-empty">{t('noMatches')}</li>
           ) : (
             results.map((r, i) => (
               <li
@@ -231,14 +233,14 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
                 {r.kind === 'room' ? (
                   <>
                     <div className="search-result-row">
-                      <span className="search-result-name">{r.name || <em>unnamed</em>}</span>
+                      <span className="search-result-name">{r.name || <em>{t('unnamed')}</em>}</span>
                       <span className="search-result-meta">#{r.id} · {r.areaName}{r.z !== 0 ? ` · z${r.z}` : ''}</span>
                     </div>
                     <div className="search-result-reason">{r.matchReason}</div>
                   </>
                 ) : (
                   <>
-                    <span className="search-result-name">{r.text || <em>empty label</em>}</span>
+                    <span className="search-result-name">{r.text || <em>{t('emptyLabel')}</em>}</span>
                     <span className="search-result-meta">
                       {r.areaName}{r.z !== 0 ? ` · z${r.z}` : ''}
                     </span>
@@ -248,7 +250,7 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
             ))
           )}
           {results.length === 100 && (
-            <li className="search-panel-more">Showing first 100 results — refine your query</li>
+            <li className="search-panel-more">{t('tooManyResults')}</li>
           )}
         </ul>
       )}

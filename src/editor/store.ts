@@ -84,7 +84,7 @@ export interface EditorState {
   spaceHeld: boolean;
   undo: Command[];
   redo: Command[];
-  status: string;
+  status: string | null;
   /** Bumped on structural changes (room added/removed, area/z changed) that need a full rebuild. */
   structureVersion: number;
   /** Bumped on every mutation (coord, exits, props) to trigger React re-renders of panels. */
@@ -168,7 +168,7 @@ const initial: EditorState = {
   spaceHeld: false,
   undo: [],
   redo: [],
-  status: 'Load a Mudlet .dat file to begin.',
+  status: null,
   structureVersion: 0,
   dataVersion: 0,
   snapCursor: null,

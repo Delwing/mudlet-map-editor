@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { MudletMap } from '../mapIO';
 import type { SceneHandle } from '../editor/scene';
 
@@ -11,6 +12,7 @@ interface EnvPickerProps {
 }
 
 export function EnvPicker({ map, sceneRef, currentEnvId, onSelect, onClose }: EnvPickerProps) {
+  const { t } = useTranslation('envs');
   const ref = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState('');
 
@@ -24,7 +26,6 @@ export function EnvPicker({ map, sceneRef, currentEnvId, onSelect, onClose }: En
 
   const reader = sceneRef.current?.reader;
 
-  // Collect all env IDs
   const ids = new Set<number>();
   for (const c of Object.keys(map.envColors)) ids.add(Number(c));
   for (const c of Object.keys(map.mCustomEnvColors)) ids.add(Number(c));
@@ -42,7 +43,7 @@ export function EnvPicker({ map, sceneRef, currentEnvId, onSelect, onClose }: En
     <div ref={ref} className="env-picker-popup">
       <input
         className="env-picker-filter"
-        placeholder="Filter by ID…"
+        placeholder={t('filterByIdPlaceholder')}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         autoFocus
@@ -53,7 +54,7 @@ export function EnvPicker({ map, sceneRef, currentEnvId, onSelect, onClose }: En
             type="button"
             className={`env-picker-swatch${currentEnvId === -1 ? ' selected' : ''}`}
             style={{ background: 'rgb(114,1,0)' }}
-            title="None (−1)"
+            title={t('noneTitle')}
             onClick={() => { onSelect(-1); onClose(); }}
           >
             <span className="env-picker-id">−</span>
@@ -64,13 +65,13 @@ export function EnvPicker({ map, sceneRef, currentEnvId, onSelect, onClose }: En
               type="button"
               className={`env-picker-swatch${envId === currentEnvId ? ' selected' : ''}`}
               style={{ background: color }}
-              title={`Env ${envId}`}
+              title={t('envTitle', { id: envId })}
               onClick={() => { onSelect(envId); onClose(); }}
             >
               <span className="env-picker-id">{envId}</span>
             </button>
           ))}
-          {envs.length === 0 && <span style={{ color: '#55606f', fontSize: 11, padding: '4px 2px' }}>No match</span>}
+          {envs.length === 0 && <span style={{ color: '#55606f', fontSize: 11, padding: '4px 2px' }}>{t('noMatch')}</span>}
         </div>
       </div>
     </div>

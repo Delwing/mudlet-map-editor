@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { pushCommand } from '../editor/commands';
 import type { SceneHandle } from '../editor/scene';
@@ -17,6 +18,7 @@ function hexToMudletColor(hex: string): MudletColor {
 }
 
 export function EnvPanel({ sceneRef }: EnvPanelProps) {
+  const { t } = useTranslation('envs');
   const map = useEditorState((s) => s.map);
   const dataVersion = useEditorState((s) => s.dataVersion);
   const [filter, setFilter] = useState('');
@@ -25,7 +27,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
   const [newId, setNewId] = useState('');
   const [newColor, setNewColor] = useState('#888888');
 
-  if (!map) return <div className="modal-empty">No map loaded.</div>;
+  if (!map) return <div className="modal-empty">{t('noMap')}</div>;
 
   const reader = sceneRef.current?.reader;
   const filterNum = filter.trim();
@@ -64,7 +66,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
     pushCommand({ kind: 'setCustomEnvColor', envId, from, to: color }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Env ${envId} color updated` });
+    store.setState({ status: t('colorUpdated', { id: envId }) });
   };
 
   const handleRemoveCustom = (envId: number) => {
@@ -73,19 +75,19 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
     pushCommand({ kind: 'setCustomEnvColor', envId, from, to: null }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Custom color for env ${envId} removed` });
+    store.setState({ status: t('customColorRemoved', { id: envId }) });
     if (selectedEnvId === envId) setSelectedEnvId(null);
   };
 
   const handleAdd = () => {
     const id = parseInt(newId, 10);
-    if (Number.isNaN(id) || id <= 256) { store.setState({ status: 'Env IDs 1–256 are reserved. Use 257 or higher.' }); return; }
+    if (Number.isNaN(id) || id <= 256) { store.setState({ status: t('reservedIds') }); return; }
     const color = hexToMudletColor(newColor);
     const from = map.mCustomEnvColors[id] ?? null;
     pushCommand({ kind: 'setCustomEnvColor', envId: id, from, to: color }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Custom env ${id} set to ${newColor}` });
+    store.setState({ status: t('customEnvSet', { id, color: newColor }) });
     setNewId('');
     setNewColor('#888888');
     setIsAdding(false);
@@ -97,7 +99,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
       <div className="modal-add-row" style={{ marginBottom: 8 }}>
         <input
           className="env-filter-input"
-          placeholder="Filter ID…"
+          placeholder={t('filterPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -110,7 +112,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
             type="button"
             className={`env-tile${selectedEnvId === envId ? ' selected' : ''}`}
             style={{ background: rgbValue }}
-            title={`Env ${envId}`}
+            title={t('envTitle', { id: envId })}
             onClick={() => handleTileClick(envId)}
           >
             <span className="env-tile-id">{envId}</span>
@@ -119,7 +121,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
         <button
           type="button"
           className={`env-tile env-tile-add${isAdding ? ' selected' : ''}`}
-          title="Add environment"
+          title={t('addTitle')}
           onClick={handleAddTileClick}
         >
           <span className="env-tile-add-icon">+</span>
@@ -128,18 +130,18 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
 
       {isAdding && (
         <div className="env-detail" style={{ marginTop: 12 }}>
-          <p className="env-detail-id">New Environment</p>
-          <label className="env-detail-label">ID</label>
+          <p className="env-detail-id">{t('newEnv')}</p>
+          <label className="env-detail-label">{t('id')}</label>
           <input
             type="number"
-            placeholder="Env ID"
+            placeholder={t('envIdPlaceholder')}
             value={newId}
             min={257}
             onChange={(e) => setNewId(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             className="env-detail-input"
           />
-          <label className="env-detail-label">Color</label>
+          <label className="env-detail-label">{t('color')}</label>
           <input
             type="color"
             value={newColor}
@@ -147,7 +149,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
             style={{ width: '100%', height: 36 }}
           />
           <button type="button" className="env-detail-btn" onClick={handleAdd} disabled={!newId}>
-            Add
+            {t('add')}
           </button>
         </div>
       )}
@@ -156,7 +158,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
         <div className="env-detail" style={{ marginTop: 12 }}>
           <div className="env-detail-swatch" style={{ background: selectedEntry.rgbValue }} />
           <p className="env-detail-id">Env #{selectedEntry.envId}</p>
-          <label className="env-detail-label">Color</label>
+          <label className="env-detail-label">{t('color')}</label>
           <input
             type="color"
             value={mudletColorToHex(map.mCustomEnvColors[selectedEntry.envId]!)}
@@ -168,7 +170,7 @@ export function EnvPanel({ sceneRef }: EnvPanelProps) {
             className="env-detail-btn env-detail-btn--danger"
             onClick={() => handleRemoveCustom(selectedEntry.envId)}
           >
-            Remove
+            {t('remove')}
           </button>
         </div>
       )}

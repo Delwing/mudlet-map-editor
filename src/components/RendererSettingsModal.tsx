@@ -1,4 +1,5 @@
 import { useState, type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SceneHandle } from '../editor/scene';
 
 type RoomShape = 'rectangle' | 'circle' | 'roundedRectangle';
@@ -74,6 +75,7 @@ export function RendererSettingsModal({
   onClose: () => void;
   sceneRef: RefObject<SceneHandle | null>;
 }) {
+  const { t } = useTranslation('modals');
   const s = sceneRef.current?.settings;
 
   const [roomShape, setRoomShape] = useState<RoomShape>(s?.roomShape ?? DEFAULTS.roomShape);
@@ -117,21 +119,21 @@ export function RendererSettingsModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Renderer Settings</h2>
+          <h2>{t('renderer.title')}</h2>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className="settings-reset-btn" onClick={resetToDefaults} title="Reset all to defaults">
-              Reset
+            <button className="settings-reset-btn" onClick={resetToDefaults} title={t('renderer.resetTitle')}>
+              {t('renderer.reset')}
             </button>
-            <button className="modal-close" onClick={onClose} title="Close">✕</button>
+            <button className="modal-close" onClick={onClose} title={t('renderer.closeTitle')}>✕</button>
           </div>
         </div>
         <div className="modal-body settings-modal-body">
 
           <section className="settings-section">
-            <h3 className="settings-section-title">Room</h3>
+            <h3 className="settings-section-title">{t('renderer.room')}</h3>
 
             <div className="settings-row">
-              <span className="settings-label">Shape</span>
+              <span className="settings-label">{t('renderer.shape')}</span>
               <div className="settings-radio-group">
                 {(['rectangle', 'roundedRectangle', 'circle'] as RoomShape[]).map((shape) => (
                   <label key={shape} className="settings-radio">
@@ -142,14 +144,14 @@ export function RendererSettingsModal({
                       checked={roomShape === shape}
                       onChange={() => { setRoomShape(shape); applyLive({ roomShape: shape }); }}
                     />
-                    {shape === 'rectangle' ? 'Rectangle' : shape === 'roundedRectangle' ? 'Rounded' : 'Circle'}
+                    {shape === 'rectangle' ? t('renderer.rectangle') : shape === 'roundedRectangle' ? t('renderer.rounded') : t('renderer.circle')}
                   </label>
                 ))}
               </div>
             </div>
 
             <div className="settings-row">
-              <span className="settings-label">Size</span>
+              <span className="settings-label">{t('renderer.size')}</span>
               <div className="settings-slider-group">
                 <input
                   type="range"
@@ -168,19 +170,19 @@ export function RendererSettingsModal({
             </div>
 
             <div className="settings-row">
-              <span className="settings-label">Style</span>
+              <span className="settings-label">{t('renderer.style')}</span>
               <div className="settings-checkbox-group">
                 <label className="settings-checkbox">
                   <input type="checkbox" checked={borders} onChange={(e) => { setBorders(e.target.checked); applyLive({ borders: e.target.checked }); }} />
-                  Borders
+                  {t('renderer.borders')}
                 </label>
                 <label className="settings-checkbox">
                   <input type="checkbox" checked={frameMode} onChange={(e) => { setFrameMode(e.target.checked); applyLive({ frameMode: e.target.checked }); }} />
-                  Frame
+                  {t('renderer.frame')}
                 </label>
                 <label className="settings-checkbox">
                   <input type="checkbox" checked={coloredMode} onChange={(e) => { setColoredMode(e.target.checked); applyLive({ coloredMode: e.target.checked }); }} />
-                  Colored
+                  {t('renderer.colored')}
                 </label>
                 <label className="settings-checkbox">
                   <input
@@ -189,17 +191,17 @@ export function RendererSettingsModal({
                     disabled={roomShape === 'circle'}
                     onChange={(e) => { setEmboss(e.target.checked); applyLive({ emboss: e.target.checked }); }}
                   />
-                  <span style={roomShape === 'circle' ? { opacity: 0.4 } : undefined}>Emboss</span>
+                  <span style={roomShape === 'circle' ? { opacity: 0.4 } : undefined}>{t('renderer.emboss')}</span>
                 </label>
               </div>
             </div>
           </section>
 
           <section className="settings-section">
-            <h3 className="settings-section-title">Lines</h3>
+            <h3 className="settings-section-title">{t('renderer.lines')}</h3>
 
             <div className="settings-row">
-              <span className="settings-label">Width</span>
+              <span className="settings-label">{t('renderer.width')}</span>
               <div className="settings-slider-group">
                 <input
                   type="range"
@@ -218,7 +220,7 @@ export function RendererSettingsModal({
             </div>
 
             <div className="settings-row">
-              <span className="settings-label">Color</span>
+              <span className="settings-label">{t('renderer.color')}</span>
               <div className="settings-color-row">
                 <input
                   type="color"
@@ -232,10 +234,10 @@ export function RendererSettingsModal({
           </section>
 
           <section className="settings-section">
-            <h3 className="settings-section-title">Background</h3>
+            <h3 className="settings-section-title">{t('renderer.background')}</h3>
 
             <div className="settings-row">
-              <span className="settings-label">Color</span>
+              <span className="settings-label">{t('renderer.color')}</span>
               <div className="settings-color-row">
                 <input
                   type="color"
@@ -248,10 +250,10 @@ export function RendererSettingsModal({
             </div>
 
             <div className="settings-row">
-              <span className="settings-label">Area name</span>
+              <span className="settings-label">{t('renderer.areaName')}</span>
               <label className="settings-checkbox">
                 <input type="checkbox" checked={areaName} onChange={(e) => { setAreaName(e.target.checked); applyLive({ areaName: e.target.checked }); }} />
-                Show on map
+                {t('renderer.showOnMap')}
               </label>
             </div>
           </section>

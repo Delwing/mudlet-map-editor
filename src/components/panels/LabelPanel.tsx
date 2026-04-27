@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { pushBatch, pushCommand } from '../../editor/commands';
 import { store, useEditorState } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
@@ -33,6 +34,7 @@ const outlineEq = (a: MudletColor | undefined, b: MudletColor | undefined) => {
 const PX_PER_UNIT = 64;
 
 export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
+  const { t } = useTranslation('panels');
   const dataVersion = useEditorState((s) => s.dataVersion);
   const map = useEditorState((s) => s.map);
   const warnings = useEditorState((s) => s.warnings);
@@ -65,7 +67,6 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const heightDraftRef = useRef(heightDraft);
   heightDraftRef.current = heightDraft;
 
-  // Captures color state at the start of a drag session so we push a single undo entry.
   const colorSessionRef = useRef<{ fg: MudletColor; bg: MudletColor } | null>(null);
   const outlineSessionRef = useRef<{ color: MudletColor | undefined } | null>(null);
 
@@ -78,7 +79,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     setOutlineAlphaDraft(s?.outlineColor?.alpha ?? 0);
   }, [selection.id, selection.areaId, dataVersion]);
 
-  if (!snap) return <div className="panel-content"><p className="hint">Label not found.</p></div>;
+  if (!snap) return <div className="panel-content"><p className="hint">{t('label.notFound')}</p></div>;
 
   const pixmapCmd = (label: LabelSnapshot): Command[] => {
     const to = generateLabelPixmap(label);
@@ -295,14 +296,14 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
 
   return (
     <div className="panel-content">
-      <h3>Label #{selection.id}</h3>
+      <h3>{t('label.heading', { id: selection.id })}</h3>
       {labelWarnings.length > 0 && (
         <div className="warnings-list">
           {labelWarnings.map((w, i) => (
             <div key={i} className="warning-row">
               <span className="warning-icon">⚠</span>
               <span className="warning-text">
-                <span className="warning-detail">zero-size label</span>
+                <span className="warning-detail">{t('label.zeroSizeWarning')}</span>
               </span>
               <button
                 type="button"
@@ -315,28 +316,26 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
                   saveAcks(key, next);
                   store.bumpAckVersion();
                 }}
-              >Ack</button>
+              >{t('label.ack')}</button>
             </div>
           ))}
         </div>
       )}
       <p className="hint" style={{ marginBottom: 8 }}>
-        Position: ({snap.pos[0]}, {snap.pos[1]}, {snap.pos[2]}) · Drag to move
+        {t('label.position', { x: snap.pos[0], y: snap.pos[1], z: snap.pos[2] })}
       </p>
 
-      {/* Mode switch */}
       <div style={{ display: 'flex', marginBottom: 10, border: '1px solid var(--border, #444)', borderRadius: 4, overflow: 'hidden' }}>
         <button style={modeBtnStyle(!isImageMode)} onClick={() => { if (isImageMode) handleClearImage(); }}>
-          Text
+          {t('label.modeText')}
         </button>
         <button style={{ ...modeBtnStyle(isImageMode), borderLeft: '1px solid var(--border, #444)' }} onClick={() => { if (!isImageMode) handleSetImage(); }}>
-          Image
+          {t('label.modeImage')}
         </button>
       </div>
 
-      {/* Size + AR lock (always visible) */}
       <div className="field-row">
-        <Field label="Width">
+        <Field label={t('label.width')}>
           <input
             type="number"
             min={0.1}
@@ -349,7 +348,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
             style={{ width: 70 }}
           />
         </Field>
-        <Field label="Height">
+        <Field label={t('label.height')}>
           <input
             type="number"
             min={0.1}
@@ -363,32 +362,30 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           />
         </Field>
         <button
-          title={aspectRatioLocked ? 'Aspect ratio locked — click to unlock' : 'Lock aspect ratio for resize'}
+          title={aspectRatioLocked ? t('label.aspectLocked') : t('label.aspectFree')}
           onClick={() => store.setState({ labelAspectRatioLocked: !aspectRatioLocked })}
           style={{
             background: aspectRatioLocked ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
             color: aspectRatioLocked ? '#000' : 'inherit',
           }}
         >
-          {aspectRatioLocked ? 'AR locked' : 'AR free'}
+          {aspectRatioLocked ? t('label.arLocked') : t('label.arFree')}
         </button>
       </div>
 
-      {/* Display options (always visible) */}
       <CheckboxField
         checked={snap.showOnTop}
         onChange={commitShowOnTop}
-        description="Show on top (foreground)"
+        description={t('label.showOnTop')}
       />
       <CheckboxField
         checked={!snap.noScaling}
         onChange={(v) => commitNoScaling(!v)}
-        description="Scale with zoom"
+        description={t('label.scaleWithZoom')}
       />
 
-      {/* IMAGE MODE */}
       {isImageMode && (
-        <Field label="Image">
+        <Field label={t('label.image')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
             <img
               src={snap.imageSrc}
@@ -396,15 +393,14 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               style={{ maxWidth: '100%', border: '1px solid var(--border, #444)', borderRadius: 3 }}
             />
             <button onClick={handleSetImage} style={{ alignSelf: 'flex-start' }}>
-              Replace image...
+              {t('label.replaceImage')}
             </button>
           </div>
         </Field>
       )}
 
-      {/* TEXT MODE */}
       {!isImageMode && <>
-        <Field label="Text">
+        <Field label={t('label.text')}>
           <textarea
             value={textDraft}
             rows={3}
@@ -416,7 +412,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         </Field>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <Field label="Text color" as="div">
+          <Field label={t('label.textColor')} as="div">
             <input
               type="color"
               key={`fg-${selection.id}-${fgHex}`}
@@ -425,7 +421,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               onBlur={(e) => commitColors(hexToMudletColor(e.target.value), snap.bgColor)}
             />
           </Field>
-          <Field label="BG color" as="div">
+          <Field label={t('label.bgColor')} as="div">
             <input
               type="color"
               key={`bg-${selection.id}-${bgHex}`}
@@ -436,7 +432,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           </Field>
         </div>
 
-        <Field label="BG alpha">
+        <Field label={t('label.bgAlpha')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
             <input
               type="range"
@@ -456,15 +452,16 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           </div>
         </Field>
 
-        <Field label="Font" as="div">
+        <Field label={t('label.font')} as="div">
           <FontPicker
             value={snap.font.family}
             options={availableFonts}
             onChange={(family) => commitFont({ family })}
+            searchPlaceholder={t('label.fontSearchPlaceholder')}
           />
         </Field>
 
-        <Field label="Size">
+        <Field label={t('label.size')}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input
               type="number"
@@ -477,11 +474,11 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               style={{ width: 60 }}
             />
             <button
-              title="Auto-fit font size to fill label area"
+              title={t('label.autoFitTitle')}
               onClick={handleFitFontSize}
               style={{ height: 24, padding: '0 6px', fontSize: 12, border: '1px solid var(--border, #444)', borderRadius: 3, cursor: 'pointer', background: 'var(--bg2, #2a2a2a)', whiteSpace: 'nowrap' }}
             >
-              Auto-fit
+              {t('label.autoFit')}
             </button>
             <div style={{ display: 'flex', gap: 4 }}>
               {([
@@ -510,7 +507,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           </div>
         </Field>
 
-        <Field label="Outline color" as="div">
+        <Field label={t('label.outlineColor')} as="div">
           <input
             type="color"
             key={`outline-${selection.id}-${outlineHex}`}
@@ -520,7 +517,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           />
         </Field>
 
-        <Field label="Outline alpha">
+        <Field label={t('label.outlineAlpha')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
             <input
               type="range"
@@ -546,7 +543,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           </div>
         </Field>
 
-        <Field label="Pixmap">
+        <Field label={t('label.pixmap')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
             {snap.pixMap ? (
               <img
@@ -555,10 +552,10 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
                 style={{ maxWidth: '100%', border: '1px solid var(--border, #444)', borderRadius: 3 }}
               />
             ) : (
-              <span className="hint">No pixmap stored</span>
+              <span className="hint">{t('label.noPixmap')}</span>
             )}
             <button onClick={handleRegeneratePixmap} style={{ alignSelf: 'flex-start' }}>
-              Regenerate pixmap
+              {t('label.regeneratePixmap')}
             </button>
           </div>
         </Field>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { pushCommand, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushBatch, buildCustomLineMoveCommands } from '../editor/commands';
 import { hitToSelection, hitStatusLabel } from '../editor/tools';
@@ -23,11 +24,12 @@ interface MoveLabelToState {
 }
 
 export function ContextMenu({ sceneRef }: ContextMenuProps) {
+  const { t } = useTranslation('context');
   const menu = useEditorState((s) => s.contextMenu);
   const ref = useRef<HTMLDivElement | null>(null);
   const [moveToDialog, setMoveToDialog] = useState<MoveToState | null>(null);
   const [moveLabelToDialog, setMoveLabelToDialog] = useState<MoveLabelToState | null>(null);
-  void moveLabelToDialog; // used inside if(menu.kind === 'label') — TS 6 false positive
+  void moveLabelToDialog;
 
   useEffect(() => {
     if (!menu) {
@@ -78,7 +80,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
     store.setState({
       selection: { kind: 'customLine', roomId: menu.roomId, exitName: menu.exitName },
       contextMenu: null,
-      status: `Removed waypoint from '${menu.exitName}' on room ${menu.roomId}`,
+      status: t('menu.removedWaypoint', { exit: menu.exitName, id: menu.roomId }),
     });
   };
 
@@ -88,7 +90,6 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
     const s = store.getState();
     const selectHit = (hit: HitItem) => {
       if (hit.kind === 'room') {
-        // Transition directly to the room context menu so the user can act on it.
         store.setState({
           selection: hitToSelection(hit),
           contextMenu: { kind: 'room', roomId: hit.id, screenX: menu.screenX, screenY: menu.screenY },
@@ -128,7 +129,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         style={{ left: menu.screenX, top: menu.screenY }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className="context-menu-title">Select</div>
+        <div className="context-menu-title">{t('menu.select')}</div>
         {menu.hits.map((hit, i) => (
           <button
             key={i}
@@ -152,7 +153,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         onContextMenu={(e) => e.preventDefault()}
       >
         <button type="button" className="context-menu-item danger" onClick={deletePoint}>
-          Delete waypoint
+          {t('menu.deleteWaypoint')}
         </button>
       </div>
     );
@@ -177,7 +178,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       if (sel?.kind === 'label' && sel.id === menu.labelId) {
         store.setState({ selection: null });
       }
-      store.setState({ status: `Deleted label ${menu.labelId}`, contextMenu: null });
+      store.setState({ status: t('menu.deletedLabel', { id: menu.labelId }), contextMenu: null });
     };
 
     const submitLabelMoveTo = () => {
@@ -196,7 +197,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         }, sceneRef.current);
         sceneRef.current?.refresh();
         store.bumpData();
-        store.setState({ status: `Moved label ${menu.labelId} to (${newX}, ${newY}, ${newZ})` });
+        store.setState({ status: t('menu.movedLabel', { id: menu.labelId, x: newX, y: newY, z: newZ }) });
       }
       store.setState({ contextMenu: null });
     };
@@ -209,7 +210,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
           style={{ left: menu.screenX, top: menu.screenY }}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <div className="context-menu-title">Move label {menu.labelId} to</div>
+          <div className="context-menu-title">{t('menu.moveLabelTo', { id: menu.labelId })}</div>
           <div className="context-menu-coords">
             <div className="context-menu-field">
               <label>X</label>
@@ -238,10 +239,10 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
           </div>
           <div className="context-menu-actions">
             <button type="button" className="context-menu-btn" onClick={() => setMoveLabelToDialog(null)}>
-              Back
+              {t('menu.back')}
             </button>
             <button type="button" className="context-menu-btn primary" onClick={submitLabelMoveTo}>
-              Move
+              {t('menu.move')}
             </button>
           </div>
         </div>
@@ -255,12 +256,12 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         style={{ left: menu.screenX, top: menu.screenY }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className="context-menu-title">Label {menu.labelId}</div>
+        <div className="context-menu-title">{t('menu.labelTitle', { id: menu.labelId })}</div>
         <button type="button" className="context-menu-item" onClick={openLabelMoveTo}>
-          Move to&hellip;
+          {t('menu.moveTo')}
         </button>
         <button type="button" className="context-menu-item danger" onClick={deleteLabel}>
-          Delete label
+          {t('menu.deleteLabel')}
         </button>
       </div>
     );
@@ -304,7 +305,7 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       pushCommand({ kind: 'batch', cmds }, sceneRef.current);
       sceneRef.current?.refresh();
       store.bumpStructure();
-      store.setState({ selection: null, status: `Deleted ${multiIds.length} rooms`, contextMenu: null });
+      store.setState({ selection: null, status: t('menu.deletedRooms', { count: multiIds.length }), contextMenu: null });
       return;
     }
     const rawRoom = st.map.rooms[menu.roomId];
@@ -320,11 +321,11 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
     }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpStructure();
-    const sel = store.getState().selection;
-    if (sel?.kind === 'room' && sel.ids.includes(menu.roomId)) {
+    const curSel = store.getState().selection;
+    if (curSel?.kind === 'room' && curSel.ids.includes(menu.roomId)) {
       store.setState({ selection: null });
     }
-    store.setState({ status: `Deleted room ${menu.roomId}`, contextMenu: null });
+    store.setState({ status: t('menu.deletedRoom', { id: menu.roomId }), contextMenu: null });
   };
 
   const submitMoveTo = () => {
@@ -392,8 +393,8 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       store.bumpStructure();
       store.setState({
         status: multiIds
-          ? `Moved ${multiIds.length} rooms to area ${moveToDialog.areaId} (${newX}, ${newY}, ${newZ})`
-          : `Moved room ${menu.roomId} to area ${moveToDialog.areaId} (${newX}, ${newY}, ${newZ})`,
+          ? t('menu.movedRooms', { count: multiIds.length, areaId: moveToDialog.areaId, x: newX, y: newY, z: newZ })
+          : t('menu.movedRoom', { id: menu.roomId, areaId: moveToDialog.areaId, x: newX, y: newY, z: newZ }),
       });
     }
 
@@ -419,9 +420,11 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         style={{ left: menu.screenX, top: menu.screenY }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className="context-menu-title">{multiIds ? `Move ${multiIds.length} rooms to` : `Move room ${menu.roomId} to`}</div>
+        <div className="context-menu-title">
+          {multiIds ? t('menu.moveRoomsTo', { count: multiIds.length }) : t('menu.moveRoomTo', { id: menu.roomId })}
+        </div>
         <div className="context-menu-field">
-          <label>Area</label>
+          <label>{t('menu.area')}</label>
           <select
             value={moveToDialog.areaId}
             onChange={(e) => setMoveToDialog((d) => d && { ...d, areaId: Number(e.target.value) })}
@@ -459,10 +462,10 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         </div>
         <div className="context-menu-actions">
           <button type="button" className="context-menu-btn" onClick={() => setMoveToDialog(null)}>
-            Back
+            {t('menu.back')}
           </button>
           <button type="button" className="context-menu-btn primary" onClick={submitMoveTo}>
-            Move
+            {t('menu.move')}
           </button>
         </div>
       </div>
@@ -476,9 +479,11 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       style={{ left: menu.screenX, top: menu.screenY }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div className="context-menu-title">{multiIds ? `${multiIds.length} rooms` : `Room ${menu.roomId}`}</div>
+      <div className="context-menu-title">
+        {multiIds ? t('menu.roomsTitle', { count: multiIds.length }) : t('menu.roomTitle', { id: menu.roomId })}
+      </div>
       <button type="button" className="context-menu-item" onClick={openMoveTo}>
-        Move to&hellip;
+        {t('menu.moveTo')}
       </button>
       {multiIds && (
         <>
@@ -487,19 +492,19 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
             className="context-menu-item"
             onClick={() => store.setState({ spreadShrink: { mode: 'spread', factor: 2, centerMode: 'centroid', anchorRoomId: null }, contextMenu: null })}
           >
-            Spread&hellip;
+            {t('menu.spread')}
           </button>
           <button
             type="button"
             className="context-menu-item"
             onClick={() => store.setState({ spreadShrink: { mode: 'shrink', factor: 0.5, centerMode: 'centroid', anchorRoomId: null }, contextMenu: null })}
           >
-            Shrink&hellip;
+            {t('menu.shrink')}
           </button>
         </>
       )}
       <button type="button" className="context-menu-item danger" onClick={deleteRoom}>
-        {multiIds ? `Delete ${multiIds.length} rooms` : 'Delete room'}
+        {multiIds ? t('menu.deleteRooms', { count: multiIds.length }) : t('menu.deleteRoom')}
       </button>
     </div>
   );

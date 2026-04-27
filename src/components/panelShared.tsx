@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
 import type { MudletColor } from '../mapIO';
 
@@ -59,15 +60,16 @@ export function CheckboxField({ checked, onChange, description }: {
 }
 
 export function ToolHint({ activeTool }: { activeTool: string }) {
+  const { t } = useTranslation('panels');
   const hints: Record<string, string> = {
-    select: 'Click a room to select. Drag to move. Arrow keys nudge.',
-    connect: 'Click source, then target. Shift for one-way.',
-    unlink: 'Click an exit line to remove.',
-    addRoom: 'Click an empty grid cell to create a room.',
-    delete: 'Click a room to delete it.',
-    pan: 'Drag to pan. Hold Space with any tool for temporary pan.',
-    customLine: 'Click to add waypoints. Right-click or Enter to finish.',
-    label: 'Click a label to select and edit its properties.',
+    select: t('shared.toolHints.select'),
+    connect: t('shared.toolHints.connect'),
+    unlink: t('shared.toolHints.unlink'),
+    addRoom: t('shared.toolHints.addRoom'),
+    delete: t('shared.toolHints.delete'),
+    pan: t('shared.toolHints.pan'),
+    customLine: t('shared.toolHints.customLine'),
+    label: t('shared.toolHints.label'),
   };
   return <p className="hint-tool">{hints[activeTool] ?? ''}</p>;
 }
@@ -78,6 +80,7 @@ interface UserDataEditorProps {
 }
 
 export function UserDataEditor({ data, onCommit }: UserDataEditorProps) {
+  const { t } = useTranslation('panels');
   const [newKey, setNewKey] = useState('');
   const [newVal, setNewVal] = useState('');
 
@@ -103,26 +106,26 @@ export function UserDataEditor({ data, onCommit }: UserDataEditorProps) {
             onBlur={(e) => { if (e.target.value !== val) onCommit(key, val, e.target.value); }}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           />
-          <button type="button" className="ud-delete" title="Remove entry" onClick={() => onCommit(key, val, null)}>×</button>
+          <button type="button" className="ud-delete" title={t('shared.removeEntry')} onClick={() => onCommit(key, val, null)}>×</button>
         </div>
       ))}
-      {entries.length === 0 && <div className="userdata-empty">— no user data —</div>}
+      {entries.length === 0 && <div className="userdata-empty">{t('shared.noUserData')}</div>}
       <div className="userdata-add">
         <input
           className="ud-new-key"
-          placeholder="key"
+          placeholder={t('shared.keyPlaceholder')}
           value={newKey}
           onChange={(e) => setNewKey(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && newVal !== undefined && addEntry()}
         />
         <input
           className="ud-new-val"
-          placeholder="value"
+          placeholder={t('shared.valuePlaceholder')}
           value={newVal}
           onChange={(e) => setNewVal(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addEntry()}
         />
-        <button type="button" className="ud-add" title="Add entry" onClick={addEntry} disabled={!newKey.trim()}>+</button>
+        <button type="button" className="ud-add" title={t('shared.addEntry')} onClick={addEntry} disabled={!newKey.trim()}>+</button>
       </div>
     </div>
   );

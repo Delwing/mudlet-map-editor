@@ -1,4 +1,5 @@
 import { useState, useLayoutEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useEditorState, store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import { UserDataEditor } from '../panelShared';
@@ -62,6 +63,7 @@ function goToRoom(roomId: number) {
 }
 
 export function MapPanel({ sceneRef }: MapPanelProps) {
+  const { t } = useTranslation('panels');
   const map = useEditorState((s) => s.map);
   const allWarnings = useEditorState((s) => s.warnings);
 
@@ -69,11 +71,7 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
   const [showAcked, setShowAcked] = useState(false);
   const [storeInUserdata, setStoreInUserdata] = useState(false);
 
-  // Recomputed each render; changes only when areas are added/removed.
   const mapKey = map ? mapAckKey(map) : null;
-  // useLayoutEffect so ackedKeys is committed before App's useEffect populates warnings
-  // via useSyncExternalStore, which would otherwise trigger a re-render with empty ackedKeys.
-  // `map` is in deps because reference changes on file load (even if mapKey stays the same).
   useLayoutEffect(() => {
     if (!mapKey || !map) {
       setAckedKeys(new Set());
@@ -97,8 +95,8 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
   if (!map) {
     return (
       <div className="panel-content">
-        <h3>No map loaded</h3>
-        <p className="hint">Drag a .dat file in or load from toolbar.</p>
+        <h3>{t('map.noMap')}</h3>
+        <p className="hint">{t('map.noMapHint')}</p>
       </div>
     );
   }
@@ -160,37 +158,37 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
   function renderWarningContent(w: MapWarning) {
     if (w.kind === 'zeroSizeLabel') return (
       <span className="warning-text">
-        <strong>Zero-size label</strong>
+        <strong>{t('map.warnZeroSizeLabel')}</strong>
         <span className="warning-detail">{w.text ? `"${w.text}"` : `#${w.labelId}`} · {w.areaName}{w.z !== 0 ? ` z=${w.z}` : ''}</span>
       </span>
     );
     if (w.kind === 'selfLinkRoom') return (
       <span className="warning-text">
-        <strong>Self-linking room</strong>
+        <strong>{t('map.warnSelfLinkRoom')}</strong>
         <span className="warning-detail">#{w.roomId} · {w.dirs.join(', ')}</span>
       </span>
     );
     if (w.kind === 'orphanRoom') return (
       <span className="warning-text">
-        <strong>Orphan room</strong>
+        <strong>{t('map.warnOrphanRoom')}</strong>
         <span className="warning-detail">#{w.roomId} · {w.areaName}</span>
       </span>
     );
     if (w.kind === 'danglingExit') return (
       <span className="warning-text">
-        <strong>Dangling exit</strong>
+        <strong>{t('map.warnDanglingExit')}</strong>
         <span className="warning-detail">#{w.roomId} {w.dir} → missing #{w.targetId} · {w.areaName}</span>
       </span>
     );
     if (w.kind === 'duplicateCoord') return (
       <span className="warning-text">
-        <strong>Duplicate coords</strong>
+        <strong>{t('map.warnDuplicateCoord')}</strong>
         <span className="warning-detail">{w.areaName} ({w.x}, {w.y}, {w.z}) · {w.roomIds.map((id) => `#${id}`).join(', ')}</span>
       </span>
     );
     if (w.kind === 'coordMismatch') return (
       <span className="warning-text">
-        <strong>Direction mismatch</strong>
+        <strong>{t('map.warnCoordMismatch')}</strong>
         <span className="warning-detail">#{w.roomId} {w.dir} → #{w.targetId} · {w.areaName}</span>
       </span>
     );
@@ -203,23 +201,23 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
   }
 
   function goBtn(w: MapWarning) {
-    if (w.kind === 'zeroSizeLabel') return <button type="button" className="warning-go-btn" onClick={() => goToLabel(w)}>Go</button>;
-    if (w.kind === 'duplicateCoord') return <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomIds[0])}>Go</button>;
-    if (w.kind === 'plugin') return w.roomId != null ? <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId!)}>Go</button> : null;
-    return <button type="button" className="warning-go-btn" onClick={() => goToRoom((w as any).roomId)}>Go</button>;
+    if (w.kind === 'zeroSizeLabel') return <button type="button" className="warning-go-btn" onClick={() => goToLabel(w)}>{t('map.go')}</button>;
+    if (w.kind === 'duplicateCoord') return <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomIds[0])}>{t('map.go')}</button>;
+    if (w.kind === 'plugin') return w.roomId != null ? <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId!)}>{t('map.go')}</button> : null;
+    return <button type="button" className="warning-go-btn" onClick={() => goToRoom((w as any).roomId)}>{t('map.go')}</button>;
   }
 
   return (
     <div className="panel-content">
-      <h4>Map Info</h4>
+      <h4>{t('map.heading')}</h4>
       <div className="map-stats">
-        <div className="map-stat-row"><span className="map-stat-label">Version</span><span className="map-stat-value">{map.version}</span></div>
-        <div className="map-stat-row"><span className="map-stat-label">Rooms</span><span className="map-stat-value">{roomCount}</span></div>
-        <div className="map-stat-row"><span className="map-stat-label">Areas</span><span className="map-stat-value">{areaCount}</span></div>
-        <div className="map-stat-row"><span className="map-stat-label">Custom envs</span><span className="map-stat-value">{envCount}</span></div>
+        <div className="map-stat-row"><span className="map-stat-label">{t('map.version')}</span><span className="map-stat-value">{map.version}</span></div>
+        <div className="map-stat-row"><span className="map-stat-label">{t('map.rooms')}</span><span className="map-stat-value">{roomCount}</span></div>
+        <div className="map-stat-row"><span className="map-stat-label">{t('map.areas')}</span><span className="map-stat-value">{areaCount}</span></div>
+        <div className="map-stat-row"><span className="map-stat-label">{t('map.customEnvs')}</span><span className="map-stat-value">{envCount}</span></div>
       </div>
 
-      <h4>User Data</h4>
+      <h4>{t('map.userData')}</h4>
       <UserDataEditor
         data={map.mUserData ?? {}}
         onCommit={(key, from, to) => {
@@ -235,14 +233,14 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
             checked={storeInUserdata}
             onChange={(e) => handleStoreInUserdataChange(e.target.checked)}
           />
-          {' '}Store acks in map userdata
+          {' '}{t('map.storeAcks')}
         </label>
       </div>
 
       {allWarnings.length > 0 && (
         <>
           <h4>
-            Warnings{' '}
+            {t('map.warnings')}{' '}
             {activeWarnings.length > 0 && <span className="tab-badge tab-badge--warn">{activeWarnings.length}</span>}
           </h4>
           {activeWarnings.length > 0 && (
@@ -252,7 +250,7 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
                   <span className="warning-icon">⚠</span>
                   {renderWarningContent(w)}
                   {goBtn(w)}
-                  <button type="button" className="warning-ack-btn" onClick={() => ackWarning(w)}>Ack</button>
+                  <button type="button" className="warning-ack-btn" onClick={() => ackWarning(w)}>{t('map.ack')}</button>
                 </div>
               ))}
             </div>
@@ -260,7 +258,7 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
           {ackedWarnings.length > 0 && (
             <div className="warnings-acked-section">
               <button type="button" className="warnings-acked-toggle" onClick={() => setShowAcked((p) => !p)}>
-                {showAcked ? '▾' : '▸'} {ackedWarnings.length} acknowledged
+                {showAcked ? '▾' : '▸'} {t('map.acknowledged', { count: ackedWarnings.length })}
               </button>
               {showAcked && (
                 <div className="warnings-list warnings-list--acked">
@@ -268,7 +266,7 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
                     <div key={warningKey(w)} className="warning-row warning-row--acked">
                       <span className="warning-icon">✓</span>
                       {renderWarningContent(w)}
-                      <button type="button" className="warning-ack-btn warning-ack-btn--unack" onClick={() => unackWarning(w)}>Unack</button>
+                      <button type="button" className="warning-ack-btn warning-ack-btn--unack" onClick={() => unackWarning(w)}>{t('map.unack')}</button>
                     </div>
                   ))}
                 </div>

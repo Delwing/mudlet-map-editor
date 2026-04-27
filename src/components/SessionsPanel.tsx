@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
 import { listSessions, clearSession, clearAllSessions, restoreMapFromSession, type SessionData } from '../editor/session';
 
@@ -35,6 +36,7 @@ function applyAutoDelete(sessions: SessionData[], days: number): SessionData[] {
 }
 
 export function SessionsPanel() {
+  const { t } = useTranslation('sessions');
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [autoDelete, setAutoDelete] = useState<AutoDeleteSettings>(loadAutoDeleteSettings);
@@ -63,7 +65,7 @@ export function SessionsPanel() {
       selection: null,
       hover: null,
       pending: null,
-      status: `Session restored · ${session.roomCount} rooms · ${Object.keys(map.areaNames).length} areas`,
+      status: t('restored', { rooms: session.roomCount, areas: Object.keys(map.areaNames).length }),
       sessionId: session.id,
     });
     store.bumpStructure();
@@ -97,15 +99,15 @@ export function SessionsPanel() {
     }
   };
 
-  if (!loaded) return <div className="empty-state">Loading…</div>;
-  if (sessions.length === 0) return <div className="empty-state">No map loaded.<br />Drag a .dat file in or load from toolbar.<img src="logo.png" alt="logo" className="empty-state-logo" /></div>;
+  if (!loaded) return <div className="empty-state">{t('loading')}</div>;
+  if (sessions.length === 0) return <div className="empty-state">{t('noMap')}<br />{t('noMapHint')}<img src="logo.png" alt="logo" className="empty-state-logo" /></div>;
 
   return (
     <div className="sessions-panel-overlay">
       <div className="sessions-panel">
         <div className="sessions-panel-header">
-          <span>Saved Sessions</span>
-          <button type="button" className="session-delete sessions-delete-all" onClick={handleDeleteAll}>Delete All</button>
+          <span>{t('savedSessions')}</span>
+          <button type="button" className="session-delete sessions-delete-all" onClick={handleDeleteAll}>{t('deleteAll')}</button>
         </div>
         <div className="sessions-list">
             {sessions.map((s) => (
@@ -117,8 +119,8 @@ export function SessionsPanel() {
                   </span>
                 </div>
                 <div className="session-actions">
-                  <button type="button" onClick={() => handleLoad(s)}>Load</button>
-                  <button type="button" className="session-delete" onClick={() => handleDelete(s)}>Delete</button>
+                  <button type="button" onClick={() => handleLoad(s)}>{t('load')}</button>
+                  <button type="button" className="session-delete" onClick={() => handleDelete(s)}>{t('delete')}</button>
                 </div>
               </div>
             ))}
@@ -130,7 +132,7 @@ export function SessionsPanel() {
               checked={autoDelete.enabled}
               onChange={(e) => handleAutoDeleteToggle(e.target.checked)}
             />
-            Auto-delete sessions older than
+            {t('autoDelete')}
           </label>
           <input
             type="number"
@@ -144,7 +146,7 @@ export function SessionsPanel() {
               handleAutoDeleteDays(v);
             }}
           />
-          <span className="sessions-autodelete-unit">days</span>
+          <span className="sessions-autodelete-unit">{t('days')}</span>
         </div>
       </div>
     </div>

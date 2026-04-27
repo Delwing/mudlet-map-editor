@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, saveSwatchState, useEditorState } from '../editor/store';
 import type { Swatch, SwatchSet } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 import { EnvPicker } from './EnvPicker';
 
 export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle | null } }) {
+  const { t } = useTranslation('swatches');
   const swatchSets = useEditorState((s) => s.swatchSets);
   const pluginSwatchSets = useEditorState((s) => s.pluginSwatchSets);
   const activeSwatchSetId = useEditorState((s) => s.activeSwatchSetId);
@@ -15,14 +17,12 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
   const [pos, setPos] = useState({ x: 12, y: 120 });
   const dragRef = useRef<{ ox: number; oy: number; px: number; py: number } | null>(null);
 
-  // Set management UI state
   const [addingSet, setAddingSet] = useState(false);
   const [newSetName, setNewSetName] = useState('');
   const [editingSetName, setEditingSetName] = useState(false);
   const [setNameDraft, setSetNameDraft] = useState('');
 
-  // Swatch edit/add form state
-  const [editId, setEditId] = useState<string | null>(null); // 'new' | swatch id
+  const [editId, setEditId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftSymbol, setDraftSymbol] = useState('');
   const [draftEnv, setDraftEnv] = useState(-1);
@@ -31,7 +31,6 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
   const allSets = [...swatchSets, ...pluginSwatchSets.map((s) => ({ ...s, readonly: true as const }))];
   const activeSet = allSets.find((s) => s.id === activeSwatchSetId) ?? allSets[0] ?? null;
 
-  // Drag to reposition
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragRef.current) return;
@@ -44,7 +43,6 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
-  // Receive picked room values from the canvas
   useEffect(() => {
     const onPick = (e: Event) => {
       const { symbol, environment } = (e as CustomEvent<{ symbol: string; environment: number }>).detail;
@@ -68,9 +66,8 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
     saveSwatchState(newSets, setId, swatchId);
   };
 
-  // Set operations
   const addSet = () => {
-    const name = newSetName.trim() || 'New Set';
+    const name = newSetName.trim() || t('title');
     const id = crypto.randomUUID();
     const newSets = [...swatchSets, { id, name, swatches: [] } as SwatchSet];
     commit(newSets, id, null);
@@ -85,7 +82,7 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
 
   const deleteSet = () => {
     if (!activeSet || swatchSets.length <= 1) return;
-    if (!window.confirm(`Delete set "${activeSet.name}"?`)) return;
+    if (!window.confirm(t('confirmDeleteSet', { name: activeSet.name }))) return;
     const newSets = swatchSets.filter((s) => s.id !== activeSet.id);
     commit(newSets, newSets[0]?.id ?? null, null);
   };
@@ -95,7 +92,6 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
     saveSwatchState(swatchSets, setId, null);
   };
 
-  // Swatch operations
   const activateSwatch = (swatchId: string) => {
     store.setState({ activeSwatchId: swatchId });
     saveSwatchState(swatchSets, activeSwatchSetId, swatchId);
@@ -121,7 +117,7 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
 
   const commitEdit = () => {
     if (!activeSet || !editId) return;
-    const name = draftName.trim() || 'Swatch';
+    const name = draftName.trim() || t('title');
     const symbol = draftSymbol.slice(0, 4);
     if (editId === 'new') {
       const id = crypto.randomUUID();
@@ -152,7 +148,6 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
 
   return (
     <div className="swatch-palette" style={{ left: pos.x, top: pos.y }}>
-      {/* Header / drag handle */}
       <div
         className="swatch-palette-header"
         onMouseDown={(e) => {
@@ -160,14 +155,13 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
           dragRef.current = { ox: e.clientX, oy: e.clientY, px: pos.x, py: pos.y };
         }}
       >
-        <span className="swatch-palette-title">Swatches</span>
+        <span className="swatch-palette-title">{t('title')}</span>
         <button type="button" className="swatch-palette-close" onClick={() => store.setState({ swatchPaletteOpen: false })}>✕</button>
       </div>
 
-      {/* Set selector row */}
       <div className="swatch-set-row">
         {allSets.length === 0 ? (
-          <span className="swatch-empty-hint">No sets yet</span>
+          <span className="swatch-empty-hint">{t('noSets')}</span>
         ) : !activeSet?.readonly && editingSetName ? (
           <>
             <input
@@ -196,13 +190,13 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
               <button
                 type="button"
                 className="swatch-icon-btn"
-                title="Rename set"
+                title={t('renameSet')}
                 onClick={() => { setEditingSetName(true); setSetNameDraft(activeSet?.name ?? ''); }}
               >✏</button>
               <button
                 type="button"
                 className="swatch-icon-btn swatch-icon-btn-danger"
-                title="Delete set"
+                title={t('deleteSet')}
                 disabled={swatchSets.length <= 1}
                 onClick={deleteSet}
               >🗑</button>
@@ -213,7 +207,7 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
           <>
             <input
               className="swatch-set-name-input"
-              placeholder="Set name…"
+              placeholder={t('setNamePlaceholder')}
               value={newSetName}
               onChange={(e) => setNewSetName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addSet(); if (e.key === 'Escape') { setAddingSet(false); setNewSetName(''); } }}
@@ -223,11 +217,10 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
             <button type="button" className="swatch-icon-btn" onClick={() => { setAddingSet(false); setNewSetName(''); }}>✕</button>
           </>
         ) : (
-          <button type="button" className="swatch-icon-btn" title="New set" onClick={() => setAddingSet(true)}>+</button>
+          <button type="button" className="swatch-icon-btn" title={t('newSet')} onClick={() => setAddingSet(true)}>+</button>
         )}
       </div>
 
-      {/* Swatch chips */}
       {activeSet && (
         <div className="swatch-grid">
           {activeSet.swatches.map((sw) => (
@@ -241,27 +234,26 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
               {sw.symbol && <span className="swatch-chip-symbol">{sw.symbol}</span>}
               <span className="swatch-chip-name">{sw.name}</span>
               {!activeSet.readonly && <>
-                <button type="button" className="swatch-chip-edit" title="Edit" onClick={(e) => { e.stopPropagation(); openEdit(sw); }}>✏</button>
-                <button type="button" className="swatch-chip-del" title="Delete" onClick={(e) => { e.stopPropagation(); deleteSwatch(sw.id); }}>×</button>
+                <button type="button" className="swatch-chip-edit" title={t('editSwatch')} onClick={(e) => { e.stopPropagation(); openEdit(sw); }}>✏</button>
+                <button type="button" className="swatch-chip-del" title={t('deleteSwatch')} onClick={(e) => { e.stopPropagation(); deleteSwatch(sw.id); }}>×</button>
               </>}
             </div>
           ))}
-          {!activeSet.readonly && <button type="button" className="swatch-add-btn" title="Add swatch" onClick={openAdd}>+</button>}
+          {!activeSet.readonly && <button type="button" className="swatch-add-btn" title={t('addSwatch')} onClick={openAdd}>+</button>}
         </div>
       )}
 
-      {/* Add/Edit form */}
       {editId && !activeSet?.readonly && (
         picking ? (
           <div className="swatch-pick-banner">
-            <span>Click a room on the canvas to copy its values…</span>
-            <button type="button" className="swatch-icon-btn" onClick={() => store.setState({ pending: null })}>Cancel</button>
+            <span>{t('clickToCopy')}</span>
+            <button type="button" className="swatch-icon-btn" onClick={() => store.setState({ pending: null })}>{t('cancel')}</button>
           </div>
         ) : (
           <div className="swatch-edit-form">
             <input
               className="swatch-edit-name"
-              placeholder="Name"
+              placeholder={t('namePlaceholder')}
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
@@ -269,7 +261,7 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
             />
             <input
               className="swatch-edit-symbol"
-              placeholder="Sym"
+              placeholder={t('symPlaceholder')}
               maxLength={4}
               value={draftSymbol}
               onChange={(e) => setDraftSymbol(e.target.value)}
@@ -298,17 +290,17 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
             <button
               type="button"
               className="swatch-icon-btn"
-              title="Pick symbol &amp; environment from a room on the canvas"
+              title={t('pickFromCanvas')}
               onClick={() => store.setState({ pending: { kind: 'pickSwatch' } })}
             >⊕</button>
             <button type="button" className="swatch-edit-ok" title="Save" onClick={commitEdit}>✓</button>
-            <button type="button" className="swatch-edit-cancel" title="Cancel" onClick={cancelEdit}>✕</button>
+            <button type="button" className="swatch-edit-cancel" title={t('cancel')} onClick={cancelEdit}>✕</button>
           </div>
         )
       )}
 
       {swatchSets.length === 0 && (
-        <div className="swatch-empty">Create a set above, then add swatches to it.</div>
+        <div className="swatch-empty">{t('empty')}</div>
       )}
     </div>
   );

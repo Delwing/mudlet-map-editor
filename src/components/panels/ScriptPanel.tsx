@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { runScript, type ScriptResult } from '../../editor/script';
 import { store } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
@@ -11,10 +12,11 @@ import { ScriptLibraryModal } from './ScriptLibraryModal';
 const ScriptCodeEditor = lazy(() => import('./ScriptCodeEditor'));
 
 function ScriptEditorLoading() {
+  const { t } = useTranslation('panels');
   return (
     <div className="script-editor-loading" role="status" aria-live="polite">
       <div className="script-editor-loading-bar" />
-      <span>Loading editor…</span>
+      <span>{t('script.loadingEditor')}</span>
     </div>
   );
 }
@@ -61,6 +63,7 @@ interface Props {
 }
 
 export function ScriptPanel({ sceneRef }: Props) {
+  const { t } = useTranslation('panels');
   const [code, setCode] = useState(() => localStorage.getItem(LS_KEY) ?? DEFAULT_CODE);
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -73,7 +76,7 @@ export function ScriptPanel({ sceneRef }: Props) {
   const libraryCount = Object.keys(library).length;
   const trimmedName = nameInput.trim();
   const nameExists = trimmedName in library;
-  const saveLabel = nameExists && trimmedName !== currentName ? 'Overwrite' : 'Save';
+  const saveLabel = nameExists && trimmedName !== currentName ? t('script.overwriteBtn') : t('script.saveBtn');
 
   const onSave = () => {
     const name = trimmedName;
@@ -83,7 +86,7 @@ export function ScriptPanel({ sceneRef }: Props) {
     persistLibrary(next);
     setCurrentName(name);
     localStorage.setItem(LS_NAME, name);
-    store.setState({ status: `Script "${name}" saved` });
+    store.setState({ status: t('script.savedStatus', { name }) });
   };
 
   const onLoad = (name: string) => {
@@ -100,7 +103,7 @@ export function ScriptPanel({ sceneRef }: Props) {
     setNameInput(name);
     localStorage.setItem(LS_NAME, name);
     setResult(null);
-    store.setState({ status: `Script "${name}" loaded` });
+    store.setState({ status: t('script.loadedStatus', { name }) });
   };
 
   const onDeleteByName = (name: string) => {
@@ -114,7 +117,7 @@ export function ScriptPanel({ sceneRef }: Props) {
       setNameInput('');
       localStorage.removeItem(LS_NAME);
     }
-    store.setState({ status: `Script "${name}" deleted` });
+    store.setState({ status: t('script.deletedStatus', { name }) });
   };
 
   const onRun = () => {
@@ -128,9 +131,9 @@ export function ScriptPanel({ sceneRef }: Props) {
         const r = runScript(code, scene);
         setResult(r);
         if (r.error) {
-          store.setState({ status: `Script error: ${r.error.message}` });
+          store.setState({ status: t('script.errorStatus', { message: r.error.message }) });
         } else {
-          store.setState({ status: r.commandCount === 0 ? 'Script ran (no changes)' : `Script: ${r.commandCount} change${r.commandCount === 1 ? '' : 's'}` });
+          store.setState({ status: r.commandCount === 0 ? t('script.ranNoChanges') : (r.commandCount === 1 ? t('script.ranChange', { count: r.commandCount }) : t('script.ranChanges', { count: r.commandCount })) });
         }
       } finally {
         setRunning(false);
@@ -146,28 +149,28 @@ export function ScriptPanel({ sceneRef }: Props) {
   return (
     <div className="panel-content script-panel">
       <div className="script-header">
-        <h3>Script</h3>
+        <h3>{t('script.heading')}</h3>
         <div className="script-header-actions">
           <button
             type="button"
             className="script-help-btn"
             onClick={() => setShowLibrary(true)}
-            title="Browse saved scripts"
-          >Library{libraryCount > 0 && <span className="tab-badge">{libraryCount}</span>}</button>
+            title={t('script.libraryTitle')}
+          >{t('script.libraryBtn')}{libraryCount > 0 && <span className="tab-badge">{libraryCount}</span>}</button>
           <button
             type="button"
             className="script-help-btn"
             onClick={() => setShowHelp(true)}
-            title="Show script API reference"
-          >? API</button>
+            title={t('script.apiTitle')}
+          >{t('script.apiBtn')}</button>
         </div>
       </div>
-      <p className="hint">Bulk-edit rooms with JavaScript. One run = one undo step.</p>
+      <p className="hint">{t('script.hint')}</p>
       <div className="script-library">
         <input
           type="text"
           className="script-library-name"
-          placeholder="Script name…"
+          placeholder={t('script.namePlaceholder')}
           value={nameInput}
           onChange={(e) => setNameInput(e.target.value)}
           onKeyDown={(e) => {
@@ -179,7 +182,7 @@ export function ScriptPanel({ sceneRef }: Props) {
           type="button"
           onClick={onSave}
           disabled={!trimmedName}
-          title={nameExists ? `Overwrite "${trimmedName}"` : 'Save current script to library'}
+          title={nameExists ? t('script.overwriteTitle', { name: trimmedName }) : t('script.saveTitle')}
         >{saveLabel}</button>
       </div>
       <div className="script-editor-container">
@@ -198,10 +201,10 @@ export function ScriptPanel({ sceneRef }: Props) {
       </div>
       <div className="script-actions">
         <button type="button" className="script-run-btn" onClick={onRun} disabled={running}>
-          {running ? 'Running…' : 'Run script'}
+          {running ? t('script.running') : t('script.runBtn')}
         </button>
-        <button type="button" onClick={onReset}>Reset</button>
-        <span className="script-hint">Ctrl+Enter to run</span>
+        <button type="button" onClick={onReset}>{t('script.resetBtn')}</button>
+        <span className="script-hint">{t('script.runHint')}</span>
       </div>
       {result && (
         <div className="script-result">
@@ -209,29 +212,29 @@ export function ScriptPanel({ sceneRef }: Props) {
             <div className="script-error-box">
               <div className="script-error-title">{result.error.name}</div>
               <pre className="script-error-msg">{result.error.message}</pre>
-              <div className="hint">All changes rolled back.</div>
+              <div className="hint">{t('script.errorRolledBack')}</div>
             </div>
           ) : (
             <div className="script-ok-box">
-              {result.commandCount === 0 ? 'No changes.' : `Applied ${result.commandCount} change${result.commandCount === 1 ? '' : 's'}.`}
+              {result.commandCount === 0 ? t('script.noChanges') : (result.commandCount === 1 ? t('script.appliedChange', { count: result.commandCount }) : t('script.appliedChanges', { count: result.commandCount }))}
             </div>
           )}
           {result.logs.length > 0 && (
             <>
-              <div className="script-log-title">Log</div>
+              <div className="script-log-title">{t('script.logTitle')}</div>
               <pre className="script-log">{result.logs.join('\n')}</pre>
             </>
           )}
           {result.returnJson !== undefined && (
             <>
               <div className="script-log-title">
-                Result
+                {t('script.resultTitle')}
                 <button
                   type="button"
                   className="script-copy-btn"
                   onClick={() => navigator.clipboard?.writeText(result.returnJson ?? '')}
-                  title="Copy JSON to clipboard"
-                >Copy</button>
+                  title={t('script.copyTitle')}
+                >{t('script.copyBtn')}</button>
               </div>
               <pre className="script-result-json">{result.returnJson}</pre>
             </>

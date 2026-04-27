@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
 import { loadUrlIntoStore } from '../editor/loadFile';
 
 export function UrlLoadModal({ onClose, initialUrl }: { onClose: () => void; initialUrl?: string }) {
+  const { t } = useTranslation('modals');
   const [urlInput, setUrlInput] = useState(initialUrl ?? '');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -30,14 +32,14 @@ export function UrlLoadModal({ onClose, initialUrl }: { onClose: () => void; ini
     >
       <div className="modal" style={{ width: 420 }}>
         <div className="modal-header">
-          <h2>Load map from URL</h2>
+          <h2>{t('urlLoad.title')}</h2>
           <button type="button" className="modal-close" disabled={loading} onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           <div className="modal-add-row">
             <input
               type="url"
-              placeholder="https://example.com/map.dat"
+              placeholder={t('urlLoad.placeholder')}
               value={urlInput}
               disabled={loading}
               autoFocus={!initialUrl}
@@ -48,7 +50,7 @@ export function UrlLoadModal({ onClose, initialUrl }: { onClose: () => void; ini
               }}
             />
             <button type="button" disabled={loading || !urlInput.trim()} onClick={() => handleLoad()}>
-              {loading ? 'Loading…' : 'Load'}
+              {loading ? t('urlLoad.loading') : t('urlLoad.load')}
             </button>
           </div>
           {loading && (
@@ -69,7 +71,7 @@ export function UrlLoadModal({ onClose, initialUrl }: { onClose: () => void; ini
             </div>
           )}
           <p style={{ margin: '10px 0 0', fontSize: 11, color: '#55606f', lineHeight: 1.5 }}>
-            The server must allow cross-origin requests (CORS). If loading fails, download the file and use "Load .dat" instead.
+            {t('urlLoad.corsNote')}
           </p>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import type { Direction } from '../../editor/types';
@@ -10,6 +12,7 @@ export function ExitPanel({ selection, map, sceneRef }: {
   map: MudletMap;
   sceneRef: { current: SceneHandle | null };
 }) {
+  const { t } = useTranslation('panels');
   const fromRoom = map.rooms[selection.fromId];
   const toRoom = map.rooms[selection.toId];
   const OPPOSITE: Record<string, string> = {
@@ -46,12 +49,12 @@ export function ExitPanel({ selection, map, sceneRef }: {
     }
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ selection: null, status: `Removed exit ${selection.fromId} → ${selection.toId}` });
+    store.setState({ selection: null, status: i18n.t('editor:status.removedExit', { from: selection.fromId, to: selection.toId }) });
   };
 
   return (
     <>
-      <h3>Exit</h3>
+      <h3>{t('exit.heading')}</h3>
       <div className="exit-flow">
         <RoomLink id={selection.fromId} name={fromRoom?.name} />
         <div className="exit-flow-center">
@@ -67,7 +70,7 @@ export function ExitPanel({ selection, map, sceneRef }: {
       </div>
       {isBidirectional && (
         <button type="button" className="link-delete-btn link-delete-btn--both" onClick={() => removeExit('both')}>
-          ✕ Remove both directions
+          {t('exit.removeBothDirections')}
         </button>
       )}
     </>

@@ -5,9 +5,10 @@ interface Props {
   value: string;
   options: string[];
   onChange: (family: string) => void;
+  searchPlaceholder?: string;
 }
 
-export function FontPicker({ value, options, onChange }: Props) {
+export function FontPicker({ value, options, onChange, searchPlaceholder = 'Search fonts…' }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlighted, setHighlighted] = useState<number>(-1);
@@ -98,7 +99,7 @@ export function FontPicker({ value, options, onChange }: Props) {
               <input
                 ref={searchRef}
                 className="dropdown-search"
-                placeholder="Search fonts…"
+                placeholder={searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />

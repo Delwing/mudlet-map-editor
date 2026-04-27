@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
 import { pushCommand } from '../editor/commands';
 import type { Command } from '../editor/types';
@@ -14,7 +15,6 @@ interface MultiRoomPanelProps {
   sceneRef: { current: SceneHandle | null };
 }
 
-/** Returns { same: true, value } if all elements are strictly equal, { same: false } otherwise. */
 function unanimous<T>(arr: T[]): { same: true; value: T } | { same: false } {
   if (arr.length === 0) return { same: false };
   const first = arr[0];
@@ -24,9 +24,9 @@ function unanimous<T>(arr: T[]): { same: true; value: T } | { same: false } {
 const COLOR_KEY = 'system.fallback_symbol_color';
 
 export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps) {
+  const { t } = useTranslation('panels');
   const ids = selection.ids;
 
-  // Compute common values once at mount for pre-filling.
   const rooms = ids.map((id) => map.rooms[id]).filter((r): r is NonNullable<typeof r> => r != null);
 
   const commonName = unanimous(rooms.map((r) => r.name ?? ''));
@@ -42,10 +42,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
   const [symbolEnabled, setSymbolEnabled] = useState(false);
   const [symbolDraft, setSymbolDraft] = useState(() => (commonSymbol.same ? commonSymbol.value : ''));
 
-  // null = "clear the color" mode
   const [symbolColorEnabled, setSymbolColorEnabled] = useState(false);
-  // Only pre-fill when all rooms share a real color; null unanimous means "all have no color" —
-  // still start in set-color mode so the picker is clickable.
   const [symbolColorDraft, setSymbolColorDraft] = useState<string | null>(() =>
     commonColor.same && commonColor.value !== null ? commonColor.value : '#ffffff',
   );
@@ -99,15 +96,15 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
     pushCommand({ kind: 'batch', cmds }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Applied bulk edit to ${ids.length} rooms` });
+    store.setState({ status: t('multiRoom.applied', { count: ids.length }) });
   };
 
   const envColor = sceneRef.current?.reader.getColorValue(envDraft) ?? 'rgb(114,1,0)';
 
   return (
     <div className="panel-content">
-      <h3>{ids.length} rooms selected</h3>
-      <p className="hint">Drag to move all. Delete to remove all. Shift+click/drag to add more. Ctrl+click/drag to toggle. Ctrl+A selects all.</p>
+      <h3>{t('multiRoom.heading', { count: ids.length })}</h3>
+      <p className="hint">{t('multiRoom.hint')}</p>
 
       <div className="multi-room-list">
         {ids.map((id) => {
@@ -116,7 +113,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
         })}
       </div>
 
-      <h4>Bulk Edit</h4>
+      <h4>{t('multiRoom.bulkEdit')}</h4>
 
       <div className="multi-room-fields">
         <div className="multi-field-row">
@@ -125,18 +122,18 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             className="multi-field-check"
             checked={nameEnabled}
             onChange={(e) => setNameEnabled(e.target.checked)}
-            title="Enable name override"
+            title={t('multiRoom.enableName')}
           />
           <span className="multi-field-label">
-            Name
-            {!commonName.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+            {t('multiRoom.name')}
+            {!commonName.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
           <input
             className="multi-field-input"
             disabled={!nameEnabled}
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
-            placeholder={commonName.same ? '' : 'mixed'}
+            placeholder={commonName.same ? '' : t('multiRoom.mixed')}
           />
         </div>
 
@@ -146,11 +143,11 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             className="multi-field-check"
             checked={symbolEnabled}
             onChange={(e) => setSymbolEnabled(e.target.checked)}
-            title="Enable symbol override"
+            title={t('multiRoom.enableSymbol')}
           />
           <span className="multi-field-label">
-            Symbol
-            {!commonSymbol.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+            {t('multiRoom.symbol')}
+            {!commonSymbol.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
           <input
             className="multi-field-input multi-field-symbol"
@@ -158,7 +155,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             value={symbolDraft}
             maxLength={4}
             onChange={(e) => setSymbolDraft(e.target.value)}
-            placeholder={commonSymbol.same ? '' : 'mixed'}
+            placeholder={commonSymbol.same ? '' : t('multiRoom.mixed')}
           />
         </div>
 
@@ -168,11 +165,11 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             className="multi-field-check"
             checked={symbolColorEnabled}
             onChange={(e) => setSymbolColorEnabled(e.target.checked)}
-            title="Enable symbol color override"
+            title={t('multiRoom.enableSymbolColor')}
           />
           <span className="multi-field-label">
-            Symbol color
-            {!commonColor.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+            {t('multiRoom.symbolColor')}
+            {!commonColor.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
           <input
             type="color"
@@ -185,7 +182,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             type="button"
             className="symbol-color-clear"
             disabled={!symbolColorEnabled}
-            title={symbolColorDraft === null ? 'Restore: set a color instead of clearing' : 'Clear: remove symbol color from all rooms'}
+            title={symbolColorDraft === null ? t('multiRoom.restoreSymbolColor') : t('multiRoom.clearSymbolColor')}
             onClick={() => setSymbolColorDraft((v) => (v === null ? '#ffffff' : null))}
           >
             {symbolColorDraft === null ? '+' : '×'}
@@ -198,11 +195,11 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             className="multi-field-check"
             checked={envEnabled}
             onChange={(e) => setEnvEnabled(e.target.checked)}
-            title="Enable environment override"
+            title={t('multiRoom.enableEnv')}
           />
           <span className="multi-field-label">
-            Env
-            {!commonEnv.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+            {t('multiRoom.env')}
+            {!commonEnv.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
           <div className="env-field-row" style={{ position: 'relative' }}>
             <button
@@ -211,7 +208,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
               style={{ background: envEnabled ? envColor : 'rgba(80,80,90,0.5)' }}
               disabled={!envEnabled}
               onClick={() => setEnvPickerOpen((v) => !v)}
-              title={envEnabled ? `Env ${envDraft} — click to change` : 'Enable to set'}
+              title={envEnabled ? t('multiRoom.envPickerChange', { id: envDraft }) : t('multiRoom.enableToSet')}
             />
             <span className="env-id-label">#{envDraft}</span>
             {envPickerOpen && envEnabled && (
@@ -232,11 +229,11 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             className="multi-field-check"
             checked={weightEnabled}
             onChange={(e) => setWeightEnabled(e.target.checked)}
-            title="Enable weight override"
+            title={t('multiRoom.enableWeight')}
           />
           <span className="multi-field-label">
-            Weight
-            {!commonWeight.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+            {t('multiRoom.weight')}
+            {!commonWeight.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
           <input
             type="number"
@@ -246,7 +243,7 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             value={weightDraft}
             onChange={(e) => setWeightDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            placeholder={commonWeight.same ? '' : 'mixed'}
+            placeholder={commonWeight.same ? '' : t('multiRoom.mixed')}
           />
         </div>
 
@@ -256,17 +253,17 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             className="multi-field-check"
             checked={lockEnabled}
             onChange={(e) => setLockEnabled(e.target.checked)}
-            title="Enable lock override"
+            title={t('multiRoom.enableLock')}
           />
           <span className="multi-field-label">
-            Lock
-            {!commonLock.same && <span className="multi-field-mixed" title="Rooms have different values">~</span>}
+            {t('multiRoom.lock')}
+            {!commonLock.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
           <button
             type="button"
             className={`multi-lock-btn${lockDraft ? ' lock-active' : ''}`}
             disabled={!lockEnabled}
-            title={lockDraft ? 'Locked — click to set unlocked' : 'Unlocked — click to set locked'}
+            title={lockDraft ? t('multiRoom.locked') : t('multiRoom.unlocked')}
             onClick={() => setLockDraft((v) => !v)}
           >
             <LockIcon locked={lockDraft} />
@@ -281,11 +278,11 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
           disabled={!anyEnabled}
           onClick={handleApply}
         >
-          Apply to {ids.length} rooms
+          {t('multiRoom.applyTo', { count: ids.length })}
         </button>
         {anyEnabled && (
           <p className="multi-room-warning">
-            This will overwrite the checked properties on all {ids.length} selected rooms.
+            {t('multiRoom.warning', { count: ids.length })}
           </p>
         )}
       </div>

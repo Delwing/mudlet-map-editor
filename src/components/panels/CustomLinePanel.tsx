@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import { finishCustomLine, restorePendingCustomLine } from '../../editor/tools';
@@ -13,6 +14,7 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
   pending: PendingCustomLine;
   sceneRef: { current: SceneHandle | null };
 }) {
+  const { t } = useTranslation('panels');
   const updatePending = (patch: Partial<typeof pending>) => store.setState({ pending: { ...pending, ...patch } });
   const colorHex = mudletColorToHex(pending.color);
 
@@ -34,46 +36,46 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
 
   const cancel = () => {
     if (sceneRef.current) restorePendingCustomLine(pending, sceneRef.current);
-    store.setState({ pending: null, activeTool: 'select', status: 'Custom line cancelled.' });
+    store.setState({ pending: null, activeTool: 'select', status: t('customLine.cancelledStatus') });
     store.bumpData();
   };
 
   return (
     <div className="side-panel">
       <div className="panel-content">
-      <h3>Custom Line</h3>
+      <h3>{t('customLine.heading')}</h3>
       <p className="hint" style={{ marginBottom: 10 }}>
-        Drawing on room #{pending.roomId}.<br />
-        Click to add waypoints · right-click or Enter to finish · Esc cancels.
+        {t('customLine.drawingOn', { id: pending.roomId })}<br />
+        {t('customLine.drawingHint')}
       </p>
 
-      <Field label="Exit Name">
+      <Field label={t('customLine.exitName')}>
         <span className="readonly">{pending.exitName}</span>
       </Field>
       {pending.companion && (
         <p className="hint" style={{ fontSize: 11, margin: '4px 0 8px', color: '#8f97a6' }}>
-          Covering both ways — stub on room #{pending.companion.roomId} ({pending.companion.exitName}).
+          {t('customLine.coveringBothWays', { id: pending.companion.roomId, exitName: pending.companion.exitName })}
         </p>
       )}
       <div className="cl-form-row" style={{ marginTop: 8 }}>
-        <label className="cl-form-label">Color</label>
+        <label className="cl-form-label">{t('room.clColor')}</label>
         <input type="color" value={colorHex} onChange={(e) => commitAttrPatch({ color: hexToMudletColor(e.target.value) })} />
         <select value={pending.style} onChange={(e) => commitAttrPatch({ style: Number(e.target.value) })} style={{ flex: 1, marginLeft: 6 }}>
-          <option value={1}>Solid</option>
-          <option value={2}>Dash</option>
-          <option value={3}>Dot</option>
-          <option value={4}>Dash-Dot</option>
-          <option value={5}>Dash-Dot-Dot</option>
+          <option value={1}>{t('room.solid')}</option>
+          <option value={2}>{t('room.dash')}</option>
+          <option value={3}>{t('room.dot')}</option>
+          <option value={4}>{t('room.dashDot')}</option>
+          <option value={5}>{t('room.dashDotDot')}</option>
         </select>
       </div>
       <div className="cl-form-row">
-        <label className="cl-form-label">Arrow</label>
+        <label className="cl-form-label">{t('room.clArrow')}</label>
         <input type="checkbox" checked={pending.arrow} onChange={(e) => commitAttrPatch({ arrow: e.target.checked })} />
       </div>
-      <p style={{ color: '#8f97a6', fontSize: 12, margin: '8px 0' }}>Waypoints: {pending.points.length - 1}</p>
+      <p style={{ color: '#8f97a6', fontSize: 12, margin: '8px 0' }}>{t('customLine.waypoints')}: {pending.points.length - 1}</p>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button type="button" onClick={() => finishCustomLine(pending)} disabled={pending.points.length < 2} style={{ flex: 1 }}>Finish</button>
-        <button type="button" onClick={cancel} style={{ flex: 1 }}>Cancel</button>
+        <button type="button" onClick={() => finishCustomLine(pending)} disabled={pending.points.length < 2} style={{ flex: 1 }}>{t('customLine.finish')}</button>
+        <button type="button" onClick={cancel} style={{ flex: 1 }}>{t('customLine.cancel')}</button>
       </div>
       </div>
     </div>
@@ -87,6 +89,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
   map: MudletMap;
   sceneRef: { current: SceneHandle | null };
 }) {
+  const { t } = useTranslation('panels');
   const room = map.rooms[selection.roomId];
   const cl = room?.customLines?.[selection.exitName];
   const color = room?.customLinesColor?.[selection.exitName];
@@ -103,7 +106,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
   const [activeDraft, setActiveDraft] = useState<PointDraft | null>(null);
 
   if (!room || !cl) {
-    return <h3>Custom line not found</h3>;
+    return <h3>{t('customLine.notFound')}</h3>;
   }
 
   const buildSnapshot = (overrides: Partial<{ color: MudletColor; style: number; arrow: boolean }>) => ({
@@ -136,7 +139,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ selection: null, status: `Custom line '${selection.exitName}' removed` });
+    store.setState({ selection: null, status: t('customLine.removedStatus', { exit: selection.exitName }) });
   };
 
   const selectPoint = (i: number) => {
@@ -189,7 +192,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     store.bumpData();
     store.setState({
       selection: { kind: 'customLine', roomId: selection.roomId, exitName: selection.exitName },
-      status: `Removed waypoint from '${selection.exitName}' on room ${selection.roomId}`,
+      status: t('customLine.removedWaypoint', { exit: selection.exitName, id: selection.roomId }),
     });
   };
 
@@ -225,7 +228,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
         previousSnapshot,
         companion: null,
       },
-      status: 'Click canvas to add waypoints · right-click or Enter to finish · Esc cancels',
+      status: t('customLine.startStatus'),
     });
     store.bumpData();
   };
@@ -235,7 +238,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     const snapped: [number, number][] = cl.map(([x, y]) => [snap(x, step), -snap(-y, step)]);
     const changed = snapped.some((p, i) => p[0] !== cl[i][0] || p[1] !== cl[i][1]);
     if (!changed) {
-      store.setState({ status: `Custom line '${selection.exitName}' already on grid.` });
+      store.setState({ status: t('customLine.alreadyOnGrid', { exit: selection.exitName }) });
       return;
     }
     pushCommand({
@@ -247,40 +250,40 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
-    store.setState({ status: `Snapped custom line '${selection.exitName}' to grid` });
+    store.setState({ status: t('customLine.snappedToGrid', { exit: selection.exitName }) });
   };
 
   return (
     <>
-      <h3>Custom Line</h3>
+      <h3>{t('customLine.heading')}</h3>
       <div className="link-info">
         <div className="link-info-row">
-          <span className="label">Exit</span>
+          <span className="label">{t('customLine.exitInfo')}</span>
           <span className="readonly">{selection.exitName}</span>
         </div>
         <div className="link-info-row">
-          <span className="label">{targetRoom != null ? 'From' : 'Room'}</span>
+          <span className="label">{targetRoom != null ? t('customLine.fromRoom') : t('customLine.roomLabel')}</span>
           <RoomLink id={selection.roomId} name={room.name} />
         </div>
         {targetRoom != null && targetRoomId != null && (
           <div className="link-info-row">
-            <span className="label">To</span>
+            <span className="label">{t('customLine.toRoom')}</span>
             <RoomLink id={targetRoomId} name={targetRoom.name} />
           </div>
         )}
         <div className="link-info-row">
-          <span className="label">Points</span>
+          <span className="label">{t('customLine.pointsCount')}</span>
           <span className="readonly">{cl.length}</span>
         </div>
       </div>
 
       <p className="hint" style={{ margin: '8px 0 10px', fontSize: 11 }}>
-        Right-click a segment to insert a waypoint · drag a waypoint to move it · Delete to remove
+        {t('customLine.rightClickHint')}
       </p>
 
       <div className="cl-form" style={{ marginTop: 10 }}>
         <div className="cl-form-row">
-          <label className="cl-form-label">Color</label>
+          <label className="cl-form-label">{t('room.clColor')}</label>
           <input
             type="color"
             value={colorHex}
@@ -292,15 +295,15 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
             onChange={(e) => { const v = Number(e.target.value); setStyleDraft(v); applyChange({ style: v }); }}
             style={{ flex: 1, marginLeft: 6 }}
           >
-            <option value={1}>Solid</option>
-            <option value={2}>Dash</option>
-            <option value={3}>Dot</option>
-            <option value={4}>Dash-Dot</option>
-            <option value={5}>Dash-Dot-Dot</option>
+            <option value={1}>{t('room.solid')}</option>
+            <option value={2}>{t('room.dash')}</option>
+            <option value={3}>{t('room.dot')}</option>
+            <option value={4}>{t('room.dashDot')}</option>
+            <option value={5}>{t('room.dashDotDot')}</option>
           </select>
         </div>
         <div className="cl-form-row">
-          <label className="cl-form-label">Arrow</label>
+          <label className="cl-form-label">{t('room.clArrow')}</label>
           <input
             type="checkbox"
             checked={arrowDraft}
@@ -310,7 +313,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
       </div>
 
       <div className="cl-waypoints" style={{ marginTop: 12 }}>
-        <div className="cl-waypoints-header">Waypoints</div>
+        <div className="cl-waypoints-header">{t('customLine.waypoints')}</div>
         {cl.map((_pt, i) => (
           <div
             key={i}
@@ -343,7 +346,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
             <button
               type="button"
               className="cl-waypoint-del"
-              title="Delete waypoint"
+              title={t('customLine.deleteWaypoint')}
               onMouseDown={(e) => { e.stopPropagation(); deletePointAt(i); }}
             >×</button>
           </div>
@@ -351,15 +354,15 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
       </div>
 
       <button type="button" style={{ marginTop: 12, width: '100%' }} onClick={startRedraw}>
-        Redraw line
+        {t('customLine.redrawLine')}
       </button>
 
       <button type="button" style={{ marginTop: 8, width: '100%' }} onClick={snapToGrid} disabled={cl.length === 0}>
-        Snap to grid
+        {t('customLine.snapToGrid')}
       </button>
 
       <button type="button" className="link-delete-btn" style={{ marginTop: 8 }} onClick={removeCustomLine}>
-        Remove custom line
+        {t('customLine.removeCustomLine')}
       </button>
     </>
   );

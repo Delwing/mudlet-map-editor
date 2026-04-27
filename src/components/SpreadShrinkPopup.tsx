@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { pushBatch, buildCustomLineMoveCommands } from '../editor/commands';
 import type { SceneHandle } from '../editor/scene';
@@ -9,6 +10,7 @@ interface SpreadShrinkPopupProps {
 }
 
 export function SpreadShrinkPopup({ sceneRef }: SpreadShrinkPopupProps) {
+  const { t } = useTranslation('context');
   const spreadShrink = useEditorState((s) => s.spreadShrink);
   const selection = useEditorState((s) => s.selection);
   const ref = useRef<HTMLDivElement>(null);
@@ -18,7 +20,7 @@ export function SpreadShrinkPopup({ sceneRef }: SpreadShrinkPopupProps) {
     const cancel = () => store.setState({ spreadShrink: null });
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancel(); };
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0) return; // right-clicks are handled by the contextmenu event
+      if (e.button !== 0) return;
       if (ref.current && !ref.current.contains(e.target as Node)) cancel();
     };
     window.addEventListener('keydown', onKey);
@@ -92,39 +94,42 @@ export function SpreadShrinkPopup({ sceneRef }: SpreadShrinkPopupProps) {
       pushBatch(cmds, scene);
       scene.refresh();
       store.bumpStructure();
-      store.setState({ status: `${mode === 'spread' ? 'Spread' : 'Shrunk'} ${rooms.length} rooms (×${factor.toFixed(2)})` });
+      const statusKey = mode === 'spread' ? 'spread.spreadStatus' : 'spread.shrinkStatus';
+      store.setState({ status: t(statusKey, { count: rooms.length, factor: factor.toFixed(2) }) });
     }
     store.setState({ spreadShrink: null });
   };
 
+  const titleKey = mode === 'spread' ? 'spread.spreadTitle' : 'spread.shrinkTitle';
+
   return (
     <div ref={ref} className="spread-shrink-popup" onContextMenu={(e) => e.preventDefault()}>
       <div className="spread-shrink-title">
-        {mode === 'spread' ? 'Spread' : 'Shrink'} {selection.ids.length} rooms
+        {t(titleKey, { count: selection.ids.length })}
       </div>
       <div className="spread-shrink-mode">
         <button type="button" className={`spread-shrink-tab${mode === 'spread' ? ' active' : ''}`} onClick={() => setMode('spread')}>
-          Spread
+          {t('spread.spread')}
         </button>
         <button type="button" className={`spread-shrink-tab${mode === 'shrink' ? ' active' : ''}`} onClick={() => setMode('shrink')}>
-          Shrink
+          {t('spread.shrink')}
         </button>
       </div>
       <div className="spread-shrink-mode">
         <button type="button" className={`spread-shrink-tab${centerMode === 'centroid' ? ' active' : ''}`} onClick={() => setCenterMode('centroid')}>
-          Centroid
+          {t('spread.centroid')}
         </button>
         <button type="button" className={`spread-shrink-tab${centerMode === 'anchor' ? ' active' : ''}`} onClick={() => setCenterMode('anchor')}>
-          Anchor
+          {t('spread.anchor')}
         </button>
       </div>
       {centerMode === 'anchor' && (
         <div className="spread-shrink-anchor">
           {anchorRoomId === null
-            ? <span className="spread-shrink-anchor-hint">Right-click a room to set anchor</span>
+            ? <span className="spread-shrink-anchor-hint">{t('spread.rightClickAnchor')}</span>
             : (
               <>
-                <span>Anchor: room {anchorRoomId}</span>
+                <span>{t('spread.anchorRoom', { id: anchorRoomId })}</span>
                 <button type="button" className="spread-shrink-anchor-clear" onClick={() => setCenterMode('anchor')}>×</button>
               </>
             )
@@ -132,7 +137,7 @@ export function SpreadShrinkPopup({ sceneRef }: SpreadShrinkPopupProps) {
         </div>
       )}
       <div className="spread-shrink-field">
-        <label>Scale factor</label>
+        <label>{t('spread.scaleFactor')}</label>
         <input
           type="number"
           min="0.01"
@@ -144,10 +149,10 @@ export function SpreadShrinkPopup({ sceneRef }: SpreadShrinkPopupProps) {
       </div>
       <div className="spread-shrink-actions">
         <button type="button" className="context-menu-btn" onClick={() => store.setState({ spreadShrink: null })}>
-          Cancel
+          {t('spread.cancel')}
         </button>
         <button type="button" className="context-menu-btn primary" onClick={apply}>
-          Apply
+          {t('spread.apply')}
         </button>
       </div>
     </div>

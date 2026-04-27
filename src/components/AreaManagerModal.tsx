@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { pushBatch, pushCommand } from '../editor/commands';
 import { nextAreaId } from '../editor/mapHelpers';
@@ -19,6 +20,7 @@ type DeleteConfirm = {
 };
 
 export function AreaPanel({ sceneRef }: AreaPanelProps) {
+  const { t } = useTranslation('areas');
   const map = useEditorState((s) => s.map);
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -26,7 +28,7 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null);
   const [expandedUd, setExpandedUd] = useState<number | null>(null);
 
-  if (!map) return <div className="modal-empty">No map loaded.</div>;
+  if (!map) return <div className="modal-empty">{t('noMap')}</div>;
 
   const areas = Object.entries(map.areaNames)
     .map(([id, name]) => ({ id: Number(id), name: name as string, roomCount: map.areas[Number(id)]?.rooms.length ?? 0 }))
@@ -39,7 +41,7 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
     pushCommand({ kind: 'addArea', id, name: trimmed }, sceneRef.current);
     store.setState({ currentAreaId: id, currentZ: 0, selection: null, pending: null });
     store.bumpStructure();
-    store.setState({ status: `Area '${trimmed}' added (ID ${id})` });
+    store.setState({ status: t('added', { name: trimmed, id }) });
     setNewName('');
   };
 
@@ -90,7 +92,7 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
       sceneRef.current?.refresh();
     }
     store.bumpStructure();
-    store.setState({ status: `Area '${name}' and ${rooms.length} rooms deleted` });
+    store.setState({ status: t('deleted', { name, count: rooms.length }) });
     setDeleteConfirm(null);
   };
 
@@ -105,7 +107,7 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
     if (s.currentAreaId === deleteConfirm.id) store.setState({ currentAreaId: targetId });
     else sceneRef.current?.refresh();
     store.bumpStructure();
-    store.setState({ status: `Moved ${deleteConfirm.rooms.length} rooms to area #${targetId}, deleted '${deleteConfirm.name}'` });
+    store.setState({ status: t('moved', { count: deleteConfirm.rooms.length, targetId, name: deleteConfirm.name }) });
     setDeleteConfirm(null);
   };
 
@@ -114,7 +116,7 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
     if (trimmed && trimmed !== from) {
       pushCommand({ kind: 'renameArea', id, from, to: trimmed }, sceneRef.current);
       store.bumpStructure();
-      store.setState({ status: `Renamed area to '${trimmed}'` });
+      store.setState({ status: t('renamed', { name: trimmed }) });
     }
     setEditingId(null);
   };
@@ -125,16 +127,16 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
     <div className="panel-content">
       <div className="modal-add-row">
         <input
-          placeholder="New area name…"
+          placeholder={t('newAreaPlaceholder')}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
         />
-        <button type="button" onClick={handleAdd} disabled={!newName.trim()}>Add</button>
+        <button type="button" onClick={handleAdd} disabled={!newName.trim()}>{t('add')}</button>
       </div>
 
       <div className="modal-list">
-        {areas.length === 0 && <div className="modal-empty">No areas.</div>}
+        {areas.length === 0 && <div className="modal-empty">{t('noAreas')}</div>}
         {areas.map(({ id, name, roomCount }) => (
           <div key={id}>
             <div className="modal-list-row">
@@ -151,15 +153,15 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
                   }}
                 />
               ) : (
-                <span className="modal-list-name" onDoubleClick={() => { setEditingId(id); setEditDraft(name); }} title="Double-click to rename">
+                <span className="modal-list-name" onDoubleClick={() => { setEditingId(id); setEditDraft(name); }} title={t('doubleClickToRename')}>
                   {name}
                 </span>
               )}
               <span className="modal-list-meta">#{id} · {roomCount}r</span>
               <div className="modal-list-actions">
-                <button type="button" onClick={() => { setEditingId(id); setEditDraft(name); }}>Rename</button>
-                <button type="button" onClick={() => setExpandedUd(expandedUd === id ? null : id)} title="Edit user data">UD</button>
-                <button type="button" className="danger icon-btn" title="Delete area" onClick={() => requestDelete(id, name)}>✕</button>
+                <button type="button" onClick={() => { setEditingId(id); setEditDraft(name); }}>{t('rename')}</button>
+                <button type="button" onClick={() => setExpandedUd(expandedUd === id ? null : id)} title={t('editUserData')}>UD</button>
+                <button type="button" className="danger icon-btn" title={t('deleteArea')} onClick={() => requestDelete(id, name)}>✕</button>
               </div>
             </div>
 
@@ -177,28 +179,28 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
 
             {deleteConfirm?.id === id && deleteConfirm.mode === 'confirming' && (
               <div className="area-delete-confirm">
-                <p><strong>{name}</strong> has {deleteConfirm.rooms.length} room{deleteConfirm.rooms.length !== 1 ? 's' : ''}. Choose:</p>
+                <p><strong>{name}</strong> {t('hasRooms', { name, count: deleteConfirm.rooms.length })}</p>
                 <div className="area-delete-actions">
                   <button
                     type="button"
                     className="danger"
                     onClick={() => executeDeleteArea(id, name, deleteConfirm.rooms)}
                   >
-                    Delete all rooms &amp; area
+                    {t('deleteAllRooms')}
                   </button>
                   <div className="area-move-row">
                     <select
                       value={deleteConfirm.moveTarget}
                       onChange={(e) => setDeleteConfirm({ ...deleteConfirm, moveTarget: e.target.value === '' ? '' : Number(e.target.value) })}
                     >
-                      <option value="">Move rooms to…</option>
+                      <option value="">{t('moveRoomsTo')}</option>
                       {otherAreas.map((a) => (
                         <option key={a.id} value={a.id}>{a.name} (#{a.id})</option>
                       ))}
                     </select>
-                    <button type="button" onClick={executeMoveRooms} disabled={deleteConfirm.moveTarget === ''}>Move &amp; delete</button>
+                    <button type="button" onClick={executeMoveRooms} disabled={deleteConfirm.moveTarget === ''}>{t('moveAndDelete')}</button>
                   </div>
-                  <button type="button" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+                  <button type="button" onClick={() => setDeleteConfirm(null)}>{t('cancelDelete')}</button>
                 </div>
               </div>
             )}
