@@ -469,56 +469,41 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     const hasCustomLine = !!room.customLines?.[dirKey];
     const isPicking = pending?.kind === 'pickExit' && pending.fromId === selId && pending.dir === d;
     return (
-      <div key={dir} className={`compass-cell${isActive ? ' has-exit' : ''}${lineFormFor === dir ? ' active' : ''}${isPicking ? ' picking-exit' : ''}`}>
+      <div key={dir} className={[
+        'compass-cell',
+        hasExit ? 'has-exit' : '',
+        isStub && !hasExit ? 'is-stub' : '',
+        lineFormFor === dir ? 'active' : '',
+        isPicking ? 'picking-exit' : '',
+      ].filter(Boolean).join(' ')}>
+        {/* Line 1: badge · [room link | stub badge | room input] · [delete | pick] */}
         <div className="cc-header">
           <span className="cc-label">{DIR_ABBREV[dir]}</span>
-          <span className="cc-header-btn-slot">
-            {isActive && (
-              <button
-                type="button"
-                className={`exit-line-btn${hasCustomLine ? ' has-line' : ''}`}
-                onClick={() => handleLineButton(dir)}
-                title={hasCustomLine ? 'Edit custom line' : 'Draw custom line'}
-              >
-                {hasCustomLine
-                  ? (() => { const c = room.customLinesColor?.[dirKey]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <span className="cl-swatch" style={{ background: rgb }} />; })()
-                  : <span className="exit-line-icon">∿</span>
-                }
-              </button>
-            )}
-            <button
-              type="button"
-              className={`cc-icon-btn cc-stub-btn${isStub ? ' stub-active' : ''}`}
-              title={isStub ? 'Remove stub' : hasExit ? 'Convert to stub' : 'Add stub'}
-              onClick={() => toggleStub(d, isStub, v)}
-            >S</button>
-            {isActive && (
+          {hasExit && <RoomLink id={v} className="cc-target" />}
+          {isStub && !hasExit && <span className="cc-stub-label">STUB</span>}
+          {!isActive && (
+            <input
+              type="number"
+              className="cc-exit-input"
+              placeholder="#"
+              value={exitDrafts[dir] ?? ''}
+              onChange={(e) => setExitDrafts((prev) => ({ ...prev, [dir]: e.target.value }))}
+              onBlur={(e) => {
+                const id = parseInt(e.target.value, 10);
+                if (!isNaN(id)) { addExit(d, id); setExitDrafts((prev) => ({ ...prev, [dir]: '' })); }
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            />
+          )}
+          {isActive
+            ? (
               <button
                 type="button"
                 className="cc-icon-btn cc-delete-btn"
                 title={hasExit ? 'Remove exit' : 'Remove stub'}
                 onClick={() => deleteExit(d, hasExit, v, isStub)}
-              >×</button>
-            )}
-          </span>
-        </div>
-        <div className="cc-middle">
-          {hasExit && <RoomLink id={v} className="cc-target" />}
-          {isStub && !hasExit && <span className="cc-stub-label">stub</span>}
-          {!isActive && (
-            <div className="cc-exit-add">
-              <input
-                type="number"
-                className="cc-exit-input"
-                placeholder="#"
-                value={exitDrafts[dir] ?? ''}
-                onChange={(e) => setExitDrafts((prev) => ({ ...prev, [dir]: e.target.value }))}
-                onBlur={(e) => {
-                  const id = parseInt(e.target.value, 10);
-                  if (!isNaN(id)) { addExit(d, id); setExitDrafts((prev) => ({ ...prev, [dir]: '' })); }
-                }}
-                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              />
+              >X</button>
+            ) : (
               <button
                 type="button"
                 className={`cc-pick-btn${isPicking ? ' picking' : ''}`}
@@ -527,41 +512,71 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               >
                 <CrosshairIcon />
               </button>
-            </div>
-          )}
+            )
+          }
         </div>
-        <div className="cc-footer">
-          <button
-            type="button"
-            className={`cc-door-btn ${DOOR_CLASSES[doorState]}${!isActive ? ' cc-dim' : ''}`}
-            title={isActive ? DOOR_TITLES[doorState] : undefined}
-            disabled={!isActive}
-            onClick={isActive ? () => changeDoor(d, doorState, (doorState + 1) % 4) : undefined}
-          >
-            <DoorIcon />
-          </button>
-          <button
-            type="button"
-            className={`cc-icon-btn${isLocked ? ' lock-active' : ''}${!isActive ? ' cc-dim' : ''}`}
-            title={isActive ? (isLocked ? 'Locked — click to unlock' : 'Unlocked — click to lock') : undefined}
-            disabled={!isActive}
-            onClick={isActive ? () => toggleExitLock(d, isLocked) : undefined}
-          ><LockIcon locked={isLocked} /></button>
-          <span className={`cc-weight-wrap${!isActive ? ' cc-dim' : ''}`}>
-            <WeightIcon />
-            <input
-              key={`${selId}-${dir}-${exitWeight}`}
-              type="number"
-              className="cc-weight"
-              min={1}
-              defaultValue={exitWeight}
-              disabled={!isActive}
-              title="Exit weight"
-              onBlur={(e) => changeWeight(d, exitWeight, Math.max(1, parseInt(e.target.value, 10) || 1))}
-              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            />
-          </span>
-        </div>
+        {hasExit && (
+          <div className="cc-line2">
+            <button
+              type="button"
+              className={`exit-line-btn${hasCustomLine ? '' : ' no-line'}`}
+              onClick={() => handleLineButton(dir)}
+              title={hasCustomLine ? 'Edit custom line' : 'Draw custom line'}
+            >
+              {hasCustomLine
+  ? (() => { const c = room.customLinesColor?.[dirKey]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <><span className="cl-swatch" style={{ background: rgb }} /><span className="exit-line-label">Custom line</span></>; })()
+  : <><span className="cl-placeholder">∿</span><span className="exit-line-label">Custom line</span></>
+}
+            </button>
+          </div>
+        )}
+        {hasExit && (
+          <div className="cc-footer">
+            <button
+              type="button"
+              className={`cc-door-btn ${DOOR_CLASSES[doorState]}`}
+              title={DOOR_TITLES[doorState]}
+              onClick={() => changeDoor(d, doorState, (doorState + 1) % 4)}
+            >
+              <DoorIcon />
+            </button>
+            <button
+              type="button"
+              className="cc-icon-btn cc-stub-btn"
+              title="Convert to stub"
+              onClick={() => toggleStub(d, false, v)}
+            >STUB</button>
+            <button
+              type="button"
+              className={`cc-icon-btn${isLocked ? ' lock-active' : ''}`}
+              title={isLocked ? 'Locked — click to unlock' : 'Unlocked — click to lock'}
+              onClick={() => toggleExitLock(d, isLocked)}
+            ><LockIcon locked={isLocked} /></button>
+            <span className="cc-weight-wrap">
+              <WeightIcon />
+              <input
+                key={`${selId}-${dir}-${exitWeight}`}
+                type="number"
+                className="cc-weight"
+                min={1}
+                defaultValue={exitWeight}
+                title="Exit weight"
+                onBlur={(e) => changeWeight(d, exitWeight, Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              />
+            </span>
+          </div>
+        )}
+        {!isActive && (
+          <div className="cc-footer-empty">
+            <button
+              type="button"
+              className="cc-icon-btn cc-stub-btn"
+              title="Mark as stub — exit direction exists but destination is unknown"
+              onClick={() => toggleStub(d, false, v)}
+            >STUB</button>
+          </div>
+        )}
       </div>
     );
   };
@@ -702,7 +717,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               style={{ visibility: symbolColor !== null ? 'visible' : 'hidden' }}
               title="Clear symbol color"
               onClick={() => { setSymbolColor(null); commitSymbolColor(null); }}
-            >×</button>
+            >X</button>
           </div>
         </Field>
       </div>
@@ -759,22 +774,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               <div className={`compass-cell has-exit${lineFormFor === name ? ' active' : ''}`}>
                 <div className="cc-header">
                   <span className="cc-label" title={name}>{name}</span>
-                  <span className="cc-header-btn-slot">
-                    <button
-                      type="button"
-                      className={`exit-line-btn${hasCustomLine ? ' has-line' : ''}`}
-                      onClick={() => handleLineButton(name)}
-                      title={hasCustomLine ? 'Edit custom line' : 'Draw custom line'}
-                    >
-                      {hasCustomLine
-                        ? (() => { const c = room.customLinesColor?.[name]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <span className="cl-swatch" style={{ background: rgb }} />; })()
-                        : <span className="exit-line-icon">∿</span>
-                      }
-                    </button>
-                  </span>
-                </div>
-                <div className="cc-middle">
                   <RoomLink id={toId} className="cc-target" />
+                  <button
+                    type="button"
+                    className="cc-icon-btn cc-delete-btn"
+                    title="Remove special exit"
+                    onClick={() => removeSpecialExit(name, toId)}
+                  >X</button>
                 </div>
                 <div className="cc-footer">
                   <button
@@ -784,6 +790,17 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                     onClick={() => changeSpecialDoor(name, doorState, (doorState + 1) % 4)}
                   >
                     <DoorIcon />
+                  </button>
+                  <button
+                    type="button"
+                    className={`exit-line-btn se-line-btn${hasCustomLine ? '' : ' no-line'}`}
+                    onClick={() => handleLineButton(name)}
+                    title={hasCustomLine ? 'Edit custom line' : 'Draw custom line'}
+                  >
+                    {hasCustomLine
+                      ? (() => { const c = room.customLinesColor?.[name]; const rgb = c ? `rgb(${c.r},${c.g},${c.b})` : '#fff'; return <><span className="cl-swatch" style={{ background: rgb }} /><span className="exit-line-label">Custom line</span></>; })()
+                      : <><span className="cl-placeholder">∿</span><span className="exit-line-label">Custom line</span></>
+                    }
                   </button>
                   <span className="cc-weight-wrap">
                     <WeightIcon />
@@ -798,12 +815,6 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
                       onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                     />
                   </span>
-                  <button
-                    type="button"
-                    className="cc-icon-btn"
-                    title="Remove special exit"
-                    onClick={() => removeSpecialExit(name, toId)}
-                  >✕</button>
                 </div>
               </div>
               {lineFormFor === name && renderLineForm(name)}

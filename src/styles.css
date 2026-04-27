@@ -1327,37 +1327,59 @@ html, body, #root {
 }
 
 .exit-line-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid rgba(143, 184, 255, 0.1);
-  color: #6a7588;
+  justify-content: flex-start;
+  gap: 6px;
+  background: rgba(5, 8, 15, 0.7);
+  border: 1px solid rgba(143, 184, 255, 0.18);
+  color: #5a7090;
   cursor: pointer;
-  width: 22px;
-  height: 20px;
-  padding: 0;
+  height: 22px;
+  padding: 0 6px;
   border-radius: 3px;
-  font-size: 13px;
+  font-size: 10px;
   line-height: 1;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.exit-line-btn:hover {
-  color: #cfe1ff;
-  border-color: rgba(52, 100, 168, 0.6);
-  background: rgba(30, 53, 83, 0.4);
+.exit-line-label {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }
 
-.exit-line-btn.has-line {
-  border-color: rgba(52, 100, 168, 0.5);
-  background: rgba(6, 9, 16, 0.6);
+.exit-line-btn:hover {
+  color: #8fb8ff;
+  border-color: rgba(52, 100, 168, 0.6);
+}
+
+.exit-line-btn.no-line {
+  background: transparent;
+  border-color: rgba(143, 184, 255, 0.2);
+  color: #8f97a6;
+}
+
+.exit-line-btn.no-line:hover {
+  color: #8fb8ff;
+  border-color: rgba(52, 100, 168, 0.6);
 }
 
 .exit-line-btn .cl-swatch {
   width: 12px;
   height: 10px;
   border-radius: 2px;
+}
+
+.exit-line-btn .cl-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.5;
 }
 
 .exit-line-icon {
@@ -1395,14 +1417,14 @@ html, body, #root {
 
 .special-exits-list .compass-cell {
   height: auto;
+  justify-content: flex-start;
+  gap: 5px;
 }
 
 .special-exits-list .cc-label {
   max-width: 120px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  display: inline-block;
 }
 
 .special-exit-add {
@@ -1598,21 +1620,22 @@ html, body, #root {
 }
 
 .compass-cell {
+  --cc-row-h: 26px;
   background: rgba(8, 12, 20, 0.55);
   border: 1px solid rgba(143, 184, 255, 0.07);
   border-radius: 5px;
   padding: 4px 5px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  height: 86px;
+  justify-content: space-between;
+  height: 96px;
   box-sizing: border-box;
   overflow: hidden;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .compass-extra .compass-cell {
-  height: 86px;
+  height: 96px;
 }
 
 .compass-cell.compass-center {
@@ -1658,27 +1681,70 @@ html, body, #root {
 .cc-room-weight::-webkit-inner-spin-button { -webkit-appearance: none; }
 .cc-room-weight:focus { border-color: rgba(52, 100, 168, 0.7); outline: none; color: #e6e9ef; }
 
-.cc-header {
+/* ── Row containers: all three rows share the same fixed height ── */
+.cc-header,
+.cc-line2,
+.cc-footer,
+.cc-footer-empty {
+  height: var(--cc-row-h);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 3px;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.cc-header-btn-slot {
-  height: 20px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
+
+/* ── Every element in a row is exactly row-height tall ── */
+.compass-cell .cc-label,
+.compass-cell .cc-target,
+.compass-cell .cc-stub-label,
+.compass-cell .cc-exit-input,
+.compass-cell .cc-door-btn,
+.compass-cell .cc-icon-btn,
+.compass-cell .cc-pick-btn,
+.compass-cell .exit-line-btn,
+.compass-cell .cc-weight,
+.compass-cell .cc-weight-wrap {
+  height: var(--cc-row-h);
+  box-sizing: border-box;
 }
 
-.cc-middle {
+/* ── Flex roles within the header row ── */
+.cc-header .cc-target,
+.cc-header .cc-stub-label,
+.cc-header .cc-exit-input {
   flex: 1;
+  min-width: 0;
+}
+
+/* Text-bearing elements center their content via inner flex */
+.cc-header .cc-target,
+.cc-header .cc-stub-label {
   display: flex;
   align-items: center;
-  justify-content: center;
+  font-size: 11px;
+  padding: 0 3px 0 6px;
+  border-radius: 3px;
 }
+
+.cc-header .cc-target {
+  border: 1px solid rgba(143, 184, 255, 0.2);
+}
+
+.cc-header .cc-stub-label {
+  border: 1px solid rgba(200, 160, 48, 0.35);
+}
+
+/* Custom line button fills the line2 row */
+.cc-line2 .exit-line-btn { flex: 1; }
+
+.cc-footer { gap: 6px; }
+
+/* In special exit footer, custom line takes most space; weight stays compact */
+.se-line-btn { flex: 1; }
+.se-line-btn ~ .cc-weight-wrap { flex: 0 0 auto; }
+.se-line-btn ~ .cc-weight-wrap .cc-weight { width: 36px; flex: none; }
 
 .cc-dim {
   opacity: 0.22;
@@ -1695,15 +1761,35 @@ html, body, #root {
 }
 
 .cc-label {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 0 6px;
+  font-size: 13px;
   font-weight: 700;
-  color: rgba(43, 51, 64, 0.8);
+  color: rgba(60, 72, 90, 0.9);
   font-family: ui-monospace, Consolas, monospace;
   letter-spacing: 0.04em;
+  background: rgba(15, 22, 35, 0.8);
+  border: 1px solid rgba(143, 184, 255, 0.1);
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .compass-cell.has-exit .cc-label {
   color: #8fb8ff;
+  border-color: rgba(143, 184, 255, 0.2);
+  background: rgba(15, 22, 40, 0.9);
+}
+
+.compass-cell.is-stub {
+  border-color: rgba(200, 160, 48, 0.18);
+}
+.compass-cell.is-stub .cc-label {
+  color: #c8a030;
+  border-color: rgba(200, 160, 48, 0.25);
+  background: rgba(20, 16, 8, 0.9);
 }
 
 .cc-target {
@@ -1725,19 +1811,10 @@ html, body, #root {
 }
 
 .cc-stub-label {
-  display: block;
-  text-align: center;
-  font-size: 9px;
-  color: #55606f;
-  font-style: italic;
-  padding: 1px 0;
-}
-
-.cc-footer {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-top: 3px;
+  font-size: 10px;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #b08828;
+  letter-spacing: 0.03em;
 }
 
 /* Compass icon buttons — scoped under .compass-cell to beat .side-panel button specificity */
@@ -1748,16 +1825,14 @@ html, body, #root {
   padding: 0;
   border-radius: 3px;
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 24px;
-  font-size: 11px;
+  width: 28px;
+  font-size: 12px;
   font-weight: 700;
   font-family: ui-monospace, Consolas, monospace;
-  box-sizing: border-box;
   transition: color 0.15s, border-color 0.15s;
 }
 
@@ -1775,17 +1850,15 @@ html, body, #root {
 .compass-cell .cc-icon-btn.stub-active   { color: #e6c84a; border-color: rgba(90, 78, 30, 0.7); }
 .compass-cell .cc-icon-btn.cc-delete-btn { color: #7a4040; }
 .compass-cell .cc-icon-btn.cc-delete-btn:hover { color: #f07070; border-color: rgba(92, 28, 28, 0.7); }
+.compass-cell .cc-icon-btn.cc-stub-btn { width: auto; padding: 0 7px; font-size: 10px; }
 
-/* Stub + delete live in the header — match exit-line-btn 22×20 size */
-.cc-header-btn-slot .cc-icon-btn {
-  width: 22px;
-  height: 20px;
-  font-size: 10px;
+/* Delete button in header */
+.cc-header .cc-delete-btn {
+  font-size: 14px;
+  line-height: 1;
+  border-color: rgba(143, 184, 255, 0.18);
 }
 
-/* Dim state (no exit) — override hover too so disabled buttons stay dim */
-.compass-cell .cc-dim,
-.compass-cell .cc-dim:hover { opacity: 0.2; pointer-events: none; border-color: rgba(143,184,255,0.06); color: #5a7090; }
 
 .cc-weight {
   background: rgba(5, 8, 15, 0.7);
@@ -1796,7 +1869,6 @@ html, body, #root {
   width: 0;
   flex: 1;
   min-width: 0;
-  height: 24px;
   padding: 0 3px;
   border-radius: 2px;
   -moz-appearance: textfield;
@@ -1837,11 +1909,10 @@ html, body, #root {
 
 .cc-exit-input {
   background: rgba(5, 8, 15, 0.7);
-  border: 1px solid rgba(143, 184, 255, 0.07);
+  border: 1px solid rgba(143, 184, 255, 0.18);
   color: #55606f;
   font-size: 9px;
   font-family: ui-monospace, Consolas, monospace;
-  height: 24px;
   width: 0;
   flex: 1;
   min-width: 0;
@@ -1857,18 +1928,16 @@ html, body, #root {
 .compass-cell .cc-pick-btn,
 .special-exit-add .cc-pick-btn {
   background: rgba(5, 8, 15, 0.7);
-  border: 1px solid rgba(143, 184, 255, 0.07);
+  border: 1px solid rgba(143, 184, 255, 0.18);
   border-radius: 3px;
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 26px;
   padding: 0;
   color: #4a6070;
-  box-sizing: border-box;
   transition: color 0.15s, border-color 0.15s;
 }
 .compass-cell .cc-pick-btn:hover,
