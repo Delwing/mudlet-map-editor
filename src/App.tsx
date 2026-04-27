@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { HelpModal } from './components/HelpModal';
+import { RendererSettingsModal, loadRendererSettings, applyRendererSettings } from './components/RendererSettingsModal';
 import { UrlLoadModal } from './components/UrlLoadModal';
 import { SidePanel } from './components/SidePanel';
 import { ContextMenu } from './components/ContextMenu';
@@ -80,6 +81,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   const [showHelp, setShowHelp] = useState(false);
   const [showUrlLoad, setShowUrlLoad] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [autoLoadUrl, setAutoLoadUrl] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('map');
@@ -136,6 +138,10 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     if (!map || !containerRef.current) return;
     const scene = createScene(map, containerRef.current);
     sceneRef.current = scene;
+    const savedRendererSettings = loadRendererSettings();
+    if (Object.keys(savedRendererSettings).length > 0) {
+      applyRendererSettings(scene, savedRendererSettings);
+    }
     const { currentAreaId, currentZ } = store.getState();
     if (currentAreaId != null) {
       scene.setArea(currentAreaId, currentZ, getViewInsets());
@@ -641,7 +647,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       <div className="map-viewport">
         <div ref={containerRef} className="map-container" />
         {!mapLoaded && <SessionsPanel />}
-        <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} />
+        <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} onSettingsClick={() => setShowSettings(true)} />
 <SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} pluginRoomSections={pluginRoomSections} />
       </div>
       <ContextMenu sceneRef={sceneRef} />
@@ -652,6 +658,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         <SearchPanel onClose={() => setShowSearch(false)} />
       </>}
       <SpreadShrinkPopup sceneRef={sceneRef} />
+      {showSettings && mapLoaded && <RendererSettingsModal onClose={() => setShowSettings(false)} sceneRef={sceneRef} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {(showUrlLoad || autoLoadUrl) && (
         <UrlLoadModal

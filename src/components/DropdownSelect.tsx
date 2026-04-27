@@ -24,6 +24,7 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
   const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
+  const mouseHighlightRef = useRef(false);
 
   const selected = options.find((o) => o.value === value);
   const filtered = searchable && search.trim()
@@ -43,9 +44,10 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
     item?.scrollIntoView({ block: 'center' });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On arrow navigation: keep highlighted item visible (nearest, not center)
+  // On keyboard navigation: keep highlighted item visible (nearest, not center)
   useEffect(() => {
     if (!open || !optionsRef.current || highlighted < 0) return;
+    if (mouseHighlightRef.current) { mouseHighlightRef.current = false; return; }
     const item = optionsRef.current.children[highlighted] as HTMLElement | undefined;
     item?.scrollIntoView({ block: 'nearest' });
   }, [highlighted]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,7 +125,7 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
                   type="button"
                   className={`dropdown-option${o.value === value ? ' selected' : ''}${i === highlighted ? ' highlighted' : ''}`}
                   onClick={() => { onChange(o.value); setOpen(false); }}
-                  onMouseEnter={() => setHighlighted(i)}
+                  onMouseEnter={() => { mouseHighlightRef.current = true; setHighlighted(i); }}
                 >
                   {o.label}
                 </button>

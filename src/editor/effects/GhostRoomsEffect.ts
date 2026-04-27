@@ -17,7 +17,7 @@ export class GhostRoomsEffect implements LiveEffect {
   private dash = [0.2, 0.15];
 
   constructor(
-    private readonly roomSize: number,
+    private readonly settings: { roomSize: number },
     private readonly sceneRef: { current: SceneHandle | null },
   ) {}
 
@@ -98,7 +98,8 @@ export class GhostRoomsEffect implements LiveEffect {
     }
 
     const pad = 0.05;
-    const size = this.roomSize + pad * 2;
+    const rs = this.settings.roomSize;
+    const size = rs + pad * 2;
 
     for (const [id, pos] of positions) {
       const liveRoom = scene?.getRenderRoom(id);
@@ -119,8 +120,8 @@ export class GhostRoomsEffect implements LiveEffect {
       }
       rect.fill(fill);
       rect.stroke(stroke);
-      rect.x(pos.x - this.roomSize / 2 - pad);
-      rect.y(pos.y - this.roomSize / 2 - pad);
+      rect.x(pos.x - rs / 2 - pad);
+      rect.y(pos.y - rs / 2 - pad);
       rect.width(size);
       rect.height(size);
     }

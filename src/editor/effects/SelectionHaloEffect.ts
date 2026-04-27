@@ -10,7 +10,7 @@ export class SelectionHaloEffect implements LiveEffect {
   private strokeWidth = 0.08;
   private dash = [0.2, 0.15];
 
-  constructor(private readonly roomSize: number, private readonly sceneRef: { current: SceneHandle | null }) {}
+  constructor(private readonly settings: { roomSize: number }, private readonly sceneRef: { current: SceneHandle | null }) {}
 
   attach(layer: Konva.Layer): void {
     this.layer = layer;
@@ -62,11 +62,12 @@ export class SelectionHaloEffect implements LiveEffect {
 
     // Update or create rects for wanted IDs.
     const pad = 0.18;
-    const size = this.roomSize + pad * 2;
+    const rs = this.settings.roomSize;
+    const size = rs + pad * 2;
     for (const id of wanted) {
       const room = scene!.getRenderRoom(id)!;
-      const x = room.x - this.roomSize / 2 - pad;
-      const y = room.y - this.roomSize / 2 - pad;
+      const x = room.x - rs / 2 - pad;
+      const y = room.y - rs / 2 - pad;
       let rect = this.rects.get(id);
       if (!rect) {
         rect = new Konva.Rect({

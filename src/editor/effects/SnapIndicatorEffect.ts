@@ -8,15 +8,16 @@ export class SnapIndicatorEffect implements LiveEffect {
   private layer?: Konva.Layer;
   private unsubscribe?: () => void;
 
-  constructor(private readonly roomSize: number) {}
+  constructor(private readonly settings: { roomSize: number }) {}
 
   attach(layer: Konva.Layer): void {
     this.layer = layer;
+    const rs = this.settings.roomSize;
     this.rect = new Konva.Rect({
-      width: this.roomSize,
-      height: this.roomSize,
-      offsetX: this.roomSize / 2,
-      offsetY: this.roomSize / 2,
+      width: rs,
+      height: rs,
+      offsetX: rs / 2,
+      offsetY: rs / 2,
       fill: 'rgba(143, 184, 255, 0.25)',
       stroke: '#8fb8ff',
       strokeWidth: 0.04,
@@ -35,6 +36,10 @@ export class SnapIndicatorEffect implements LiveEffect {
     }
   }
 
+  syncPositions(): void {
+    this.sync(store.getState());
+  }
+
   destroy(): void {
     this.unsubscribe?.();
     this.rect?.destroy();
@@ -50,6 +55,11 @@ export class SnapIndicatorEffect implements LiveEffect {
       }
       return;
     }
+    const rs = this.settings.roomSize;
+    this.rect.width(rs);
+    this.rect.height(rs);
+    this.rect.offsetX(rs / 2);
+    this.rect.offsetY(rs / 2);
     this.rect.x(c.x);
     this.rect.y(c.y);
     this.rect.visible(true);

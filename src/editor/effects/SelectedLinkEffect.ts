@@ -21,7 +21,7 @@ export class SelectedLinkEffect implements LiveEffect {
 
   constructor(
     private readonly sceneRef: { current: SceneHandle | null },
-    _roomSize: number,
+    _settings: { roomSize: number },
   ) {}
 
   attach(layer: Konva.Layer): void {

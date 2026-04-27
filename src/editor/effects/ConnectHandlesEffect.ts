@@ -21,7 +21,7 @@ export class ConnectHandlesEffect implements LiveEffect {
   private layer?: Konva.Layer;
   private unsubscribe?: () => void;
 
-  constructor(private readonly roomSize: number, private readonly sceneRef: { current: SceneHandle | null }) {}
+  constructor(private readonly settings: { roomSize: number }, private readonly sceneRef: { current: SceneHandle | null }) {}
 
   attach(layer: Konva.Layer): void {
     this.layer = layer;
@@ -46,6 +46,10 @@ export class ConnectHandlesEffect implements LiveEffect {
     this.layer?.batchDraw();
   }
 
+  syncPositions(): void {
+    this.sync(store.getState());
+  }
+
   destroy(): void {
     this.unsubscribe?.();
     this.source?.group.destroy();
@@ -57,10 +61,10 @@ export class ConnectHandlesEffect implements LiveEffect {
     const handles = new Map<Direction, Konva.Circle>();
     for (const [, , dir] of HANDLE_OFFSETS) {
       const c = new Konva.Circle({
-        radius: this.roomSize * 0.12,
+        radius: this.settings.roomSize * 0.12,
         fill: 'rgba(143, 184, 255, 0.85)',
         stroke: '#cfe1ff',
-        strokeWidth: this.roomSize * 0.02,
+        strokeWidth: this.settings.roomSize * 0.02,
         listening: false,
       });
       handles.set(dir, c);
@@ -75,7 +79,7 @@ export class ConnectHandlesEffect implements LiveEffect {
     activeDir: Direction | null,
     mode: 'idle' | 'hover' | 'drag-source' | 'drag-target',
   ): void {
-    const half = this.roomSize / 2;
+    const half = this.settings.roomSize / 2;
     // Only the active handle changes colour — others stay at a uniform base
     // so the user doesn't see all 8 redraw when the cursor crosses sector boundaries.
     const baseFill = 'rgba(143, 184, 255, 0.85)';

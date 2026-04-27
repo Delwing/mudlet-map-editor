@@ -45,16 +45,16 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   const sceneRef: { current: SceneHandle | null } = { current: null };
 
   const marquee = new MarqueeEffect();
-  const selectionHalo = new SelectionHaloEffect(settings.roomSize, sceneRef);
-  const hoverHalo = new HoverHaloEffect(settings.roomSize, sceneRef);
+  const selectionHalo = new SelectionHaloEffect(settings, sceneRef);
+  const hoverHalo = new HoverHaloEffect(settings, sceneRef);
   const rubberBand = new RubberBandEffect(sceneRef);
-  const snapIndicator = new SnapIndicatorEffect(settings.roomSize);
-  const connectHandles = new ConnectHandlesEffect(settings.roomSize, sceneRef);
+  const snapIndicator = new SnapIndicatorEffect(settings);
+  const connectHandles = new ConnectHandlesEffect(settings, sceneRef);
   const customLinePreview = new CustomLinePreviewEffect(sceneRef);
-  const selectedLink = new SelectedLinkEffect(sceneRef, settings.roomSize);
+  const selectedLink = new SelectedLinkEffect(sceneRef, settings);
   const labelHalo = new LabelHaloEffect(sceneRef);
   const selectionCenter = new SelectionCenterEffect(sceneRef);
-  const ghostRooms = new GhostRoomsEffect(settings.roomSize, sceneRef);
+  const ghostRooms = new GhostRoomsEffect(settings, sceneRef);
 
   const gridOverlay = new GridOverlayEffect(
     settings.gridColor,
@@ -107,7 +107,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       renderer.camera.panToMapPoint(mapX, mapY);
       gridOverlay.syncVisibility();
     },
-    refresh() { renderer.refresh(); selectionHalo.syncPositions(); labelHalo.syncPositions(); selectionCenter.syncPositions(); ghostRooms.syncPositions(); },
+    refresh() { renderer.refresh(); selectionHalo.syncPositions(); hoverHalo.syncPositions(); snapIndicator.syncPositions(); connectHandles.syncPositions(); labelHalo.syncPositions(); selectionCenter.syncPositions(); ghostRooms.syncPositions(); },
     destroy() {
       delete container.dataset.editorCursor;
       detach();

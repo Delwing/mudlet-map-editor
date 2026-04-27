@@ -17,7 +17,7 @@ export class HoverHaloEffect implements LiveEffect {
   private unsubscribe?: () => void;
   private currentScale = 1;
 
-  constructor(private readonly roomSize: number, private readonly sceneRef: { current: SceneHandle | null }) {}
+  constructor(private readonly settings: { roomSize: number }, private readonly sceneRef: { current: SceneHandle | null }) {}
 
   attach(layer: Konva.Layer): void {
     this.layer = layer;
@@ -44,6 +44,10 @@ export class HoverHaloEffect implements LiveEffect {
       if (c instanceof Shape) c.strokeWidth(linkStroke);
     });
     this.layer?.batchDraw();
+  }
+
+  syncPositions(): void {
+    this.sync(store.getState());
   }
 
   destroy(): void {
@@ -74,9 +78,10 @@ export class HoverHaloEffect implements LiveEffect {
         return;
       }
       const pad = 0.12;
-      const size = this.roomSize + pad * 2;
-      this.roomRect.x(room.x - this.roomSize / 2 - pad);
-      this.roomRect.y(room.y - this.roomSize / 2 - pad);
+      const rs = this.settings.roomSize;
+      const size = rs + pad * 2;
+      this.roomRect.x(room.x - rs / 2 - pad);
+      this.roomRect.y(room.y - rs / 2 - pad);
       this.roomRect.width(size);
       this.roomRect.height(size);
       this.roomRect.visible(true);
