@@ -58,6 +58,12 @@ npm run build     # Type-check and bundle for production
 npm run preview   # Preview the production build
 ```
 
+## Extending with plugins
+
+Drop a file at `src/plugins/<name>/index.ts` with a default export implementing `EditorPlugin` and it is picked up automatically at build time. Plugins can add sidebar tabs, room panel sections, swatch presets, map check warnings, and lifecycle hooks (map open/close/save, app ready, custom overlay UI).
+
+See [docs/plugins.md](docs/plugins.md) for the full interface reference and examples.
+
 ## Tech Stack
 
 - **React 19** + **TypeScript**

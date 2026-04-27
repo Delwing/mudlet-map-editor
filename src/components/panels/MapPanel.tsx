@@ -146,11 +146,18 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
         <span className="warning-detail">#{w.roomId} {w.dir} → #{w.targetId} · {w.areaName}</span>
       </span>
     );
+    if (w.kind === 'plugin') return (
+      <span className="warning-text">
+        <strong>{w.message}</strong>
+        {w.detail && <span className="warning-detail">{w.detail}</span>}
+      </span>
+    );
   }
 
   function goBtn(w: MapWarning) {
     if (w.kind === 'zeroSizeLabel') return <button type="button" className="warning-go-btn" onClick={() => goToLabel(w)}>Go</button>;
     if (w.kind === 'duplicateCoord') return <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomIds[0])}>Go</button>;
+    if (w.kind === 'plugin') return w.roomId != null ? <button type="button" className="warning-go-btn" onClick={() => goToRoom(w.roomId!)}>Go</button> : null;
     return <button type="button" className="warning-go-btn" onClick={() => goToRoom((w as any).roomId)}>Go</button>;
   }
 

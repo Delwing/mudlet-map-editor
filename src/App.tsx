@@ -126,10 +126,16 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   const warningAckVersion = useEditorState((s) => s.warningAckVersion);
   useEffect(() => {
     if (!map) { store.setState({ warnings: [] }); return; }
-    store.setState({ warnings: collectWarnings(sceneRef, map) });
+    const builtIn = collectWarnings(sceneRef, map);
+    const pluginWarnings = plugins.flatMap((p, i) => {
+      const results = p.mapChecks?.(map, sceneRef) ?? [];
+      const pluginId = p.id ?? String(i);
+      return results.map((r) => ({ kind: 'plugin' as const, pluginId, ...r }));
+    });
+    store.setState({ warnings: [...builtIn, ...pluginWarnings] });
   // sceneRef is stable — intentionally omitted
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, undoCount, warningAckVersion]);
+  }, [map, undoCount, warningAckVersion, plugins]);
 
   // Scene lifecycle: keyed on the raw map reference, so a file load (new MudletMap
   // identity) tears down and recreates the scene, while in-place mutations

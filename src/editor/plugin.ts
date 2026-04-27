@@ -3,6 +3,17 @@ import type { MudletMap, MudletRoom } from '../mapIO';
 import type { SwatchSet } from './types';
 import type { SceneHandle } from './scene';
 
+export interface PluginCheckResult {
+  /** Stable identifier for this warning instance; used to namespace ack keys. */
+  id: string;
+  /** Bold title shown in the warnings list. */
+  message: string;
+  /** Optional secondary description. */
+  detail?: string;
+  /** If set, the "Go" button navigates to this room. */
+  roomId?: number;
+}
+
 export interface SidebarTab {
   id: string;
   label: string;
@@ -22,6 +33,8 @@ export interface RoomPanelSection {
 }
 
 export interface EditorPlugin {
+  /** Stable identifier used to namespace plugin warning ack keys. Defaults to array index if omitted. */
+  id?: string;
   onAppReady?(): Promise<void>;
   onMapOpened?(map: MudletMap): void;
   onMapClosed?(): void;
@@ -31,4 +44,6 @@ export interface EditorPlugin {
   swatchSets?(): SwatchSet[];
   /** Contribute additional sections rendered at the bottom of the room selection panel. */
   roomPanelSections?(): RoomPanelSection[];
+  /** Return custom map warnings. Called whenever built-in warnings are recomputed. */
+  mapChecks?(map: MudletMap, sceneRef: { current: SceneHandle | null }): PluginCheckResult[];
 }

@@ -8,7 +8,8 @@ export type MapWarning =
   | { kind: 'orphanRoom'; roomId: number; areaName: string }
   | { kind: 'danglingExit'; roomId: number; dir: string; targetId: number; areaName: string }
   | { kind: 'duplicateCoord'; roomIds: number[]; areaId: number; areaName: string; x: number; y: number; z: number }
-  | { kind: 'coordMismatch'; roomId: number; dir: string; targetId: number; areaName: string };
+  | { kind: 'coordMismatch'; roomId: number; dir: string; targetId: number; areaName: string }
+  | { kind: 'plugin'; pluginId: string; id: string; message: string; detail?: string; roomId?: number };
 
 export function warningKey(w: MapWarning): string {
   switch (w.kind) {
@@ -18,6 +19,7 @@ export function warningKey(w: MapWarning): string {
     case 'danglingExit':   return `danglingExit:${w.roomId}:${w.dir}`;
     case 'duplicateCoord': return `duplicateCoord:${w.areaId}:${w.x}:${w.y}:${w.z}`;
     case 'coordMismatch':  return `coordMismatch:${w.roomId}:${w.dir}`;
+    case 'plugin':         return `plugin:${w.pluginId}:${w.id}`;
   }
 }
 
