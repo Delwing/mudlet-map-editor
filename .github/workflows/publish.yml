@@ -21,6 +21,7 @@ jobs:
           node-version: 24
           cache: npm
           registry-url: 'https://registry.npmjs.org'
+      - run: npm install --package-lock-only
       - run: npm ci
       - run: npm run build:lib
       - run: npm publish --provenance --access public
