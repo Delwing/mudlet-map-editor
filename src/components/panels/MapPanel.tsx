@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useLayoutEffect, useMemo } from 'react';
 import { useEditorState, store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
 import { UserDataEditor } from '../panelShared';
 import type { SceneHandle } from '../../editor/scene';
-import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
+import { loadAcks, saveAcks, mapAckKey, loadAckInUserdata, saveAckInUserdata, ACKS_USERDATA_KEY } from '../../editor/warningAcks';
 import { type MapWarning, warningKey } from '../../editor/warnings';
 
 export type { MapWarning };
@@ -67,13 +67,32 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
 
   const [ackedKeys, setAckedKeys] = useState<Set<string>>(new Set());
   const [showAcked, setShowAcked] = useState(false);
+  const [storeInUserdata, setStoreInUserdata] = useState(false);
 
   // Recomputed each render; changes only when areas are added/removed.
   const mapKey = map ? mapAckKey(map) : null;
-  useEffect(() => {
-    setAckedKeys(mapKey ? loadAcks(mapKey) : new Set());
+  // useLayoutEffect so ackedKeys is committed before App's useEffect populates warnings
+  // via useSyncExternalStore, which would otherwise trigger a re-render with empty ackedKeys.
+  // `map` is in deps because reference changes on file load (even if mapKey stays the same).
+  useLayoutEffect(() => {
+    if (!mapKey || !map) {
+      setAckedKeys(new Set());
+      setStoreInUserdata(false);
+      setShowAcked(false);
+      return;
+    }
+    const pref = loadAckInUserdata(mapKey);
+    setStoreInUserdata(pref);
+    let acks = loadAcks(mapKey);
+    if (map.mUserData?.[ACKS_USERDATA_KEY]) {
+      try {
+        const fromUserdata = new Set(JSON.parse(map.mUserData[ACKS_USERDATA_KEY]) as string[]);
+        acks = new Set([...acks, ...fromUserdata]);
+      } catch {}
+    }
+    setAckedKeys(acks);
     setShowAcked(false);
-  }, [mapKey]);
+  }, [mapKey, map]);
 
   if (!map) {
     return (
@@ -88,8 +107,20 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
   const areaCount = Object.keys(map.areas).length;
   const envCount = Object.keys(map.mCustomEnvColors).length;
 
-  const activeWarnings = allWarnings.filter((w) => !ackedKeys.has(warningKey(w)));
-  const ackedWarnings = allWarnings.filter((w) => ackedKeys.has(warningKey(w)));
+  const sortedWarnings = useMemo(
+    () => [...allWarnings].sort((a, b) => warningKey(a).localeCompare(warningKey(b))),
+    [allWarnings],
+  );
+  const activeWarnings = sortedWarnings.filter((w) => !ackedKeys.has(warningKey(w)));
+  const ackedWarnings = sortedWarnings.filter((w) => ackedKeys.has(warningKey(w)));
+
+  function syncAcksToUserdata(next: Set<string>) {
+    if (!map) return;
+    const from = map.mUserData?.[ACKS_USERDATA_KEY] ?? null;
+    const to = next.size > 0 ? JSON.stringify([...next]) : null;
+    pushCommand({ kind: 'setMapUserDataEntry', key: ACKS_USERDATA_KEY, from, to }, sceneRef.current);
+    store.bumpData();
+  }
 
   function ackWarning(w: MapWarning) {
     if (!mapKey) return;
@@ -97,6 +128,7 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
     next.add(warningKey(w));
     setAckedKeys(next);
     saveAcks(mapKey, next);
+    if (storeInUserdata) syncAcksToUserdata(next);
     store.bumpAckVersion();
   }
 
@@ -106,7 +138,23 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
     next.delete(warningKey(w));
     setAckedKeys(next);
     saveAcks(mapKey, next);
+    if (storeInUserdata) syncAcksToUserdata(next);
     store.bumpAckVersion();
+  }
+
+  function handleStoreInUserdataChange(checked: boolean) {
+    if (!mapKey || !map) return;
+    saveAckInUserdata(mapKey, checked);
+    setStoreInUserdata(checked);
+    if (checked) {
+      syncAcksToUserdata(ackedKeys);
+    } else {
+      const from = map.mUserData?.[ACKS_USERDATA_KEY] ?? null;
+      if (from !== null) {
+        pushCommand({ kind: 'setMapUserDataEntry', key: ACKS_USERDATA_KEY, from, to: null }, sceneRef.current);
+        store.bumpData();
+      }
+    }
   }
 
   function renderWarningContent(w: MapWarning) {
@@ -179,6 +227,17 @@ export function MapPanel({ sceneRef }: MapPanelProps) {
           store.bumpData();
         }}
       />
+
+      <div className="map-setting-row">
+        <label className="map-setting-label">
+          <input
+            type="checkbox"
+            checked={storeInUserdata}
+            onChange={(e) => handleStoreInUserdataChange(e.target.checked)}
+          />
+          {' '}Store acks in map userdata
+        </label>
+      </div>
 
       {allWarnings.length > 0 && (
         <>

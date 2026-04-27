@@ -2971,6 +2971,24 @@ html, body, #root {
   font-variant-numeric: tabular-nums;
 }
 
+.map-setting-row {
+  margin: 6px 0 10px;
+}
+
+.map-setting-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8a96aa;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.map-setting-label input[type='checkbox'] {
+  cursor: pointer;
+}
+
 .warnings-list {
   display: flex;
   flex-direction: column;
