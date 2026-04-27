@@ -1299,13 +1299,6 @@ export function restorePendingCustomLine(
 export function finishCustomLine(pending: import('./types').PendingCustomLine, ctx?: ToolContext): void {
   if (!store.getState().map) return;
 
-  // No waypoints placed → treat as cancel.
-  if (pending.points.length < 2) {
-    if (ctx) restorePendingCustomLine(pending, ctx.scene);
-    store.setState({ pending: null, activeTool: 'select', status: 'Need at least 1 waypoint — cancelled.' });
-    store.bumpData();
-    return;
-  }
 
   // Raw already holds the committed points (written live during drawing).
   // pending.points[0] is the room centre; skip it, y-flip the rest.
@@ -1340,6 +1333,7 @@ export function finishCustomLine(pending: import('./types').PendingCustomLine, c
   store.setState({
     pending: null,
     activeTool: 'select',
+    selection: { kind: 'customLine', roomId: pending.roomId, exitName: pending.exitName },
     status: `Custom line '${pending.exitName}' saved on room ${pending.roomId}`,
   });
 }

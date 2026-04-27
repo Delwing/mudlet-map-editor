@@ -58,10 +58,7 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
       <div className="cl-form-row" style={{ marginTop: 8 }}>
         <label className="cl-form-label">Color</label>
         <input type="color" value={colorHex} onChange={(e) => commitAttrPatch({ color: hexToMudletColor(e.target.value) })} />
-      </div>
-      <div className="cl-form-row">
-        <label className="cl-form-label">Style</label>
-        <select value={pending.style} onChange={(e) => commitAttrPatch({ style: Number(e.target.value) })}>
+        <select value={pending.style} onChange={(e) => commitAttrPatch({ style: Number(e.target.value) })} style={{ flex: 1, marginLeft: 6 }}>
           <option value={1}>Solid</option>
           <option value={2}>Dash</option>
           <option value={3}>Dot</option>
@@ -183,6 +180,34 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     if (e.key === 'Escape') { setActiveDraft(null); e.currentTarget.blur(); }
   };
 
+  const startRedraw = () => {
+    const scene = sceneRef.current;
+    const renderRoom = scene?.reader.getRoom(selection.roomId);
+    if (!scene || !renderRoom) return;
+    const rawColor = color ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+    const previousSnapshot = { points: cl, color: rawColor, style, arrow };
+    scene.reader.setCustomLine(selection.roomId, selection.exitName, [], rawColor, style, arrow);
+    scene.refresh();
+    store.setState({
+      activeTool: 'customLine',
+      selection: null,
+      pending: {
+        kind: 'customLine',
+        roomId: selection.roomId,
+        exitName: selection.exitName,
+        color: rawColor,
+        style,
+        arrow,
+        points: [[renderRoom.x, renderRoom.y]],
+        cursor: null,
+        previousSnapshot,
+        companion: null,
+      },
+      status: 'Click canvas to add waypoints · right-click or Enter to finish · Esc cancels',
+    });
+    store.bumpData();
+  };
+
   const snapToGrid = () => {
     const step = store.getState().gridStep;
     const snapped: [number, number][] = cl.map(([x, y]) => [snap(x, step), -snap(-y, step)]);
@@ -240,12 +265,10 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
             onChange={(e) => setColorHex(e.target.value)}
             onBlur={(e) => applyChange({ color: hexToMudletColor(e.target.value) })}
           />
-        </div>
-        <div className="cl-form-row">
-          <label className="cl-form-label">Style</label>
           <select
             value={styleDraft}
             onChange={(e) => { const v = Number(e.target.value); setStyleDraft(v); applyChange({ style: v }); }}
+            style={{ flex: 1, marginLeft: 6 }}
           >
             <option value={1}>Solid</option>
             <option value={2}>Dash</option>
@@ -299,7 +322,11 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
         ))}
       </div>
 
-      <button type="button" style={{ marginTop: 12, width: '100%' }} onClick={snapToGrid} disabled={cl.length === 0}>
+      <button type="button" style={{ marginTop: 12, width: '100%' }} onClick={startRedraw}>
+        Redraw line
+      </button>
+
+      <button type="button" style={{ marginTop: 8, width: '100%' }} onClick={snapToGrid} disabled={cl.length === 0}>
         Snap to grid
       </button>
 

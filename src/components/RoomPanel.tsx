@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { store, useEditorState } from '../editor/store';
 import { registerSpecialExitPickCb } from '../editor/tools';
 import { pushCommand, pushBatch } from '../editor/commands';
-import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type CustomLineCompanion, type Direction } from '../editor/types';
+import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type CustomLineCompanion, type SetCustomLineCompanion, type Direction } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
 import type { RoomPanelSection } from '../editor/plugin';
@@ -349,6 +349,59 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     setLineFormFor(null);
   };
 
+  const drawEmptyCustomLine = (rawExitName: string) => {
+    const name = rawExitName.trim();
+    if (!name) { store.setState({ status: 'Enter exit name first.' }); return; }
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const key = normalizeCustomLineKey(name);
+    const raw = map.rooms[selId];
+    const color = hexToMudletColor(clColor);
+    const previousSnapshot = raw?.customLines?.[key]
+      ? {
+          points: raw.customLines[key],
+          color: raw.customLinesColor?.[key] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 },
+          style: raw.customLinesStyle?.[key] ?? 1,
+          arrow: raw.customLinesArrow?.[key] ?? false,
+        }
+      : null;
+
+    let companion: SetCustomLineCompanion | undefined;
+    const fullDir = SHORT_TO_DIR[key];
+    if (clBothWays && fullDir) {
+      const partnerId = (raw as any)?.[fullDir] as number | undefined;
+      if (partnerId !== undefined && partnerId !== -1) {
+        const partnerRaw = map.rooms[partnerId];
+        const oppositeFull = OPPOSITE[fullDir];
+        if (partnerRaw && (partnerRaw as any)[oppositeFull] === selId) {
+          const oppositeKey = DIR_SHORT[oppositeFull];
+          const partnerPrev = partnerRaw.customLines?.[oppositeKey]
+            ? {
+                points: partnerRaw.customLines[oppositeKey],
+                color: partnerRaw.customLinesColor?.[oppositeKey] ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 },
+                style: partnerRaw.customLinesStyle?.[oppositeKey] ?? 1,
+                arrow: partnerRaw.customLinesArrow?.[oppositeKey] ?? false,
+              }
+            : null;
+          companion = { roomId: partnerId, exitName: oppositeKey, data: { points: [], color, style: clStyle, arrow: false }, previous: partnerPrev };
+        }
+      }
+    }
+
+    pushCommand({
+      kind: 'setCustomLine',
+      roomId: selId,
+      exitName: key,
+      data: { points: [], color, style: clStyle, arrow: clArrow },
+      previous: previousSnapshot,
+      companion,
+    }, scene);
+    scene.refresh();
+    store.setState({ selection: { kind: 'customLine', roomId: selId, exitName: key } });
+    store.bumpData();
+    setLineFormFor(null);
+  };
+
   const customLineInfo = (rawName: string) => {
     const key = normalizeCustomLineKey(rawName);
     const pts = room.customLines?.[key];
@@ -374,10 +427,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
       <div className="cl-form-row">
         <label className="cl-form-label">Color</label>
         <input type="color" value={clColor} onChange={(e) => setClColor(e.target.value)} />
-      </div>
-      <div className="cl-form-row">
-        <label className="cl-form-label">Style</label>
-        <select value={clStyle} onChange={(e) => setClStyle(Number(e.target.value))}>
+        <select value={clStyle} onChange={(e) => setClStyle(Number(e.target.value))} style={{ flex: 1, marginLeft: 6 }}>
           <option value={1}>Solid</option>
           <option value={2}>Dash</option>
           <option value={3}>Dot</option>
@@ -396,6 +446,9 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
         <button type="button" onClick={() => startDrawingCustomLine(exitName)} style={{ flex: 1 }}>
           Start Drawing
+        </button>
+        <button type="button" onClick={() => drawEmptyCustomLine(exitName)} style={{ flex: 1 }}>
+          Draw empty
         </button>
         <button type="button" onClick={() => setLineFormFor(null)}>Cancel</button>
       </div>
