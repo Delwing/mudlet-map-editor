@@ -25,6 +25,8 @@ jobs:
           node-version: 22
           cache: npm
 
+      - run: npm install --package-lock-only
+
       - run: npm ci
 
       - run: npm run build
