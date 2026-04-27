@@ -271,7 +271,7 @@ export const panelsEn = {
     ranNoChanges: 'Script ran (no changes)',
     ranChange: 'Script: {{count}} change',
     ranChanges: 'Script: {{count}} changes',
-    libraryTitle: 'Saved scripts',
+    libraryPanelTitle: 'Saved scripts',
     libraryCloseTitle: 'Close',
     libraryEmpty: 'No saved scripts yet. Type a name above and click Save.',
     librarySavedAgo: 'Saved {{time}}',

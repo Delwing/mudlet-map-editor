@@ -44,9 +44,9 @@ export function ScriptLibraryModal({ library, currentName, onLoad, onDelete, onC
   const names = Object.keys(library).sort((a, b) => a.localeCompare(b));
 
   return (
-    <div ref={ref} className="script-library-popover" role="dialog" aria-label={t('script.libraryTitle')}>
+    <div ref={ref} className="script-library-popover" role="dialog" aria-label={t('script.libraryPanelTitle')}>
       <div className="script-library-popover-header">
-        <span className="script-library-popover-title">{t('script.libraryTitle')}</span>
+        <span className="script-library-popover-title">{t('script.libraryPanelTitle')}</span>
         <button type="button" className="script-library-popover-close" onClick={onClose} title={t('script.libraryCloseTitle')}>✕</button>
       </div>
       <div className="script-library-popover-body">

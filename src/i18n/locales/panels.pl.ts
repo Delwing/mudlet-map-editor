@@ -273,7 +273,7 @@ export const panelsPl: PanelsLocale = {
     ranNoChanges: 'Skrypt uruchomiony (brak zmian)',
     ranChange: 'Skrypt: {{count}} zmiana',
     ranChanges: 'Skrypt: {{count}} zmian',
-    libraryTitle: 'Zapisane skrypty',
+    libraryPanelTitle: 'Zapisane skrypty',
     libraryCloseTitle: 'Zamknij',
     libraryEmpty: 'Brak zapisanych skryptów. Wpisz nazwę powyżej i kliknij Zapisz.',
     librarySavedAgo: 'Zapisano {{time}}',
