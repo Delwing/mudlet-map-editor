@@ -175,9 +175,31 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
     store.bumpData();
   };
 
-  const handlePointKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const deletePointAt = (i: number) => {
+    const rawColor = color ?? { spec: 1, alpha: 255, r: 255, g: 255, b: 255 };
+    const newPoints = cl!.filter((_, j) => j !== i) as [number, number][];
+    pushCommand({
+      kind: 'setCustomLine',
+      roomId: selection.roomId,
+      exitName: selection.exitName,
+      data: { points: newPoints, color: rawColor, style, arrow },
+      previous: { points: [...cl!] as [number, number][], color: rawColor, style, arrow },
+    }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpData();
+    store.setState({
+      selection: { kind: 'customLine', roomId: selection.roomId, exitName: selection.exitName },
+      status: `Removed waypoint from '${selection.exitName}' on room ${selection.roomId}`,
+    });
+  };
+
+  const handlePointKeyDown = (e: KeyboardEvent<HTMLInputElement>, i: number) => {
     if (e.key === 'Enter') { e.currentTarget.blur(); }
     if (e.key === 'Escape') { setActiveDraft(null); e.currentTarget.blur(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && activeDraft === null) {
+      e.preventDefault();
+      deletePointAt(i);
+    }
   };
 
   const startRedraw = () => {
@@ -305,7 +327,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
               onChange={(e) => handlePointChange(i, 'x', e.target.value)}
               onFocus={() => selectPoint(i)}
               onBlur={(e) => commitPointDraft(i, 'x', e.target.value)}
-              onKeyDown={handlePointKeyDown}
+              onKeyDown={(e) => handlePointKeyDown(e, i)}
             />
             <span className="cl-waypoint-axis">Y</span>
             <input
@@ -316,8 +338,14 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
               onChange={(e) => handlePointChange(i, 'y', e.target.value)}
               onFocus={() => selectPoint(i)}
               onBlur={(e) => commitPointDraft(i, 'y', e.target.value)}
-              onKeyDown={handlePointKeyDown}
+              onKeyDown={(e) => handlePointKeyDown(e, i)}
             />
+            <button
+              type="button"
+              className="cl-waypoint-del"
+              title="Delete waypoint"
+              onMouseDown={(e) => { e.stopPropagation(); deletePointAt(i); }}
+            >×</button>
           </div>
         ))}
       </div>

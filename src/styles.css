@@ -1628,14 +1628,13 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 96px;
+  min-height: 96px;
   box-sizing: border-box;
-  overflow: hidden;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .compass-extra .compass-cell {
-  height: 96px;
+  min-height: 96px;
 }
 
 .compass-cell.compass-center {
@@ -1682,13 +1681,22 @@ html, body, #root {
 .cc-room-weight:focus { border-color: rgba(52, 100, 168, 0.7); outline: none; color: #e6e9ef; }
 
 /* ── Row containers: all three rows share the same fixed height ── */
-.cc-header,
 .cc-line2,
 .cc-footer,
 .cc-footer-empty {
   height: var(--cc-row-h);
   display: flex;
   align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.cc-header {
+  min-height: var(--cc-row-h);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 3px;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -1715,7 +1723,7 @@ html, body, #root {
 .cc-header .cc-stub-label,
 .cc-header .cc-exit-input {
   flex: 1;
-  min-width: 0;
+  min-width: 60px;
 }
 
 /* Text-bearing elements center their content via inner flex */
@@ -1935,6 +1943,7 @@ html, body, #root {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  align-self: stretch;
   width: 26px;
   padding: 0;
   color: #4a6070;
@@ -2614,7 +2623,7 @@ html, body, #root {
 
 .cl-waypoint-row {
   display: grid;
-  grid-template-columns: 18px 14px 1fr 14px 1fr;
+  grid-template-columns: 18px 14px 1fr 14px 1fr 14px;
   gap: 3px;
   align-items: center;
   padding: 1px 2px;
@@ -2667,6 +2676,27 @@ html, body, #root {
   outline: none;
   border-color: rgba(52, 100, 168, 0.7);
   box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.15);
+}
+
+.cl-waypoint-del {
+  background: none;
+  border: none;
+  color: #c05050;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 14px;
+  border-radius: 3px;
+  transition: color 0.12s, background 0.12s;
+}
+.cl-waypoint-del:hover {
+  color: #f07070;
+  background: rgba(180, 60, 60, 0.18);
 }
 
 /* Area delete confirm panel */
