@@ -84,17 +84,13 @@ export function allHitsAt(
 ): HitItem[] {
   const hits: HitItem[] = [];
 
-  // Rooms: find the primary hit via the renderer spatial index, then collect
-  // every room in the area/z that shares the same raw grid cell.
-  const primaryHit = renderer.hitTester.pick(mapX, mapY);
-  if (primaryHit?.kind === 'room') {
-    const primary = map.rooms[primaryHit.id as number];
-    if (primary && primary.area === areaId && primary.z === z) {
-      for (const [idStr, room] of Object.entries(map.rooms)) {
-        if (room && room.area === areaId && room.z === z && room.x === primary.x && room.y === primary.y) {
-          hits.push({ kind: 'room', id: Number(idStr) });
-        }
-      }
+  // Rooms: use pickAll so every stacked room at the cursor position is found
+  // regardless of which element type has the highest priority at that point.
+  for (const h of renderer.hitTester.pickAll(mapX, mapY)) {
+    if (h.kind !== 'room') continue;
+    const raw = map.rooms[h.id as number];
+    if (raw && raw.area === areaId && raw.z === z) {
+      hits.push({ kind: 'room', id: h.id as number });
     }
   }
 

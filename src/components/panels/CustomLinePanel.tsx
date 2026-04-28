@@ -144,7 +144,6 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
 
   const selectPoint = (i: number) => {
     store.setState({ selection: { ...selection, pointIndex: i } });
-    store.bumpData();
   };
 
   const getPointDisplayValue = (i: number, axis: 'x' | 'y') => {
@@ -199,7 +198,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
   const handlePointKeyDown = (e: KeyboardEvent<HTMLInputElement>, i: number) => {
     if (e.key === 'Enter') { e.currentTarget.blur(); }
     if (e.key === 'Escape') { setActiveDraft(null); e.currentTarget.blur(); }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && activeDraft === null) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && e.currentTarget.value === '') {
       e.preventDefault();
       deletePointAt(i);
     }
@@ -318,7 +317,7 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
           <div
             key={i}
             className={`cl-waypoint-row${selection.pointIndex === i ? ' active' : ''}`}
-            onMouseDown={() => selectPoint(i)}
+            onMouseDown={(e) => { if ((e.target as HTMLElement).tagName !== 'INPUT') selectPoint(i); }}
           >
             <span className="cl-waypoint-idx">{i + 1}</span>
             <span className="cl-waypoint-axis">X</span>
