@@ -1199,7 +1199,7 @@ html, body, #root {
   letter-spacing: 0.05em;
 }
 
-.side-panel .field input,
+.side-panel .field input:not([type="checkbox"]),
 .side-panel .field textarea {
   background: rgba(6, 9, 16, 0.6);
   color: #e6e9ef;
@@ -1211,7 +1211,7 @@ html, body, #root {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.side-panel .field input:focus,
+.side-panel .field input:not([type="checkbox"]):focus,
 .side-panel .field textarea:focus {
   outline: none;
   border-color: rgba(52, 100, 168, 0.7);
