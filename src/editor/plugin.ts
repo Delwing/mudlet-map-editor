@@ -16,7 +16,7 @@ export interface PluginCheckResult {
 
 export interface SidebarTab {
   id: string;
-  label: string;
+  label: ReactNode;
   render(sceneRef: { current: SceneHandle | null }): ReactNode;
 }
 
