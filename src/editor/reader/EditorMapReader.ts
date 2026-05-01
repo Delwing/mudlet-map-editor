@@ -396,6 +396,13 @@ export class EditorArea {
     this.markDirty();
   }
 
+  renameRoomId(fromId: number, toId: number): void {
+    this.rooms = this.rooms.map((room) => room.id === fromId ? makeLiveRoom(toId, room.__raw) : room);
+    this.rebuildPlanes();
+    this.rebuildExits();
+    this.markDirty();
+  }
+
   rebuildPlanes(): void {
     const grouped: Record<number, LiveRoom[]> = {};
     for (const r of this.rooms) {
@@ -589,6 +596,22 @@ export class EditorMapReader {
       rawRoom.userData[key] = value;
     }
     this.areas[rawRoom.area]?.markDirty();
+  }
+
+  renameRoomId(fromId: number, toId: number): void {
+    const rawRoom = this.raw.rooms[toId];
+    if (!rawRoom || fromId === toId) return;
+    delete this.rooms[fromId];
+    this.rooms[toId] = makeLiveRoom(toId, rawRoom);
+
+    const area = this.areas[rawRoom.area];
+    area?.renameRoomId(fromId, toId);
+    for (const otherArea of this.getAreas()) {
+      if (otherArea !== area) {
+        otherArea.rebuildExits();
+        otherArea.markDirty();
+      }
+    }
   }
 
   /** Add a raw room (expected `raw.rooms[id]` already set or not, we set it). */

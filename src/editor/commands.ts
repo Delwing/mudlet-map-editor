@@ -5,6 +5,107 @@ import type { Command, NeighborEdit } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
 
+function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
+  if (fromId === toId) return;
+  const room = map.rooms[fromId];
+  if (!room || map.rooms[toId]) return;
+
+  delete map.rooms[fromId];
+  map.rooms[toId] = room;
+  if (typeof (room as { id?: unknown }).id === 'number') (room as { id: number }).id = toId;
+
+  const area = map.areas[room.area];
+  if (area) {
+    area.rooms = area.rooms.map((id) => id === fromId ? toId : id);
+  }
+
+  if (map.mRoomIdHash && Object.prototype.hasOwnProperty.call(map.mRoomIdHash, fromId)) {
+    map.mRoomIdHash[toId] = map.mRoomIdHash[fromId];
+    delete map.mRoomIdHash[fromId];
+  }
+
+  for (const hash of Object.keys(map.mpRoomDbHashToRoomId ?? {})) {
+    if (map.mpRoomDbHashToRoomId[hash] === fromId) map.mpRoomDbHashToRoomId[hash] = toId;
+  }
+
+  for (const raw of Object.values(map.rooms)) {
+    if (!raw) continue;
+    for (const dir of CARDINAL_DIRECTIONS) {
+      if ((raw as any)[dir] === fromId) (raw as any)[dir] = toId;
+    }
+    for (const [name, targetId] of Object.entries(raw.mSpecialExits ?? {})) {
+      if (targetId === fromId) raw.mSpecialExits[name] = toId;
+    }
+  }
+}
+
+function remapRoomIdInStore(fromId: number, toId: number): void {
+  store.setState((state) => ({
+    selection:
+      state.selection?.kind === 'room'
+        ? { ...state.selection, ids: state.selection.ids.map((id) => id === fromId ? toId : id) }
+        : state.selection?.kind === 'exit'
+          ? { ...state.selection, fromId: state.selection.fromId === fromId ? toId : state.selection.fromId, toId: state.selection.toId === fromId ? toId : state.selection.toId }
+          : state.selection?.kind === 'customLine'
+            ? { ...state.selection, roomId: state.selection.roomId === fromId ? toId : state.selection.roomId }
+            : state.selection?.kind === 'stub'
+              ? { ...state.selection, roomId: state.selection.roomId === fromId ? toId : state.selection.roomId }
+              : state.selection,
+    hover:
+      state.hover?.kind === 'room'
+        ? { ...state.hover, id: state.hover.id === fromId ? toId : state.hover.id }
+        : state.hover?.kind === 'exit'
+          ? { ...state.hover, fromId: state.hover.fromId === fromId ? toId : state.hover.fromId, toId: state.hover.toId === fromId ? toId : state.hover.toId }
+          : state.hover?.kind === 'customLine'
+            ? { ...state.hover, roomId: state.hover.roomId === fromId ? toId : state.hover.roomId }
+            : state.hover?.kind === 'stub'
+              ? { ...state.hover, roomId: state.hover.roomId === fromId ? toId : state.hover.roomId }
+              : state.hover,
+    pending:
+      state.pending?.kind === 'drag'
+        ? {
+            ...state.pending,
+            roomId: state.pending.roomId === fromId ? toId : state.pending.roomId,
+            multiOrigins: state.pending.multiOrigins?.map((origin) => ({ ...origin, id: origin.id === fromId ? toId : origin.id })),
+            customLineSnapshots: state.pending.customLineSnapshots?.map((snapshot) => ({ ...snapshot, roomId: snapshot.roomId === fromId ? toId : snapshot.roomId })),
+          }
+        : state.pending?.kind === 'connect'
+          ? {
+              ...state.pending,
+              sourceId: state.pending.sourceId === fromId ? toId : state.pending.sourceId,
+              hoverTargetId: state.pending.hoverTargetId === fromId ? toId : state.pending.hoverTargetId,
+            }
+          : state.pending?.kind === 'customLine'
+            ? {
+                ...state.pending,
+                roomId: state.pending.roomId === fromId ? toId : state.pending.roomId,
+                companion: state.pending.companion
+                  ? { ...state.pending.companion, roomId: state.pending.companion.roomId === fromId ? toId : state.pending.companion.roomId }
+                  : null,
+              }
+            : state.pending?.kind === 'customLinePoint'
+              ? { ...state.pending, roomId: state.pending.roomId === fromId ? toId : state.pending.roomId }
+              : state.pending?.kind === 'pickExit'
+                ? { ...state.pending, fromId: state.pending.fromId === fromId ? toId : state.pending.fromId }
+                : state.pending?.kind === 'pickSpecialExit'
+                  ? { ...state.pending, fromId: state.pending.fromId === fromId ? toId : state.pending.fromId }
+                  : state.pending?.kind === 'marquee'
+                    ? { ...state.pending, preExistingIds: state.pending.preExistingIds.map((id) => id === fromId ? toId : id) }
+                    : state.pending?.kind === 'paint'
+                      ? { ...state.pending, painted: state.pending.painted.map((item) => ({ ...item, id: item.id === fromId ? toId : item.id })) }
+                      : state.pending,
+    contextMenu:
+      state.contextMenu?.kind === 'room'
+        ? { ...state.contextMenu, roomId: state.contextMenu.roomId === fromId ? toId : state.contextMenu.roomId }
+        : state.contextMenu?.kind === 'customLinePoint'
+          ? { ...state.contextMenu, roomId: state.contextMenu.roomId === fromId ? toId : state.contextMenu.roomId }
+          : state.contextMenu,
+    spreadShrink: state.spreadShrink
+      ? { ...state.spreadShrink, anchorRoomId: state.spreadShrink.anchorRoomId === fromId ? toId : state.spreadShrink.anchorRoomId }
+      : state.spreadShrink,
+  }));
+}
+
 /**
  * Apply a command. When a `scene` is provided, mutations go through
  * `scene.reader` so the renderer stays in sync automatically. When it is
@@ -46,6 +147,11 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
           if (idx !== -1) area.rooms.splice(idx, 1);
         }
       }
+      return { structural: true };
+    }
+    case 'renameRoomId': {
+      renameRoomIdInMap(map, cmd.fromId, cmd.toId);
+      if (reader) reader.renameRoomId(cmd.fromId, cmd.toId);
       return { structural: true };
     }
     case 'addExit': {
@@ -391,6 +497,11 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       }
       return { structural: true };
     }
+    case 'renameRoomId': {
+      renameRoomIdInMap(map, cmd.toId, cmd.fromId);
+      if (reader) reader.renameRoomId(cmd.toId, cmd.fromId);
+      return { structural: true };
+    }
     case 'addExit': {
       if (reader) {
         reader.setExit(cmd.fromId, cmd.dir, cmd.previous);
@@ -703,6 +814,7 @@ export function pushCommand(cmd: Command, scene?: SceneHandle | null): boolean {
   const state = store.getState();
   if (!state.map) return false;
   const { structural } = applyCommand(state.map, cmd, scene);
+  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.fromId, cmd.toId);
   store.setState((s) => ({
     undo: [...s.undo, cmd],
     redo: [],
@@ -727,6 +839,7 @@ export function undoOnce(scene?: SceneHandle | null): { changed: boolean; struct
   if (!state.map || state.undo.length === 0) return { changed: false, structural: false };
   const cmd = state.undo[state.undo.length - 1];
   const { structural } = revertCommand(state.map, cmd, scene);
+  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.toId, cmd.fromId);
   store.setState((s) => ({
     undo: s.undo.slice(0, -1),
     redo: [...s.redo, cmd],
@@ -739,6 +852,7 @@ export function redoOnce(scene?: SceneHandle | null): { changed: boolean; struct
   if (!state.map || state.redo.length === 0) return { changed: false, structural: false };
   const cmd = state.redo[state.redo.length - 1];
   const { structural } = applyCommand(state.map, cmd, scene);
+  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.fromId, cmd.toId);
   store.setState((s) => ({
     undo: [...s.undo, cmd],
     redo: s.redo.slice(0, -1),

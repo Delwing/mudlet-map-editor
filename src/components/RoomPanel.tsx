@@ -60,6 +60,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   const warnings = useEditorState((s) => s.warnings);
 
   const [nameDraft, setNameDraft] = useState(room.name ?? '');
+  const [idDraft, setIdDraft] = useState(String(selId));
   const [weightDraft, setWeightDraft] = useState(String(room.weight ?? 1));
   const [symbolDraft, setSymbolDraft] = useState(room.symbol ?? '');
   const [hashDraft, setHashDraft] = useState(() => lookupRoomHash(map, selId, room));
@@ -83,6 +84,8 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
   const nameDraftRef = useRef(nameDraft);
   nameDraftRef.current = nameDraft;
+  const idDraftRef = useRef(idDraft);
+  idDraftRef.current = idDraft;
   const weightDraftRef = useRef(weightDraft);
   weightDraftRef.current = weightDraft;
   const symbolDraftRef = useRef(symbolDraft);
@@ -96,32 +99,59 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     const prevHash = lookupRoomHash(map, prevId, prevRoom);
     return () => {
       let changed = false;
+      let structural = false;
+      let activeId = prevId;
+      const nextId = Number(idDraftRef.current.trim());
+      const shouldRename =
+        Number.isInteger(nextId) &&
+        nextId > 0 &&
+        nextId !== prevId &&
+        !map.rooms[nextId];
+      const alreadyRenamed =
+        Number.isInteger(nextId) &&
+        nextId > 0 &&
+        nextId !== prevId &&
+        !!map.rooms[nextId] &&
+        !map.rooms[prevId];
+      if (shouldRename) {
+        pushCommand({ kind: 'renameRoomId', fromId: prevId, toId: nextId }, sceneRef.current);
+        activeId = nextId;
+        changed = true;
+        structural = true;
+      } else if (alreadyRenamed) {
+        activeId = nextId;
+      }
       const sym = symbolDraftRef.current;
       if (sym !== prevRoom.symbol) {
-        pushCommand({ kind: 'setRoomField', id: prevId, field: 'symbol', from: prevRoom.symbol, to: sym }, sceneRef.current);
+        pushCommand({ kind: 'setRoomField', id: activeId, field: 'symbol', from: prevRoom.symbol, to: sym }, sceneRef.current);
         changed = true;
       }
       const name = nameDraftRef.current;
       if (name !== prevRoom.name) {
-        pushCommand({ kind: 'setRoomField', id: prevId, field: 'name', from: prevRoom.name, to: name }, sceneRef.current);
+        pushCommand({ kind: 'setRoomField', id: activeId, field: 'name', from: prevRoom.name, to: name }, sceneRef.current);
         changed = true;
       }
       const w = Number(weightDraftRef.current);
       if (!Number.isNaN(w) && w !== prevRoom.weight) {
-        pushCommand({ kind: 'setRoomField', id: prevId, field: 'weight', from: prevRoom.weight, to: w }, sceneRef.current);
+        pushCommand({ kind: 'setRoomField', id: activeId, field: 'weight', from: prevRoom.weight, to: w }, sceneRef.current);
         changed = true;
       }
       const hashNext = hashDraftRef.current.trim();
       if (hashNext !== prevHash) {
-        pushCommand({ kind: 'setRoomHash', id: prevId, from: prevHash || null, to: hashNext || null }, sceneRef.current);
+        pushCommand({ kind: 'setRoomHash', id: activeId, from: prevHash || null, to: hashNext || null }, sceneRef.current);
         changed = true;
       }
-      if (changed) { sceneRef.current?.refresh(); store.bumpData(); }
+      if (changed) {
+        sceneRef.current?.refresh();
+        if (structural) store.bumpStructure();
+        else store.bumpData();
+      }
     };
   }, [room]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setNameDraft(room.name ?? '');
+    setIdDraft(String(selId));
     setWeightDraft(String(room.weight ?? 1));
     setSymbolDraft(room.symbol ?? '');
     setHashDraft(lookupRoomHash(map, selId, room));
@@ -149,6 +179,28 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ status: t('room.updatedField', { field, id: selId }) });
+  };
+
+  const commitRoomId = (raw: string) => {
+    const next = Number(raw.trim());
+    if (!Number.isInteger(next) || next <= 0) {
+      setIdDraft(String(selId));
+      return;
+    }
+    if (next === selId) {
+      setIdDraft(String(selId));
+      return;
+    }
+    if (map.rooms[next]) {
+      setIdDraft(String(selId));
+      store.setState({ status: t('room.idExists', { id: next }) });
+      return;
+    }
+    pushCommand({ kind: 'renameRoomId', fromId: selId, toId: next }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpStructure();
+    setIdDraft(String(next));
+    store.setState({ status: t('room.idUpdated', { from: selId, to: next }) });
   };
 
   const commitHash = (raw: string) => {
@@ -592,7 +644,25 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   return (
     <div className="panel-content">
       <h3 className="room-heading">
-        <span>{t('room.heading', { id: selId })}</span>
+        <span className="room-heading-id">
+          <span>Room #</span>
+          <input
+            type="number"
+            className="room-id-input"
+            min={1}
+            value={idDraft}
+            onChange={(e) => setIdDraft(e.target.value)}
+            onBlur={(e) => commitRoomId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              if (e.key === 'Escape') {
+                setIdDraft(String(selId));
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            aria-label={t('room.id')}
+          />
+        </span>
         <span className="room-heading-right">
           <span className="room-coords">({room.x}, {room.y}, {room.z})</span>
           <button

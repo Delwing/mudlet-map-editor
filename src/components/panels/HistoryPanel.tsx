@@ -14,6 +14,7 @@ export function commandLabel(cmd: Command, t: CmdT): string {
     case 'moveRoom': return t('history.cmd.moveRoom', { id: cmd.id });
     case 'addRoom': return t('history.cmd.addRoom', { id: cmd.id });
     case 'deleteRoom': return t('history.cmd.deleteRoom', { id: cmd.id });
+    case 'renameRoomId': return t('history.cmd.renameRoomId', { from: cmd.fromId, to: cmd.toId });
     case 'addExit': return cmd.reverse
       ? t('history.cmd.addExitBidi', { from: cmd.fromId, dir: cmd.dir, to: cmd.toId })
       : t('history.cmd.addExitUni', { from: cmd.fromId, dir: cmd.dir, to: cmd.toId });
