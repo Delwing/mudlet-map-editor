@@ -7,6 +7,8 @@ import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, t
 import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
 import type { RoomPanelSection } from '../editor/plugin';
+import { createDefaultRoom } from '../editor/mapHelpers';
+import { roomAtCell } from '../editor/hitTest';
 import { EnvPicker } from './EnvPicker';
 import { DoorIcon, LockIcon, WeightIcon, CrosshairIcon, CenterOnRoomIcon } from './icons';
 import { RoomLink, Field, UserDataEditor, hexToMudletColor } from './panelShared';
@@ -34,6 +36,21 @@ const DIR_ABBREV: Record<string, string> = {
   north: 'N', northeast: 'NE', east: 'E', southeast: 'SE',
   south: 'S', southwest: 'SW', west: 'W', northwest: 'NW',
   up: 'Up', down: 'Dn', in: 'In', out: 'Out',
+};
+
+const ROOM_OFFSETS: Record<Direction, { x: number; y: number; z: number }> = {
+  north: { x: 0, y: 1, z: 0 },
+  northeast: { x: 1, y: 1, z: 0 },
+  east: { x: 1, y: 0, z: 0 },
+  southeast: { x: 1, y: -1, z: 0 },
+  south: { x: 0, y: -1, z: 0 },
+  southwest: { x: -1, y: -1, z: 0 },
+  west: { x: -1, y: 0, z: 0 },
+  northwest: { x: -1, y: 1, z: 0 },
+  up: { x: 0, y: 0, z: 1 },
+  down: { x: 0, y: 0, z: -1 },
+  in: { x: 0, y: 0, z: 0 },
+  out: { x: 0, y: 0, z: 0 },
 };
 
 interface RoomPanelProps {
@@ -238,6 +255,43 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ status: t('room.exitAdded', { dir, id: toId }) });
+  };
+
+  const submitExitDraft = (dir: Direction, raw: string, mode: 'blur' | 'enter') => {
+    const nextId = parseInt(raw, 10);
+    if (Number.isNaN(nextId) || nextId <= 0) {
+      setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
+      return;
+    }
+
+    if (map.rooms[nextId]) {
+      addExit(dir, nextId);
+      setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
+      return;
+    }
+
+    if (mode !== 'enter') return;
+
+    const offset = ROOM_OFFSETS[dir];
+    const targetX = room.x + offset.x;
+    const targetY = room.y + offset.y;
+    const targetZ = room.z + offset.z;
+    const occupied = roomAtCell(map, room.area, targetX, targetY, targetZ);
+    if (occupied) {
+      store.setState({ status: `Cannot create room #${nextId}: cell (${targetX}, ${targetY}, ${targetZ}) is already occupied.` });
+      return;
+    }
+
+    const newRoom = createDefaultRoom(nextId, room.area, targetX, targetY, targetZ);
+    const previous = (room as any)[dir] as number;
+    pushBatch([
+      { kind: 'addRoom', id: nextId, room: newRoom, areaId: room.area },
+      { kind: 'addExit', fromId: selId, dir, toId: nextId, previous, reverse: null },
+    ], sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpStructure();
+    setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
+    store.setState({ status: `Created room #${nextId} ${DIR_ABBREV[dir]} of room #${selId}.` });
   };
 
   const changeDoor = (dir: Direction, from: number, to: number) => {
@@ -544,11 +598,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               placeholder="#"
               value={exitDrafts[dir] ?? ''}
               onChange={(e) => setExitDrafts((prev) => ({ ...prev, [dir]: e.target.value }))}
-              onBlur={(e) => {
-                const id = parseInt(e.target.value, 10);
-                if (!isNaN(id)) { addExit(d, id); setExitDrafts((prev) => ({ ...prev, [dir]: '' })); }
+              onBlur={(e) => submitExitDraft(d, e.target.value, 'blur')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitExitDraft(d, (e.target as HTMLInputElement).value, 'enter');
+                }
               }}
-              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
             />
           )}
           {isActive
