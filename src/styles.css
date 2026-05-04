@@ -1089,7 +1089,6 @@ html, body, #root {
   font: inherit;
   font-weight: 600;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 .room-id-input:focus {

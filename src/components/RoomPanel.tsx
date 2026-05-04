@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { registerSpecialExitPickCb } from '../editor/tools';
-import { pushCommand, pushBatch } from '../editor/commands';
+import { pushCommand } from '../editor/commands';
 import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type CustomLineCompanion, type SetCustomLineCompanion, type Direction } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
@@ -101,67 +101,47 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
   const nameDraftRef = useRef(nameDraft);
   nameDraftRef.current = nameDraft;
-  const idDraftRef = useRef(idDraft);
-  idDraftRef.current = idDraft;
   const weightDraftRef = useRef(weightDraft);
   weightDraftRef.current = weightDraft;
   const symbolDraftRef = useRef(symbolDraft);
   symbolDraftRef.current = symbolDraft;
   const hashDraftRef = useRef(hashDraft);
   hashDraftRef.current = hashDraft;
+  const skipCleanupRef = useRef(false);
 
   useEffect(() => {
     const prevRoom = room;
     const prevId = selId;
     const prevHash = lookupRoomHash(map, prevId, prevRoom);
     return () => {
-      let changed = false;
-      let structural = false;
-      let activeId = prevId;
-      const nextId = Number(idDraftRef.current.trim());
-      const shouldRename =
-        Number.isInteger(nextId) &&
-        nextId > 0 &&
-        nextId !== prevId &&
-        !map.rooms[nextId];
-      const alreadyRenamed =
-        Number.isInteger(nextId) &&
-        nextId > 0 &&
-        nextId !== prevId &&
-        !!map.rooms[nextId] &&
-        !map.rooms[prevId];
-      if (shouldRename) {
-        pushCommand({ kind: 'renameRoomId', fromId: prevId, toId: nextId }, sceneRef.current);
-        activeId = nextId;
-        changed = true;
-        structural = true;
-      } else if (alreadyRenamed) {
-        activeId = nextId;
+      if (skipCleanupRef.current) {
+        skipCleanupRef.current = false;
+        return;
       }
+      let changed = false;
       const sym = symbolDraftRef.current;
       if (sym !== prevRoom.symbol) {
-        pushCommand({ kind: 'setRoomField', id: activeId, field: 'symbol', from: prevRoom.symbol, to: sym }, sceneRef.current);
+        pushCommand({ kind: 'setRoomField', id: prevId, field: 'symbol', from: prevRoom.symbol, to: sym }, sceneRef.current);
         changed = true;
       }
       const name = nameDraftRef.current;
       if (name !== prevRoom.name) {
-        pushCommand({ kind: 'setRoomField', id: activeId, field: 'name', from: prevRoom.name, to: name }, sceneRef.current);
+        pushCommand({ kind: 'setRoomField', id: prevId, field: 'name', from: prevRoom.name, to: name }, sceneRef.current);
         changed = true;
       }
       const w = Number(weightDraftRef.current);
       if (!Number.isNaN(w) && w !== prevRoom.weight) {
-        pushCommand({ kind: 'setRoomField', id: activeId, field: 'weight', from: prevRoom.weight, to: w }, sceneRef.current);
+        pushCommand({ kind: 'setRoomField', id: prevId, field: 'weight', from: prevRoom.weight, to: w }, sceneRef.current);
         changed = true;
       }
       const hashNext = hashDraftRef.current.trim();
       if (hashNext !== prevHash) {
-        pushCommand({ kind: 'setRoomHash', id: activeId, from: prevHash || null, to: hashNext || null }, sceneRef.current);
+        pushCommand({ kind: 'setRoomHash', id: prevId, from: prevHash || null, to: hashNext || null }, sceneRef.current);
         changed = true;
       }
       if (changed) {
         sceneRef.current?.refresh();
-        if (structural) store.bumpStructure();
-        else store.bumpData();
+        store.bumpData();
       }
     };
   }, [room]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -213,10 +193,37 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
       store.setState({ status: t('room.idExists', { id: next }) });
       return;
     }
+    const currentHash = lookupRoomHash(map, selId, room);
+    let changed = false;
+    if (symbolDraftRef.current !== room.symbol) {
+      pushCommand({ kind: 'setRoomField', id: selId, field: 'symbol', from: room.symbol, to: symbolDraftRef.current }, sceneRef.current);
+      changed = true;
+    }
+    if (nameDraftRef.current !== room.name) {
+      pushCommand({ kind: 'setRoomField', id: selId, field: 'name', from: room.name, to: nameDraftRef.current }, sceneRef.current);
+      changed = true;
+    }
+    const nextWeight = Number(weightDraftRef.current);
+    if (!Number.isNaN(nextWeight) && nextWeight !== room.weight) {
+      pushCommand({ kind: 'setRoomField', id: selId, field: 'weight', from: room.weight, to: nextWeight }, sceneRef.current);
+      changed = true;
+    }
+    const nextHash = hashDraftRef.current.trim();
+    if (nextHash !== currentHash) {
+      pushCommand({ kind: 'setRoomHash', id: selId, from: currentHash || null, to: nextHash || null }, sceneRef.current);
+      changed = true;
+    }
+    skipCleanupRef.current = true;
     pushCommand({ kind: 'renameRoomId', fromId: selId, toId: next }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpStructure();
     setIdDraft(String(next));
+    if (changed) {
+      setNameDraft(nameDraftRef.current);
+      setWeightDraft(weightDraftRef.current);
+      setSymbolDraft(symbolDraftRef.current);
+      setHashDraft(nextHash);
+    }
     store.setState({ status: t('room.idUpdated', { from: selId, to: next }) });
   };
 
@@ -250,7 +257,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
   const addExit = (dir: Direction, toId: number) => {
     if (!map.rooms[toId]) return;
-    const previous = (room as any)[dir] as number;
+    const previous = (room as any)[dir] ?? -1;
     pushCommand({ kind: 'addExit', fromId: selId, dir, toId, previous, reverse: null }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
@@ -272,26 +279,34 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
     if (mode !== 'enter') return;
 
+    if (dir === 'in' || dir === 'out') {
+      store.setState({ status: t('room.exitCreateInOut') });
+      return;
+    }
+
     const offset = ROOM_OFFSETS[dir];
     const targetX = room.x + offset.x;
     const targetY = room.y + offset.y;
     const targetZ = room.z + offset.z;
     const occupied = roomAtCell(map, room.area, targetX, targetY, targetZ);
     if (occupied) {
-      store.setState({ status: `Cannot create room #${nextId}: cell (${targetX}, ${targetY}, ${targetZ}) is already occupied.` });
+      store.setState({ status: t('room.exitCreateOccupied', { id: nextId, x: targetX, y: targetY, z: targetZ }) });
       return;
     }
 
     const newRoom = createDefaultRoom(nextId, room.area, targetX, targetY, targetZ);
-    const previous = (room as any)[dir] as number;
-    pushBatch([
-      { kind: 'addRoom', id: nextId, room: newRoom, areaId: room.area },
-      { kind: 'addExit', fromId: selId, dir, toId: nextId, previous, reverse: null },
-    ], sceneRef.current);
+    const previous = (room as any)[dir] ?? -1;
+    pushCommand({
+      kind: 'batch',
+      cmds: [
+        { kind: 'addRoom', id: nextId, room: newRoom, areaId: room.area },
+        { kind: 'addExit', fromId: selId, dir, toId: nextId, previous, reverse: null },
+      ],
+    }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpStructure();
     setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
-    store.setState({ status: `Created room #${nextId} ${DIR_ABBREV[dir]} of room #${selId}.` });
+    store.setState({ status: t('room.exitRoomCreated', { id: nextId, dir: DIR_ABBREV[dir], from: selId }) });
   };
 
   const changeDoor = (dir: Direction, from: number, to: number) => {

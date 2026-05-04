@@ -30,7 +30,7 @@ function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
 
   for (const raw of Object.values(map.rooms)) {
     if (!raw) continue;
-    for (const dir of CARDINAL_DIRECTIONS) {
+    for (const dir of Object.keys(DIR_SHORT) as Array<keyof typeof DIR_SHORT>) {
       if ((raw as any)[dir] === fromId) (raw as any)[dir] = toId;
     }
     for (const [name, targetId] of Object.entries(raw.mSpecialExits ?? {})) {
@@ -40,68 +40,86 @@ function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
 }
 
 function remapRoomIdInStore(fromId: number, toId: number): void {
+  const remapId = (id: number) => id === fromId ? toId : id;
   store.setState((state) => ({
-    selection:
-      state.selection?.kind === 'room'
-        ? { ...state.selection, ids: state.selection.ids.map((id) => id === fromId ? toId : id) }
-        : state.selection?.kind === 'exit'
-          ? { ...state.selection, fromId: state.selection.fromId === fromId ? toId : state.selection.fromId, toId: state.selection.toId === fromId ? toId : state.selection.toId }
-          : state.selection?.kind === 'customLine'
-            ? { ...state.selection, roomId: state.selection.roomId === fromId ? toId : state.selection.roomId }
-            : state.selection?.kind === 'stub'
-              ? { ...state.selection, roomId: state.selection.roomId === fromId ? toId : state.selection.roomId }
-              : state.selection,
-    hover:
-      state.hover?.kind === 'room'
-        ? { ...state.hover, id: state.hover.id === fromId ? toId : state.hover.id }
-        : state.hover?.kind === 'exit'
-          ? { ...state.hover, fromId: state.hover.fromId === fromId ? toId : state.hover.fromId, toId: state.hover.toId === fromId ? toId : state.hover.toId }
-          : state.hover?.kind === 'customLine'
-            ? { ...state.hover, roomId: state.hover.roomId === fromId ? toId : state.hover.roomId }
-            : state.hover?.kind === 'stub'
-              ? { ...state.hover, roomId: state.hover.roomId === fromId ? toId : state.hover.roomId }
-              : state.hover,
-    pending:
-      state.pending?.kind === 'drag'
-        ? {
-            ...state.pending,
-            roomId: state.pending.roomId === fromId ? toId : state.pending.roomId,
-            multiOrigins: state.pending.multiOrigins?.map((origin) => ({ ...origin, id: origin.id === fromId ? toId : origin.id })),
-            customLineSnapshots: state.pending.customLineSnapshots?.map((snapshot) => ({ ...snapshot, roomId: snapshot.roomId === fromId ? toId : snapshot.roomId })),
-          }
-        : state.pending?.kind === 'connect'
-          ? {
-              ...state.pending,
-              sourceId: state.pending.sourceId === fromId ? toId : state.pending.sourceId,
-              hoverTargetId: state.pending.hoverTargetId === fromId ? toId : state.pending.hoverTargetId,
-            }
-          : state.pending?.kind === 'customLine'
-            ? {
-                ...state.pending,
-                roomId: state.pending.roomId === fromId ? toId : state.pending.roomId,
-                companion: state.pending.companion
-                  ? { ...state.pending.companion, roomId: state.pending.companion.roomId === fromId ? toId : state.pending.companion.roomId }
-                  : null,
-              }
-            : state.pending?.kind === 'customLinePoint'
-              ? { ...state.pending, roomId: state.pending.roomId === fromId ? toId : state.pending.roomId }
-              : state.pending?.kind === 'pickExit'
-                ? { ...state.pending, fromId: state.pending.fromId === fromId ? toId : state.pending.fromId }
-                : state.pending?.kind === 'pickSpecialExit'
-                  ? { ...state.pending, fromId: state.pending.fromId === fromId ? toId : state.pending.fromId }
-                  : state.pending?.kind === 'marquee'
-                    ? { ...state.pending, preExistingIds: state.pending.preExistingIds.map((id) => id === fromId ? toId : id) }
-                    : state.pending?.kind === 'paint'
-                      ? { ...state.pending, painted: state.pending.painted.map((item) => ({ ...item, id: item.id === fromId ? toId : item.id })) }
-                      : state.pending,
-    contextMenu:
-      state.contextMenu?.kind === 'room'
-        ? { ...state.contextMenu, roomId: state.contextMenu.roomId === fromId ? toId : state.contextMenu.roomId }
-        : state.contextMenu?.kind === 'customLinePoint'
-          ? { ...state.contextMenu, roomId: state.contextMenu.roomId === fromId ? toId : state.contextMenu.roomId }
-          : state.contextMenu,
+    selection: (() => {
+      const selection = state.selection;
+      switch (selection?.kind) {
+        case 'room': return { ...selection, ids: selection.ids.map(remapId) };
+        case 'exit': return { ...selection, fromId: remapId(selection.fromId), toId: remapId(selection.toId) };
+        case 'customLine': return { ...selection, roomId: remapId(selection.roomId) };
+        case 'stub': return { ...selection, roomId: remapId(selection.roomId) };
+        case 'label':
+        case undefined:
+          return selection;
+      }
+    })(),
+    hover: (() => {
+      const hover = state.hover;
+      switch (hover?.kind) {
+        case 'room': return { ...hover, id: remapId(hover.id) };
+        case 'exit': return { ...hover, fromId: remapId(hover.fromId), toId: remapId(hover.toId) };
+        case 'customLine': return { ...hover, roomId: remapId(hover.roomId) };
+        case 'stub': return { ...hover, roomId: remapId(hover.roomId) };
+        case 'label':
+        case undefined:
+          return hover;
+      }
+    })(),
+    pending: (() => {
+      const pending = state.pending;
+      switch (pending?.kind) {
+        case 'drag':
+          return {
+            ...pending,
+            roomId: remapId(pending.roomId),
+            multiOrigins: pending.multiOrigins?.map((origin) => ({ ...origin, id: remapId(origin.id) })),
+            customLineSnapshots: pending.customLineSnapshots?.map((snapshot) => ({ ...snapshot, roomId: remapId(snapshot.roomId) })),
+          };
+        case 'connect':
+          return {
+            ...pending,
+            sourceId: remapId(pending.sourceId),
+            hoverTargetId: pending.hoverTargetId == null ? null : remapId(pending.hoverTargetId),
+          };
+        case 'customLine':
+          return {
+            ...pending,
+            roomId: remapId(pending.roomId),
+            companion: pending.companion
+              ? { ...pending.companion, roomId: remapId(pending.companion.roomId) }
+              : null,
+          };
+        case 'customLinePoint':
+          return { ...pending, roomId: remapId(pending.roomId) };
+        case 'pickExit':
+        case 'pickSpecialExit':
+          return { ...pending, fromId: remapId(pending.fromId) };
+        case 'marquee':
+          return { ...pending, preExistingIds: pending.preExistingIds.map(remapId) };
+        case 'paint':
+          return { ...pending, painted: pending.painted.map((item) => ({ ...item, id: remapId(item.id) })) };
+        case 'labelDrag':
+        case 'labelRect':
+        case 'labelResize':
+        case 'pickSwatch':
+        case undefined:
+          return pending;
+      }
+    })(),
+    contextMenu: (() => {
+      const contextMenu = state.contextMenu;
+      switch (contextMenu?.kind) {
+        case 'room': return { ...contextMenu, roomId: remapId(contextMenu.roomId) };
+        case 'customLinePoint': return { ...contextMenu, roomId: remapId(contextMenu.roomId) };
+        case 'disambiguate':
+        case 'label':
+        case undefined:
+          return contextMenu;
+      }
+    })(),
     spreadShrink: state.spreadShrink
-      ? { ...state.spreadShrink, anchorRoomId: state.spreadShrink.anchorRoomId === fromId ? toId : state.spreadShrink.anchorRoomId }
+      ? { ...state.spreadShrink, anchorRoomId: state.spreadShrink.anchorRoomId === null ? null : remapId(state.spreadShrink.anchorRoomId) }
       : state.spreadShrink,
   }));
 }
