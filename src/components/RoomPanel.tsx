@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { registerSpecialExitPickCb } from '../editor/tools';
 import { pushCommand } from '../editor/commands';
-import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type CustomLineCompanion, type SetCustomLineCompanion, type Direction } from '../editor/types';
+import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type Command, type CustomLineCompanion, type SetCustomLineCompanion, type Direction } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
 import type { RoomPanelSection } from '../editor/plugin';
@@ -194,31 +194,28 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
       return;
     }
     const currentHash = lookupRoomHash(map, selId, room);
-    let changed = false;
+    const cmds: Command[] = [];
     if (symbolDraftRef.current !== room.symbol) {
-      pushCommand({ kind: 'setRoomField', id: selId, field: 'symbol', from: room.symbol, to: symbolDraftRef.current }, sceneRef.current);
-      changed = true;
+      cmds.push({ kind: 'setRoomField', id: selId, field: 'symbol', from: room.symbol, to: symbolDraftRef.current });
     }
     if (nameDraftRef.current !== room.name) {
-      pushCommand({ kind: 'setRoomField', id: selId, field: 'name', from: room.name, to: nameDraftRef.current }, sceneRef.current);
-      changed = true;
+      cmds.push({ kind: 'setRoomField', id: selId, field: 'name', from: room.name, to: nameDraftRef.current });
     }
     const nextWeight = Number(weightDraftRef.current);
     if (!Number.isNaN(nextWeight) && nextWeight !== room.weight) {
-      pushCommand({ kind: 'setRoomField', id: selId, field: 'weight', from: room.weight, to: nextWeight }, sceneRef.current);
-      changed = true;
+      cmds.push({ kind: 'setRoomField', id: selId, field: 'weight', from: room.weight, to: nextWeight });
     }
     const nextHash = hashDraftRef.current.trim();
     if (nextHash !== currentHash) {
-      pushCommand({ kind: 'setRoomHash', id: selId, from: currentHash || null, to: nextHash || null }, sceneRef.current);
-      changed = true;
+      cmds.push({ kind: 'setRoomHash', id: selId, from: currentHash || null, to: nextHash || null });
     }
+    cmds.push({ kind: 'renameRoomId', fromId: selId, toId: next });
     skipCleanupRef.current = true;
-    pushCommand({ kind: 'renameRoomId', fromId: selId, toId: next }, sceneRef.current);
+    pushCommand(cmds.length === 1 ? cmds[0] : { kind: 'batch', cmds }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpStructure();
     setIdDraft(String(next));
-    if (changed) {
+    if (cmds.length > 1) {
       setNameDraft(nameDraftRef.current);
       setWeightDraft(weightDraftRef.current);
       setSymbolDraft(symbolDraftRef.current);
@@ -342,10 +339,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     if (currentStub) {
       pushCommand({ kind: 'setStub', roomId: selId, dir, stub: false }, sceneRef.current);
     } else if (targetId !== -1) {
-      pushBatch([
-        { kind: 'removeExit', fromId: selId, dir, was: targetId, reverse: null },
-        { kind: 'setStub', roomId: selId, dir, stub: true },
-      ], sceneRef.current);
+      pushCommand({
+        kind: 'batch',
+        cmds: [
+          { kind: 'removeExit', fromId: selId, dir, was: targetId, reverse: null },
+          { kind: 'setStub', roomId: selId, dir, stub: true },
+        ],
+      }, sceneRef.current);
     } else {
       pushCommand({ kind: 'setStub', roomId: selId, dir, stub: true }, sceneRef.current);
     }
@@ -718,11 +718,12 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         <span className="room-heading-id">
           <span>Room #</span>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             className="room-id-input"
-            min={1}
             value={idDraft}
-            onChange={(e) => setIdDraft(e.target.value)}
+            onChange={(e) => setIdDraft(e.target.value.replace(/[^0-9]/g, ''))}
             onBlur={(e) => commitRoomId(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();

@@ -12,7 +12,6 @@ function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
 
   delete map.rooms[fromId];
   map.rooms[toId] = room;
-  if (typeof (room as { id?: unknown }).id === 'number') (room as { id: number }).id = toId;
 
   const area = map.areas[room.area];
   if (area) {
@@ -828,11 +827,21 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
   }
 }
 
+function remapStoreForCommand(cmd: Command, direction: 'forward' | 'backward'): void {
+  if (cmd.kind === 'renameRoomId') {
+    if (direction === 'forward') remapRoomIdInStore(cmd.fromId, cmd.toId);
+    else remapRoomIdInStore(cmd.toId, cmd.fromId);
+  } else if (cmd.kind === 'batch') {
+    const ordered = direction === 'forward' ? cmd.cmds : [...cmd.cmds].reverse();
+    for (const c of ordered) remapStoreForCommand(c, direction);
+  }
+}
+
 export function pushCommand(cmd: Command, scene?: SceneHandle | null): boolean {
   const state = store.getState();
   if (!state.map) return false;
   const { structural } = applyCommand(state.map, cmd, scene);
-  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.fromId, cmd.toId);
+  remapStoreForCommand(cmd, 'forward');
   store.setState((s) => ({
     undo: [...s.undo, cmd],
     redo: [],
@@ -846,7 +855,10 @@ export function pushBatch(cmds: Command[], scene?: SceneHandle | null): boolean 
   const state = store.getState();
   if (!state.map) return false;
   let structural = false;
-  for (const cmd of cmds) { if (applyCommand(state.map, cmd, scene).structural) structural = true; }
+  for (const cmd of cmds) {
+    if (applyCommand(state.map, cmd, scene).structural) structural = true;
+    remapStoreForCommand(cmd, 'forward');
+  }
   const batch: Command = { kind: 'batch', cmds };
   store.setState((s) => ({ undo: [...s.undo, batch], redo: [] }));
   return structural;
@@ -857,7 +869,7 @@ export function undoOnce(scene?: SceneHandle | null): { changed: boolean; struct
   if (!state.map || state.undo.length === 0) return { changed: false, structural: false };
   const cmd = state.undo[state.undo.length - 1];
   const { structural } = revertCommand(state.map, cmd, scene);
-  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.toId, cmd.fromId);
+  remapStoreForCommand(cmd, 'backward');
   store.setState((s) => ({
     undo: s.undo.slice(0, -1),
     redo: [...s.redo, cmd],
@@ -870,7 +882,7 @@ export function redoOnce(scene?: SceneHandle | null): { changed: boolean; struct
   if (!state.map || state.redo.length === 0) return { changed: false, structural: false };
   const cmd = state.redo[state.redo.length - 1];
   const { structural } = applyCommand(state.map, cmd, scene);
-  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.fromId, cmd.toId);
+  remapStoreForCommand(cmd, 'forward');
   store.setState((s) => ({
     undo: [...s.undo, cmd],
     redo: s.redo.slice(0, -1),
