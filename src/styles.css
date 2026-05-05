@@ -1073,6 +1073,30 @@ html, body, #root {
   border-bottom: 1px solid rgba(143, 184, 255, 0.1);
 }
 
+.room-heading-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-id-input {
+  width: 88px;
+  padding: 2px 6px;
+  border: 1px solid rgba(143, 184, 255, 0.18);
+  border-radius: 4px;
+  background: rgba(8, 14, 24, 0.9);
+  color: #8fb8ff;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.room-id-input:focus {
+  outline: none;
+  border-color: rgba(143, 184, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(143, 184, 255, 0.12);
+}
+
 .room-heading-right {
   display: flex;
   align-items: center;

@@ -278,6 +278,7 @@ export type Command =
   | { kind: 'moveRoom'; id: number; from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }
   | { kind: 'addRoom'; id: number; room: RoomSnapshot; areaId: number }
   | { kind: 'deleteRoom'; id: number; room: RoomSnapshot; areaId: number; neighborEdits: NeighborEdit[] }
+  | { kind: 'renameRoomId'; fromId: number; toId: number }
   | { kind: 'addExit'; fromId: number; dir: Direction; toId: number; previous: number; reverse: { fromId: number; dir: Direction; previous: number } | null }
   | { kind: 'removeExit'; fromId: number; dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }
   | { kind: 'removeAllExits'; roomId: number; exits: Array<{ dir: Direction; was: number; reverse: { fromId: number; dir: Direction; was: number } | null }>; specialExits: Array<{ name: string; toId: number }> }

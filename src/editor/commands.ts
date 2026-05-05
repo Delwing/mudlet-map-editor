@@ -5,6 +5,125 @@ import type { Command, NeighborEdit } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
 
+function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
+  if (fromId === toId) return;
+  const room = map.rooms[fromId];
+  if (!room || map.rooms[toId]) return;
+
+  delete map.rooms[fromId];
+  map.rooms[toId] = room;
+  if (typeof (room as { id?: unknown }).id === 'number') (room as { id: number }).id = toId;
+
+  const area = map.areas[room.area];
+  if (area) {
+    area.rooms = area.rooms.map((id) => id === fromId ? toId : id);
+  }
+
+  if (map.mRoomIdHash && Object.prototype.hasOwnProperty.call(map.mRoomIdHash, fromId)) {
+    map.mRoomIdHash[toId] = map.mRoomIdHash[fromId];
+    delete map.mRoomIdHash[fromId];
+  }
+
+  for (const hash of Object.keys(map.mpRoomDbHashToRoomId ?? {})) {
+    if (map.mpRoomDbHashToRoomId[hash] === fromId) map.mpRoomDbHashToRoomId[hash] = toId;
+  }
+
+  for (const raw of Object.values(map.rooms)) {
+    if (!raw) continue;
+    for (const dir of Object.keys(DIR_SHORT) as Array<keyof typeof DIR_SHORT>) {
+      if ((raw as any)[dir] === fromId) (raw as any)[dir] = toId;
+    }
+    for (const [name, targetId] of Object.entries(raw.mSpecialExits ?? {})) {
+      if (targetId === fromId) raw.mSpecialExits[name] = toId;
+    }
+  }
+}
+
+function remapRoomIdInStore(fromId: number, toId: number): void {
+  const remapId = (id: number) => id === fromId ? toId : id;
+  store.setState((state) => ({
+    selection: (() => {
+      const selection = state.selection;
+      switch (selection?.kind) {
+        case 'room': return { ...selection, ids: selection.ids.map(remapId) };
+        case 'exit': return { ...selection, fromId: remapId(selection.fromId), toId: remapId(selection.toId) };
+        case 'customLine': return { ...selection, roomId: remapId(selection.roomId) };
+        case 'stub': return { ...selection, roomId: remapId(selection.roomId) };
+        case 'label':
+        case undefined:
+          return selection;
+      }
+    })(),
+    hover: (() => {
+      const hover = state.hover;
+      switch (hover?.kind) {
+        case 'room': return { ...hover, id: remapId(hover.id) };
+        case 'exit': return { ...hover, fromId: remapId(hover.fromId), toId: remapId(hover.toId) };
+        case 'customLine': return { ...hover, roomId: remapId(hover.roomId) };
+        case 'stub': return { ...hover, roomId: remapId(hover.roomId) };
+        case 'label':
+        case undefined:
+          return hover;
+      }
+    })(),
+    pending: (() => {
+      const pending = state.pending;
+      switch (pending?.kind) {
+        case 'drag':
+          return {
+            ...pending,
+            roomId: remapId(pending.roomId),
+            multiOrigins: pending.multiOrigins?.map((origin) => ({ ...origin, id: remapId(origin.id) })),
+            customLineSnapshots: pending.customLineSnapshots?.map((snapshot) => ({ ...snapshot, roomId: remapId(snapshot.roomId) })),
+          };
+        case 'connect':
+          return {
+            ...pending,
+            sourceId: remapId(pending.sourceId),
+            hoverTargetId: pending.hoverTargetId == null ? null : remapId(pending.hoverTargetId),
+          };
+        case 'customLine':
+          return {
+            ...pending,
+            roomId: remapId(pending.roomId),
+            companion: pending.companion
+              ? { ...pending.companion, roomId: remapId(pending.companion.roomId) }
+              : null,
+          };
+        case 'customLinePoint':
+          return { ...pending, roomId: remapId(pending.roomId) };
+        case 'pickExit':
+        case 'pickSpecialExit':
+          return { ...pending, fromId: remapId(pending.fromId) };
+        case 'marquee':
+          return { ...pending, preExistingIds: pending.preExistingIds.map(remapId) };
+        case 'paint':
+          return { ...pending, painted: pending.painted.map((item) => ({ ...item, id: remapId(item.id) })) };
+        case 'labelDrag':
+        case 'labelRect':
+        case 'labelResize':
+        case 'pickSwatch':
+        case undefined:
+          return pending;
+      }
+    })(),
+    contextMenu: (() => {
+      const contextMenu = state.contextMenu;
+      switch (contextMenu?.kind) {
+        case 'room': return { ...contextMenu, roomId: remapId(contextMenu.roomId) };
+        case 'customLinePoint': return { ...contextMenu, roomId: remapId(contextMenu.roomId) };
+        case 'disambiguate':
+        case 'label':
+        case undefined:
+          return contextMenu;
+      }
+    })(),
+    spreadShrink: state.spreadShrink
+      ? { ...state.spreadShrink, anchorRoomId: state.spreadShrink.anchorRoomId === null ? null : remapId(state.spreadShrink.anchorRoomId) }
+      : state.spreadShrink,
+  }));
+}
+
 /**
  * Apply a command. When a `scene` is provided, mutations go through
  * `scene.reader` so the renderer stays in sync automatically. When it is
@@ -46,6 +165,11 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
           if (idx !== -1) area.rooms.splice(idx, 1);
         }
       }
+      return { structural: true };
+    }
+    case 'renameRoomId': {
+      renameRoomIdInMap(map, cmd.fromId, cmd.toId);
+      if (reader) reader.renameRoomId(cmd.fromId, cmd.toId);
       return { structural: true };
     }
     case 'addExit': {
@@ -391,6 +515,11 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       }
       return { structural: true };
     }
+    case 'renameRoomId': {
+      renameRoomIdInMap(map, cmd.toId, cmd.fromId);
+      if (reader) reader.renameRoomId(cmd.toId, cmd.fromId);
+      return { structural: true };
+    }
     case 'addExit': {
       if (reader) {
         reader.setExit(cmd.fromId, cmd.dir, cmd.previous);
@@ -703,6 +832,7 @@ export function pushCommand(cmd: Command, scene?: SceneHandle | null): boolean {
   const state = store.getState();
   if (!state.map) return false;
   const { structural } = applyCommand(state.map, cmd, scene);
+  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.fromId, cmd.toId);
   store.setState((s) => ({
     undo: [...s.undo, cmd],
     redo: [],
@@ -727,6 +857,7 @@ export function undoOnce(scene?: SceneHandle | null): { changed: boolean; struct
   if (!state.map || state.undo.length === 0) return { changed: false, structural: false };
   const cmd = state.undo[state.undo.length - 1];
   const { structural } = revertCommand(state.map, cmd, scene);
+  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.toId, cmd.fromId);
   store.setState((s) => ({
     undo: s.undo.slice(0, -1),
     redo: [...s.redo, cmd],
@@ -739,6 +870,7 @@ export function redoOnce(scene?: SceneHandle | null): { changed: boolean; struct
   if (!state.map || state.redo.length === 0) return { changed: false, structural: false };
   const cmd = state.redo[state.redo.length - 1];
   const { structural } = applyCommand(state.map, cmd, scene);
+  if (cmd.kind === 'renameRoomId') remapRoomIdInStore(cmd.fromId, cmd.toId);
   store.setState((s) => ({
     undo: [...s.undo, cmd],
     redo: s.redo.slice(0, -1),

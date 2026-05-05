@@ -2,11 +2,13 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { registerSpecialExitPickCb } from '../editor/tools';
-import { pushCommand, pushBatch } from '../editor/commands';
+import { pushCommand } from '../editor/commands';
 import { normalizeCustomLineKey, OPPOSITE, DIR_SHORT, DIR_INDEX, SHORT_TO_DIR, type CustomLineCompanion, type SetCustomLineCompanion, type Direction } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
 import type { RoomPanelSection } from '../editor/plugin';
+import { createDefaultRoom } from '../editor/mapHelpers';
+import { roomAtCell } from '../editor/hitTest';
 import { EnvPicker } from './EnvPicker';
 import { DoorIcon, LockIcon, WeightIcon, CrosshairIcon, CenterOnRoomIcon } from './icons';
 import { RoomLink, Field, UserDataEditor, hexToMudletColor } from './panelShared';
@@ -36,6 +38,21 @@ const DIR_ABBREV: Record<string, string> = {
   up: 'Up', down: 'Dn', in: 'In', out: 'Out',
 };
 
+const ROOM_OFFSETS: Record<Direction, { x: number; y: number; z: number }> = {
+  north: { x: 0, y: 1, z: 0 },
+  northeast: { x: 1, y: 1, z: 0 },
+  east: { x: 1, y: 0, z: 0 },
+  southeast: { x: 1, y: -1, z: 0 },
+  south: { x: 0, y: -1, z: 0 },
+  southwest: { x: -1, y: -1, z: 0 },
+  west: { x: -1, y: 0, z: 0 },
+  northwest: { x: -1, y: 1, z: 0 },
+  up: { x: 0, y: 0, z: 1 },
+  down: { x: 0, y: 0, z: -1 },
+  in: { x: 0, y: 0, z: 0 },
+  out: { x: 0, y: 0, z: 0 },
+};
+
 interface RoomPanelProps {
   selection: { kind: 'room'; ids: number[] };
   room: NonNullable<MudletMap['rooms'][number]>;
@@ -60,6 +77,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   const warnings = useEditorState((s) => s.warnings);
 
   const [nameDraft, setNameDraft] = useState(room.name ?? '');
+  const [idDraft, setIdDraft] = useState(String(selId));
   const [weightDraft, setWeightDraft] = useState(String(room.weight ?? 1));
   const [symbolDraft, setSymbolDraft] = useState(room.symbol ?? '');
   const [hashDraft, setHashDraft] = useState(() => lookupRoomHash(map, selId, room));
@@ -89,12 +107,17 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   symbolDraftRef.current = symbolDraft;
   const hashDraftRef = useRef(hashDraft);
   hashDraftRef.current = hashDraft;
+  const skipCleanupRef = useRef(false);
 
   useEffect(() => {
     const prevRoom = room;
     const prevId = selId;
     const prevHash = lookupRoomHash(map, prevId, prevRoom);
     return () => {
+      if (skipCleanupRef.current) {
+        skipCleanupRef.current = false;
+        return;
+      }
       let changed = false;
       const sym = symbolDraftRef.current;
       if (sym !== prevRoom.symbol) {
@@ -116,12 +139,16 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
         pushCommand({ kind: 'setRoomHash', id: prevId, from: prevHash || null, to: hashNext || null }, sceneRef.current);
         changed = true;
       }
-      if (changed) { sceneRef.current?.refresh(); store.bumpData(); }
+      if (changed) {
+        sceneRef.current?.refresh();
+        store.bumpData();
+      }
     };
   }, [room]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setNameDraft(room.name ?? '');
+    setIdDraft(String(selId));
     setWeightDraft(String(room.weight ?? 1));
     setSymbolDraft(room.symbol ?? '');
     setHashDraft(lookupRoomHash(map, selId, room));
@@ -149,6 +176,55 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ status: t('room.updatedField', { field, id: selId }) });
+  };
+
+  const commitRoomId = (raw: string) => {
+    const next = Number(raw.trim());
+    if (!Number.isInteger(next) || next <= 0) {
+      setIdDraft(String(selId));
+      return;
+    }
+    if (next === selId) {
+      setIdDraft(String(selId));
+      return;
+    }
+    if (map.rooms[next]) {
+      setIdDraft(String(selId));
+      store.setState({ status: t('room.idExists', { id: next }) });
+      return;
+    }
+    const currentHash = lookupRoomHash(map, selId, room);
+    let changed = false;
+    if (symbolDraftRef.current !== room.symbol) {
+      pushCommand({ kind: 'setRoomField', id: selId, field: 'symbol', from: room.symbol, to: symbolDraftRef.current }, sceneRef.current);
+      changed = true;
+    }
+    if (nameDraftRef.current !== room.name) {
+      pushCommand({ kind: 'setRoomField', id: selId, field: 'name', from: room.name, to: nameDraftRef.current }, sceneRef.current);
+      changed = true;
+    }
+    const nextWeight = Number(weightDraftRef.current);
+    if (!Number.isNaN(nextWeight) && nextWeight !== room.weight) {
+      pushCommand({ kind: 'setRoomField', id: selId, field: 'weight', from: room.weight, to: nextWeight }, sceneRef.current);
+      changed = true;
+    }
+    const nextHash = hashDraftRef.current.trim();
+    if (nextHash !== currentHash) {
+      pushCommand({ kind: 'setRoomHash', id: selId, from: currentHash || null, to: nextHash || null }, sceneRef.current);
+      changed = true;
+    }
+    skipCleanupRef.current = true;
+    pushCommand({ kind: 'renameRoomId', fromId: selId, toId: next }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpStructure();
+    setIdDraft(String(next));
+    if (changed) {
+      setNameDraft(nameDraftRef.current);
+      setWeightDraft(weightDraftRef.current);
+      setSymbolDraft(symbolDraftRef.current);
+      setHashDraft(nextHash);
+    }
+    store.setState({ status: t('room.idUpdated', { from: selId, to: next }) });
   };
 
   const commitHash = (raw: string) => {
@@ -181,11 +257,56 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
 
   const addExit = (dir: Direction, toId: number) => {
     if (!map.rooms[toId]) return;
-    const previous = (room as any)[dir] as number;
+    const previous = (room as any)[dir] ?? -1;
     pushCommand({ kind: 'addExit', fromId: selId, dir, toId, previous, reverse: null }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
     store.setState({ status: t('room.exitAdded', { dir, id: toId }) });
+  };
+
+  const submitExitDraft = (dir: Direction, raw: string, mode: 'blur' | 'enter') => {
+    const nextId = parseInt(raw, 10);
+    if (Number.isNaN(nextId) || nextId <= 0) {
+      setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
+      return;
+    }
+
+    if (map.rooms[nextId]) {
+      addExit(dir, nextId);
+      setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
+      return;
+    }
+
+    if (mode !== 'enter') return;
+
+    if (dir === 'in' || dir === 'out') {
+      store.setState({ status: t('room.exitCreateInOut') });
+      return;
+    }
+
+    const offset = ROOM_OFFSETS[dir];
+    const targetX = room.x + offset.x;
+    const targetY = room.y + offset.y;
+    const targetZ = room.z + offset.z;
+    const occupied = roomAtCell(map, room.area, targetX, targetY, targetZ);
+    if (occupied) {
+      store.setState({ status: t('room.exitCreateOccupied', { id: nextId, x: targetX, y: targetY, z: targetZ }) });
+      return;
+    }
+
+    const newRoom = createDefaultRoom(nextId, room.area, targetX, targetY, targetZ);
+    const previous = (room as any)[dir] ?? -1;
+    pushCommand({
+      kind: 'batch',
+      cmds: [
+        { kind: 'addRoom', id: nextId, room: newRoom, areaId: room.area },
+        { kind: 'addExit', fromId: selId, dir, toId: nextId, previous, reverse: null },
+      ],
+    }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpStructure();
+    setExitDrafts((prev) => ({ ...prev, [dir]: '' }));
+    store.setState({ status: t('room.exitRoomCreated', { id: nextId, dir: DIR_ABBREV[dir], from: selId }) });
   };
 
   const changeDoor = (dir: Direction, from: number, to: number) => {
@@ -492,11 +613,13 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               placeholder="#"
               value={exitDrafts[dir] ?? ''}
               onChange={(e) => setExitDrafts((prev) => ({ ...prev, [dir]: e.target.value }))}
-              onBlur={(e) => {
-                const id = parseInt(e.target.value, 10);
-                if (!isNaN(id)) { addExit(d, id); setExitDrafts((prev) => ({ ...prev, [dir]: '' })); }
+              onBlur={(e) => submitExitDraft(d, e.target.value, 'blur')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitExitDraft(d, (e.target as HTMLInputElement).value, 'enter');
+                }
               }}
-              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
             />
           )}
           {isActive
@@ -592,7 +715,25 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
   return (
     <div className="panel-content">
       <h3 className="room-heading">
-        <span>{t('room.heading', { id: selId })}</span>
+        <span className="room-heading-id">
+          <span>Room #</span>
+          <input
+            type="number"
+            className="room-id-input"
+            min={1}
+            value={idDraft}
+            onChange={(e) => setIdDraft(e.target.value)}
+            onBlur={(e) => commitRoomId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+              if (e.key === 'Escape') {
+                setIdDraft(String(selId));
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            aria-label={t('room.id')}
+          />
+        </span>
         <span className="room-heading-right">
           <span className="room-coords">({room.x}, {room.y}, {room.z})</span>
           <button
