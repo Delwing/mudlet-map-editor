@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toolbar } from './components/Toolbar';
 import { HelpModal } from './components/HelpModal';
@@ -19,7 +19,7 @@ import { snap } from './editor/coords';
 import type { Command, ToolId } from './editor/types';
 import { saveSession } from './editor/session';
 import { loadFileIntoStore } from './editor/loadFile';
-import type { EditorPlugin, RoomPanelSection } from './editor/plugin';
+import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
 import { collectWarnings } from './editor/warnings';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px.
@@ -95,6 +95,24 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   const pluginSwatchSets = useMemo(() => plugins.flatMap((p) => p.swatchSets?.() ?? []), [plugins]);
   const pluginSidebarTabs = useMemo(() => plugins.flatMap((p) => p.sidebarTabs?.() ?? []), [plugins]);
   const pluginRoomSections = useMemo<RoomPanelSection[]>(() => plugins.flatMap((p) => p.roomPanelSections?.() ?? []), [plugins]);
+  // First plugin that *defines* renderLogo claims the slot — its return is
+  // rendered verbatim (null = empty slot, JSX = custom mark). When nothing is
+  // defined, the toolbar shows the built-in Mudlet logo. `undefined` is the
+  // sentinel for "no plugin claimed the slot"; anything else is the override.
+  const pluginLogo = useMemo<ReactNode | undefined>(() => {
+    for (const p of plugins) {
+      if (typeof p.renderLogo === 'function') return p.renderLogo();
+    }
+    return undefined;
+  }, [plugins]);
+  // Compose every plugin's toolbarActions transform into a single function
+  // applied to the built-in action list inside Toolbar. undefined when no
+  // plugin contributes so the toolbar can render the defaults unchanged.
+  const transformToolbarActions = useMemo(() => {
+    const fns = plugins.map((p) => p.toolbarActions).filter((fn): fn is NonNullable<typeof fn> => typeof fn === 'function');
+    if (fns.length === 0) return undefined;
+    return (actions: ToolbarAction[]) => fns.reduce((acc, fn) => fn(acc), actions);
+  }, [plugins]);
 
   useEffect(() => {
     store.setState({ pluginSwatchSets });
@@ -655,12 +673,18 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     store.setState({ status: t('status.redone') });
   };
 
+  // `mudlet-editor-root` is the scope class injected by postcss-prefix-selector
+  // (see vite.lib.config.ts). Every selector in the bundled stylesheet is
+  // prefixed with `.mudlet-editor-root`, so styles only match elements inside
+  // this subtree — keeping the editor's CSS from leaking onto a host app's
+  // chrome when used as a library, while standalone use still picks it up
+  // because this wrapper is always rendered.
   return (
-    <div className={`app${panelCollapsed ? ' panel-collapsed' : ''}`}>
+    <div className={`mudlet-editor-root app${panelCollapsed ? ' panel-collapsed' : ''}`}>
       <div className="map-viewport">
         <div ref={containerRef} className="map-container" />
         {!mapLoaded && <SessionsPanel />}
-        <Toolbar title={title} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} onSettingsClick={() => setShowSettings(true)} />
+        <Toolbar title={title} logo={pluginLogo} transformActions={transformToolbarActions} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} onSettingsClick={() => setShowSettings(true)} />
 <SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} pluginRoomSections={pluginRoomSections} />
       </div>
       <ContextMenu sceneRef={sceneRef} />

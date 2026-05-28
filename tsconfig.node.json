@@ -12,5 +12,5 @@
     "outDir": "./node_modules/.tmp/tsc-node",
     "types": ["node"]
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "vite.lib.config.ts", "src/types/**/*.d.ts"]
 }

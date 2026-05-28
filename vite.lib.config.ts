@@ -2,8 +2,16 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { fileURLToPath } from 'node:url';
+import prefixSelector from 'postcss-prefix-selector';
 
 const fsStub = fileURLToPath(new URL('./src/shims/fs-stub.ts', import.meta.url));
+
+/** Class added to the editor's root <div> at runtime (see App.tsx). Every CSS
+ *  selector in the bundled stylesheet is prefixed with this class at build time
+ *  so the editor's styles only match elements inside its own subtree — letting
+ *  consumers embed the editor without bare-selector collisions with their app's
+ *  own .toolbar / .app / input[type=checkbox] / * rules. */
+const EDITOR_ROOT_CLASS = '.mudlet-editor-root';
 
 export default defineConfig({
   plugins: [
@@ -13,6 +21,29 @@ export default defineConfig({
       globals: { Buffer: true, process: true },
     }),
   ],
+  css: {
+    postcss: {
+      plugins: [
+        prefixSelector({
+          prefix: EDITOR_ROOT_CLASS,
+          transform(prefix, selector, prefixedSelector) {
+            // The editor's single page-reset block targets html/body/#root —
+            // when prefixed naively (`.root html`, `.root body`, `.root #root`)
+            // none would match anything inside the embedded subtree. Map the
+            // whole comma-list onto the root itself so its color/background/
+            // font-family land on the wrapper and cascade as intended.
+            if (/^(html|body|#root)$/.test(selector)) return prefix;
+            // `:root` carries CSS-var definitions that need to live on the
+            // documentElement so they're visible across the whole subtree
+            // (and to any consumer code reading the same vars). Leave it
+            // unchanged rather than scoping it under the editor.
+            if (selector === ':root') return selector;
+            return prefixedSelector;
+          },
+        }),
+      ],
+    },
+  },
   resolve: {
     alias: {
       fs: fsStub,

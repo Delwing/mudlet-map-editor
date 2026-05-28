@@ -1,4 +1,49 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import type { ToolbarAction } from '../editor/plugin';
+
+/** Render a single ToolbarAction. `filePicker` produces a <label> wrapping a
+ *  hidden <input type=file>; `render` short-circuits to fully custom output;
+ *  otherwise the action is a plain <button>. */
+function renderToolbarAction(action: ToolbarAction): ReactNode {
+  if (action.render) return <span key={action.id}>{action.render()}</span>;
+  if (action.filePicker) {
+    const { accept, onFile } = action.filePicker;
+    return (
+      <label
+        key={action.id}
+        className="file-button"
+        title={action.title}
+        style={action.style}
+      >
+        {action.icon}
+        {action.badge}
+        <input
+          type="file"
+          accept={accept}
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onFile(file);
+            e.target.value = '';
+          }}
+        />
+      </label>
+    );
+  }
+  return (
+    <button
+      key={action.id}
+      type="button"
+      title={action.title}
+      onClick={action.onClick}
+      disabled={action.disabled}
+      style={action.style}
+    >
+      {action.icon}
+      {action.badge}
+    </button>
+  );
+}
 import { useTranslation } from 'react-i18next';
 import { modKey } from '../platform';
 import { store, useEditorState, saveUserSettings } from '../editor/store';
@@ -8,7 +53,12 @@ import { DropdownSelect } from './DropdownSelect';
 import { useToolButtons } from './HelpModal';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
-export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick }: { title?: string; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void; onSettingsClick?: () => void }) {
+/** `logo` is the plugin override slot. `undefined` means no plugin claimed it
+ *  (toolbar falls back to the built-in Mudlet logo); any other value — including
+ *  `null` — is rendered as-is, so a plugin can explicitly hide the slot.
+ *  `transformActions` is the composed plugin transform applied to the built-in
+ *  file-action list (see EditorPlugin#toolbarActions). */
+export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick }: { title?: string; logo?: ReactNode; transformActions?: (actions: ToolbarAction[]) => ToolbarAction[]; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void; onSettingsClick?: () => void }) {
   const { t } = useTranslation('editor');
   const toolButtons = useToolButtons();
   const activeTool = useEditorState((s) => s.activeTool);
@@ -45,7 +95,6 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
     return area?.zLevels?.length ? [...area.zLevels].sort((a, b) => a - b) : [0];
   }, [map, currentAreaId, structureVersion]);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [gotoInput, setGotoInput] = useState('');
 
   const handleGotoRoom = () => {
@@ -113,57 +162,76 @@ export function Toolbar({ title = 'Mudlet Map Editor', onHelpClick, onLoadFromUr
     }
   };
 
+  // Built-in file-action buttons. Plugins reshape this array via the
+  // composed `transformActions` — see EditorPlugin.toolbarActions.
+  const builtInActions: ToolbarAction[] = [
+    {
+      id: 'new',
+      title: t('toolbar.newMap'),
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <path d="M6 9h4M8 7v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      ),
+      onClick: handleNewMap,
+    },
+    {
+      id: 'load',
+      title: t('toolbar.loadDat'),
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M1 5h14v9H1V5z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <path d="M1 5l2-3h4l1 1h7" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <path d="M8 8v4M6 10l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      filePicker: { accept: '.dat', onFile: handleFile },
+    },
+    {
+      id: 'loadUrl',
+      title: t('toolbar.loadFromUrl'),
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <path d="M2 8h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+          <path d="M2.5 5.5h11M2.5 10.5h11" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1"/>
+        </svg>
+      ),
+      onClick: onLoadFromUrl,
+    },
+    {
+      id: 'save',
+      title: t('toolbar.saveDat'),
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M2 2h9l3 3v9H2V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <rect x="5" y="2" width="5" height="4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+          <rect x="3" y="8" width="10" height="5" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+        </svg>
+      ),
+      onClick: handleSave,
+      disabled: !mapLoaded,
+      style: { position: 'relative', ...(dirty ? { color: '#ffd080' } : {}) },
+      badge: dirty
+        ? <span style={{ position: 'absolute', top: 6, right: 7, fontSize: '10px', lineHeight: 1, color: '#ffd080' }}>*</span>
+        : undefined,
+    },
+  ];
+
   return (
     <div className="toolbar">
       {/* Row 1: header */}
       <div className="toolbar-row toolbar-row-header">
-        <img src={`logo.png`} alt="Mudlet logo" id={"logo"}/>
+        {logo !== undefined ? logo : <img src={`logo.png`} alt="Mudlet logo" id={"logo"}/>}
         <h1>{title}</h1>
 
-        <button type="button" title={t('toolbar.newMap')} onClick={handleNewMap}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <path d="M6 9h4M8 7v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-          </svg>
-        </button>
-
-        <label className="file-button" title={t('toolbar.loadDat')}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M1 5h14v9H1V5z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <path d="M1 5l2-3h4l1 1h7" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <path d="M8 8v4M6 10l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".dat"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFile(file);
-              e.target.value = '';
-            }}
-          />
-        </label>
-
-        <button type="button" title={t('toolbar.loadFromUrl')} onClick={onLoadFromUrl}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <path d="M2 8h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-            <path d="M2.5 5.5h11M2.5 10.5h11" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1"/>
-          </svg>
-        </button>
-
-        <button type="button" title={t('toolbar.saveDat')} onClick={handleSave} disabled={!mapLoaded} style={{ position: 'relative', ...(dirty ? { color: '#ffd080' } : {}) }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M2 2h9l3 3v9H2V2z" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <rect x="5" y="2" width="5" height="4" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-            <rect x="3" y="8" width="10" height="5" stroke="currentColor" strokeWidth="1.2" fill="none"/>
-          </svg>
-          {dirty && <span style={{ position: 'absolute', top: 6, right: 7, fontSize: '10px', lineHeight: 1, color: '#ffd080' }}>*</span>}
-        </button>
+        {(transformActions
+          ? transformActions(builtInActions)
+          : builtInActions
+        ).map(renderToolbarAction)}
 
         {mapLoaded && (
           <>

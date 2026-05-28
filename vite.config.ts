@@ -2,8 +2,15 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { fileURLToPath } from 'node:url';
+import prefixSelector from 'postcss-prefix-selector';
 
 const fsStub = fileURLToPath(new URL('./src/shims/fs-stub.ts', import.meta.url));
+
+// Same scoping the library build applies (see vite.lib.config.ts) — kept in
+// sync so the standalone app and the published library share one stylesheet
+// surface, and the root-wrapper class added in App.tsx is the only thing the
+// CSS needs to match.
+const EDITOR_ROOT_CLASS = '.mudlet-editor-root';
 
 export default defineConfig({
   base: process.env.VITE_BASE_PATH ?? '/',
@@ -14,6 +21,20 @@ export default defineConfig({
       globals: { Buffer: true, process: true },
     }),
   ],
+  css: {
+    postcss: {
+      plugins: [
+        prefixSelector({
+          prefix: EDITOR_ROOT_CLASS,
+          transform(prefix, selector, prefixedSelector) {
+            if (/^(html|body|#root)$/.test(selector)) return prefix;
+            if (selector === ':root') return selector;
+            return prefixedSelector;
+          },
+        }),
+      ],
+    },
+  },
   resolve: {
     alias: {
       fs: fsStub,
