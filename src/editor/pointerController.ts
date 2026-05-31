@@ -47,7 +47,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
     }
     const s = store.getState();
     const pendingKind = s.pending?.kind;
-    const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit')
+    const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit' || pendingKind === 'pickRoom')
       ? 'select'
       : effectiveTool();
     const tool = TOOLS[toolId];

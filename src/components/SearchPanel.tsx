@@ -1,8 +1,26 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
+import { parseRoomQuery, describeRoom } from '../editor/roomSearch';
 
 type SearchMode = 'rooms' | 'labels';
+
+/** Filter examples shown in the syntax help popover; click to append to the query. */
+const FILTER_EXAMPLES: { example: string; descKey: string }[] = [
+  { example: 'env:3', descKey: 'helpEnv' },
+  { example: 'weight:>5', descKey: 'helpWeight' },
+  { example: 'exits:1', descKey: 'helpExits' },
+  { example: 'deadend:yes', descKey: 'helpDeadend' },
+  { example: 'stubs:>0', descKey: 'helpStubs' },
+  { example: 'door:yes', descKey: 'helpDoor' },
+  { example: 'locked:no', descKey: 'helpLocked' },
+  { example: 'special:yes', descKey: 'helpSpecial' },
+  { example: 'customline:yes', descKey: 'helpCustomLine' },
+  { example: 'symbol:yes', descKey: 'helpSymbol' },
+  { example: 'area:water', descKey: 'helpArea' },
+  { example: 'z:0', descKey: 'helpZ' },
+  { example: '-door:yes', descKey: 'helpNegate' },
+];
 
 interface RoomResult {
   kind: 'room';
@@ -39,51 +57,66 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('rooms');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const results = useMemo<SearchResult[]>(() => {
-    if (!map || query.trim().length === 0) return [];
-    const q = query.trim().toLowerCase();
+  const { results, filterError } = useMemo<{ results: SearchResult[]; filterError: string | null }>(() => {
+    if (!map || query.trim().length === 0) return { results: [], filterError: null };
 
     if (mode === 'rooms') {
+      const parsed = parseRoomQuery(query);
+      // A query made up solely of an invalid filter (no text, no valid filters)
+      // can't match anything — surface the error instead of an empty list.
+      if (parsed.predicates.length === 0 && parsed.text === '') {
+        return { results: [], filterError: parsed.error };
+      }
       const out: RoomResult[] = [];
       for (const [idStr, r] of Object.entries(map.rooms)) {
         if (!r) continue;
         const id = Number(idStr);
+        const ctx = { room: r, id, map };
+        if (!parsed.predicates.every((p) => p(ctx))) continue;
+
         let matchReason: string | null = null;
-        if (r.name?.toLowerCase().includes(q)) {
-          matchReason = 'name';
-        } else if (idStr.includes(q)) {
-          matchReason = 'id';
-        } else if (r.userData) {
-          for (const [k, v] of Object.entries(r.userData)) {
-            if (k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q)) {
-              matchReason = `${k}: ${truncate(String(v))}`;
-              break;
+        if (parsed.text) {
+          const q = parsed.text;
+          if (r.name?.toLowerCase().includes(q)) {
+            matchReason = 'name';
+          } else if (idStr.includes(q)) {
+            matchReason = 'id';
+          } else if (r.userData) {
+            for (const [k, v] of Object.entries(r.userData)) {
+              if (k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q)) {
+                matchReason = `${k}: ${truncate(String(v))}`;
+                break;
+              }
             }
           }
+          if (matchReason === null) continue; // free text required but not found
         }
-        if (matchReason !== null) {
-          out.push({
-            kind: 'room',
-            id,
-            name: r.name ?? '',
-            areaId: r.area,
-            areaName: map.areaNames[r.area] ?? `Area ${r.area}`,
-            x: r.x,
-            y: r.y,
-            z: r.z,
-            matchReason,
-          });
-          if (out.length >= 100) break;
+        if (matchReason === null) {
+          matchReason = describeRoom(ctx, parsed.filterKeys);
         }
+        out.push({
+          kind: 'room',
+          id,
+          name: r.name ?? '',
+          areaId: r.area,
+          areaName: map.areaNames[r.area] ?? `Area ${r.area}`,
+          x: r.x,
+          y: r.y,
+          z: r.z,
+          matchReason,
+        });
+        if (out.length >= 100) break;
       }
-      return out;
+      return { results: out, filterError: parsed.error };
     } else {
+      const q = query.trim().toLowerCase();
       const out: LabelResult[] = [];
       for (const [areaIdStr, labelList] of Object.entries(map.labels)) {
         if (!labelList) continue;
@@ -104,7 +137,7 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
         }
         if (out.length >= 100) break;
       }
-      return out;
+      return { results: out, filterError: null };
     }
   }, [map, query, mode]);
 
@@ -177,6 +210,12 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
   const handleModeChange = (newMode: SearchMode) => {
     setMode(newMode);
     setQuery('');
+    setShowHelp(false);
+    inputRef.current?.focus();
+  };
+
+  const appendExample = (example: string) => {
+    setQuery((q) => (q.trim() ? `${q.trim()} ${example} ` : `${example} `));
     inputRef.current?.focus();
   };
 
@@ -199,7 +238,20 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
             {t('tabLabels')}
           </button>
         </div>
-        <button type="button" className="modal-close" onClick={onClose} title={t('closeTitle')}>✕</button>
+        <div className="search-panel-header-actions">
+          {mode === 'rooms' && (
+            <button
+              type="button"
+              className={`search-help-toggle${showHelp ? ' active' : ''}`}
+              onClick={() => setShowHelp((v) => !v)}
+              title={t('filtersHelpTitle')}
+              aria-pressed={showHelp}
+            >
+              {t('filtersToggle')}
+            </button>
+          )}
+          <button type="button" className="modal-close" onClick={onClose} title={t('closeTitle')}>✕</button>
+        </div>
       </div>
       <div className="search-panel-input-wrap">
         <svg className="search-panel-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -210,6 +262,7 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
           ref={inputRef}
           className="search-panel-input"
           type="text"
+          spellCheck={false}
           placeholder={mode === 'rooms' ? t('placeholderRooms') : t('placeholderLabels')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -218,10 +271,32 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
           <button type="button" className="search-panel-clear" onClick={() => { setQuery(''); inputRef.current?.focus(); }} title={t('clearTitle')}>✕</button>
         )}
       </div>
+      {mode === 'rooms' && showHelp && (
+        <div className="search-panel-help">
+          <div className="search-panel-help-hint">{t('filtersHelpHint')}</div>
+          <div className="search-panel-help-grid">
+            {FILTER_EXAMPLES.map((f) => (
+              <button
+                key={f.example}
+                type="button"
+                className="search-help-chip"
+                onClick={() => appendExample(f.example)}
+                title={t(f.descKey)}
+              >
+                <code>{f.example}</code>
+                <span>{t(f.descKey)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {mode === 'rooms' && filterError && (
+        <div className="search-panel-error">{t('invalidFilter', { token: filterError })}</div>
+      )}
       {query.trim().length > 0 && (
         <ul className="search-panel-results" ref={listRef}>
           {results.length === 0 ? (
-            <li className="search-panel-empty">{t('noMatches')}</li>
+            !filterError && <li className="search-panel-empty">{t('noMatches')}</li>
           ) : (
             results.map((r, i) => (
               <li
@@ -236,7 +311,7 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
                       <span className="search-result-name">{r.name || <em>{t('unnamed')}</em>}</span>
                       <span className="search-result-meta">#{r.id} · {r.areaName}{r.z !== 0 ? ` · z${r.z}` : ''}</span>
                     </div>
-                    <div className="search-result-reason">{r.matchReason}</div>
+                    {r.matchReason && <div className="search-result-reason">{r.matchReason}</div>}
                   </>
                 ) : (
                   <>

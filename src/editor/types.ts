@@ -201,6 +201,13 @@ export type PendingPickSpecialExit = {
   fromId: number;
 };
 
+/** Generic "click a room to fill a field" pick. `target` identifies which
+ *  field/slot requested the pick so the requester can route the result. */
+export type PendingPickRoom = {
+  kind: 'pickRoom';
+  target: string;
+};
+
 export type LabelResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
 export type PendingLabelDrag = {
@@ -255,7 +262,7 @@ export type PendingPaint = {
 
 export type PendingPickSwatch = { kind: 'pickSwatch' };
 
-export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | PendingPaint | PendingPickSwatch | null;
+export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingPickRoom | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | PendingPaint | PendingPickSwatch | null;
 
 export type RoomSnapshot = MudletRoom;
 

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { MudletMap, MudletRoom } from '../mapIO';
 import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
 import type { MapWarning } from './warnings';
+import type { PathFindingAlgorithm, RouteSummary } from './pathfinding';
 
 export type RoomClipboard = {
   /** Rooms captured at copy time; origId preserved for internal-exit remap. */
@@ -69,6 +70,15 @@ export type SpreadShrinkState = {
   anchorRoomId: number | null;
 };
 
+/** Route-finder (speedwalk) panel state. `summary.path` is what RouteEffect draws. */
+export type RouteState = {
+  fromId: number | null;
+  toId: number | null;
+  algorithm: PathFindingAlgorithm;
+  summary: RouteSummary | null;
+  status: 'idle' | 'found' | 'noPath' | 'sameRoom' | 'missing';
+};
+
 export interface EditorState {
   map: MudletMap | null;
   loaded: LoadedMap | null;
@@ -117,6 +127,8 @@ export interface EditorState {
   swatchPaletteOpen: boolean;
   sessionId: string | null;
   spreadShrink: SpreadShrinkState | null;
+  /** Route-finder panel + the path RouteEffect renders. */
+  route: RouteState;
   warningAckVersion: number;
   /** Cached map warnings; recomputed in App after each command lands. */
   warnings: MapWarning[];
@@ -191,6 +203,7 @@ const initial: EditorState = {
   swatchPaletteOpen: false,
   sessionId: null,
   spreadShrink: null,
+  route: { fromId: null, toId: null, algorithm: 'astar', summary: null, status: 'idle' },
   warningAckVersion: 0,
   warnings: [],
 };
@@ -205,7 +218,9 @@ class Store {
 
   setState = (patch: Partial<EditorState> | ((s: EditorState) => Partial<EditorState>)) => {
     let next = typeof patch === 'function' ? patch(this.state) : patch;
-    if ('selection' in next && next.selection !== this.state.selection && next.selection !== null && !('sidebarTab' in next)) {
+    // Selecting an element normally jumps to the Selection tab — but not while the
+    // Route tab is open, so picking endpoints / following the route keeps it visible.
+    if ('selection' in next && next.selection !== this.state.selection && next.selection !== null && !('sidebarTab' in next) && this.state.sidebarTab !== 'route') {
       next = { ...next, sidebarTab: 'selection' };
     }
     this.state = { ...this.state, ...next };

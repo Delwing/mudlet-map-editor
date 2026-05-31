@@ -221,7 +221,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         el.removeEventListener('pointercancel', onUp);
       };
     }
-    if (pending?.kind === 'pickExit' || pending?.kind === 'pickSpecialExit' || pending?.kind === 'pickSwatch') {
+    if (pending?.kind === 'pickExit' || pending?.kind === 'pickSpecialExit' || pending?.kind === 'pickSwatch' || pending?.kind === 'pickRoom') {
       el.style.cursor = 'crosshair';
       return;
     }

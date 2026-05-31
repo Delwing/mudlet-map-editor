@@ -9,6 +9,7 @@ import { HistoryPanel } from './panels/HistoryPanel';
 import { MapPanel, warningKey } from './panels/MapPanel';
 import { loadAcks, mapAckKey } from '../editor/warningAcks';
 import { ScriptPanel } from './panels/ScriptPanel';
+import { RoutePanel } from './panels/RoutePanel';
 import { ExitPanel } from './panels/ExitPanel';
 import { StubPanel } from './panels/StubPanel';
 import { CustomLineDrawPanel, CustomLineSelectPanel } from './panels/CustomLinePanel';
@@ -54,6 +55,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
       { id: 'history',   label: t('sidebar.historyShort') },
       { id: 'map',       label: t('sidebar.map') },
       { id: 'script',    label: t('sidebar.script') },
+      { id: 'route',     label: t('sidebar.route') },
     ];
     return (
       <div className="side-panel side-panel--collapsed">
@@ -84,6 +86,7 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
       <button type="button" className={`side-panel-tab${sidebarTab === 'history' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'history' })}>{t('sidebar.history')}{undoCount > 0 && <span className="tab-badge">{undoCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'map' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'map' })}>{t('sidebar.map')}{warningCount > 0 && <span className="tab-badge tab-badge--warn">{warningCount}</span>}</button>
       <button type="button" className={`side-panel-tab${sidebarTab === 'script' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'script' })}>{t('sidebar.script')}</button>
+      <button type="button" className={`side-panel-tab${sidebarTab === 'route' ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: 'route' })}>{t('sidebar.route')}</button>
       {extraTabs.map((tab) => (
         <button key={tab.id} type="button" className={`side-panel-tab${sidebarTab === tab.id ? ' active' : ''}`} onClick={() => store.setState({ sidebarTab: tab.id })}>{tab.label}</button>
       ))}
@@ -114,6 +117,8 @@ export function SidePanel({ sceneRef, extraTabs = [], pluginRoomSections = [] }:
     body = <MapPanel sceneRef={sceneRef} />;
   } else if (sidebarTab === 'script') {
     body = <ScriptPanel sceneRef={sceneRef} />;
+  } else if (sidebarTab === 'route') {
+    body = <RoutePanel sceneRef={sceneRef} />;
   } else {
     const pluginTab = extraTabs.find((tab) => tab.id === sidebarTab);
     if (pluginTab) {

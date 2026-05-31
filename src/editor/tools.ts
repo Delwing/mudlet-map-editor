@@ -40,6 +40,16 @@ export function registerSpecialExitPickCb(cb: PickSpecialExitCb | null): void {
   specialExitPickCb = cb;
 }
 
+/** Generic room-pick callback for `pending.kind === 'pickRoom'`. Receives the
+ *  clicked room id; the registrant reads `pending.target` to know which slot
+ *  asked. Unlike the special-exit pick, this does NOT reset the selection. */
+type PickRoomCb = (roomId: number) => void;
+let roomPickCb: PickRoomCb | null = null;
+
+export function registerRoomPickCb(cb: PickRoomCb | null): void {
+  roomPickCb = cb;
+}
+
 /** Map coord in RENDER space (what renderer & culling use; y grows down). */
 function mapCoord(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
   return clientToMap(ctx.renderer, ctx.container, ev.clientX, ev.clientY);
@@ -109,6 +119,15 @@ export const selectTool: Tool = {
       const fromId = s.pending.fromId;
       if (target && specialExitPickCb) specialExitPickCb(target.id);
       store.setState({ pending: null, selection: { kind: 'room', ids: [fromId] } });
+      return true;
+    }
+
+    if (s.pending?.kind === 'pickRoom') {
+      const target = roomUnder(ctx, ev);
+      // Fire the callback while pending is still set so it can read pending.target,
+      // then clear. Selection is left untouched on purpose.
+      if (target && roomPickCb) roomPickCb(target.id);
+      store.setState({ pending: null });
       return true;
     }
 
