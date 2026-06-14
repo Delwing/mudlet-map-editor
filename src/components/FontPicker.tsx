@@ -92,7 +92,7 @@ export function FontPicker({ value, options, onChange, searchPlaceholder = 'Sear
       </button>
 
       {open && createPortal(
-        <>
+        <div className="mudlet-editor-root">
           <div className="dropdown-backdrop" onClick={() => setOpen(false)} />
           <div className="dropdown-list" style={listStyle}>
             <div className="dropdown-search-wrap">
@@ -122,7 +122,7 @@ export function FontPicker({ value, options, onChange, searchPlaceholder = 'Sear
               ))}
             </div>
           </div>
-        </>,
+        </div>,
         document.body
       )}
     </div>

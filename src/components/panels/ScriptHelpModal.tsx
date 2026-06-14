@@ -40,6 +40,7 @@ export function ScriptHelpModal({ onClose }: Props) {
   // Portal out of the side panel — its `backdrop-filter` establishes a new
   // containing block for `position: fixed`, which would otherwise clip us.
   return createPortal((
+    <div className="mudlet-editor-root">
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -109,6 +110,7 @@ export function ScriptHelpModal({ onClose }: Props) {
           </p>
         </div>
       </div>
+    </div>
     </div>
   ), document.body);
 }

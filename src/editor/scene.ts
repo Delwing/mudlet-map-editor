@@ -72,20 +72,19 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
     () => renderer.getViewportBounds(),
   );
 
-  const konva = renderer.konvaBackend!;
-  konva.addLiveEffect('editor.marquee', marquee);
-  konva.addLiveEffect('editor.selection', selectionHalo);
-  konva.addLiveEffect('editor.hover', hoverHalo);
-  konva.addLiveEffect('editor.rubberband', rubberBand);
-  konva.addLiveEffect('editor.snap', snapIndicator);
-  konva.addLiveEffect('editor.connectHandles', connectHandles);
-  konva.addLiveEffect('editor.customLinePreview', customLinePreview);
-  konva.addLiveEffect('editor.selectedLink', selectedLink);
-  konva.addLiveEffect('editor.labelHalo', labelHalo);
-  konva.addLiveEffect('editor.selectionCenter', selectionCenter);
-  konva.addLiveEffect('editor.ghostRooms', ghostRooms);
-  konva.addLiveEffect('editor.route', route);
-  konva.addLiveEffect('editor.gridOverlay', gridOverlay);
+  renderer.addLiveEffect('editor.marquee', marquee);
+  renderer.addLiveEffect('editor.selection', selectionHalo);
+  renderer.addLiveEffect('editor.hover', hoverHalo);
+  renderer.addLiveEffect('editor.rubberband', rubberBand);
+  renderer.addLiveEffect('editor.snap', snapIndicator);
+  renderer.addLiveEffect('editor.connectHandles', connectHandles);
+  renderer.addLiveEffect('editor.customLinePreview', customLinePreview);
+  renderer.addLiveEffect('editor.selectedLink', selectedLink);
+  renderer.addLiveEffect('editor.labelHalo', labelHalo);
+  renderer.addLiveEffect('editor.selectionCenter', selectionCenter);
+  renderer.addLiveEffect('editor.ghostRooms', ghostRooms);
+  renderer.addLiveEffect('editor.route', route);
+  renderer.addLiveEffect('editor.gridOverlay', gridOverlay);
 
   const handle: SceneHandle = {
     renderer,
@@ -114,32 +113,32 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
     destroy() {
       delete container.dataset.editorCursor;
       detach();
-      konva.removeLiveEffect('editor.selection');
-      konva.removeLiveEffect('editor.hover');
-      konva.removeLiveEffect('editor.rubberband');
-      konva.removeLiveEffect('editor.snap');
-      konva.removeLiveEffect('editor.connectHandles');
+      renderer.removeLiveEffect('editor.selection');
+      renderer.removeLiveEffect('editor.hover');
+      renderer.removeLiveEffect('editor.rubberband');
+      renderer.removeLiveEffect('editor.snap');
+      renderer.removeLiveEffect('editor.connectHandles');
       marquee.destroy();
-      konva.removeLiveEffect('editor.marquee');
+      renderer.removeLiveEffect('editor.marquee');
       selectionHalo.destroy();
       hoverHalo.destroy();
       rubberBand.destroy();
       snapIndicator.destroy();
       connectHandles.destroy();
       customLinePreview.destroy();
-      konva.removeLiveEffect('editor.customLinePreview');
+      renderer.removeLiveEffect('editor.customLinePreview');
       selectedLink.destroy();
-      konva.removeLiveEffect('editor.selectedLink');
+      renderer.removeLiveEffect('editor.selectedLink');
       labelHalo.destroy();
-      konva.removeLiveEffect('editor.labelHalo');
+      renderer.removeLiveEffect('editor.labelHalo');
       selectionCenter.destroy();
-      konva.removeLiveEffect('editor.selectionCenter');
+      renderer.removeLiveEffect('editor.selectionCenter');
       ghostRooms.destroy();
-      konva.removeLiveEffect('editor.ghostRooms');
+      renderer.removeLiveEffect('editor.ghostRooms');
       route.destroy();
-      konva.removeLiveEffect('editor.route');
+      renderer.removeLiveEffect('editor.route');
       gridOverlay.destroy();
-      konva.removeLiveEffect('editor.gridOverlay');
+      renderer.removeLiveEffect('editor.gridOverlay');
       renderer.destroy();
     },
   };

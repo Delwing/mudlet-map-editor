@@ -101,7 +101,7 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
       </button>
 
       {open && createPortal(
-        <>
+        <div className="mudlet-editor-root">
           <div className="dropdown-backdrop" onClick={() => setOpen(false)} />
           <div className="dropdown-list" style={listStyle}>
             {searchable && (
@@ -132,7 +132,7 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
               ))}
             </div>
           </div>
-        </>,
+        </div>,
         document.body
       )}
     </div>
