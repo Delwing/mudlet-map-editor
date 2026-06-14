@@ -92,6 +92,11 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
     return () => document.removeEventListener('keydown', onKey);
   }, [open, highlighted, filtered]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Portal into the editor's scoped root so the prefixed CSS (`.mudlet-editor-root …`)
+  // matches; `document.body` is outside the scope and the popup renders unstyled.
+  const portalTarget =
+    (triggerRef.current?.closest('.mudlet-editor-root') as HTMLElement | null) ?? document.body;
+
   return (
     <div className="dropdown-select">
       <button ref={triggerRef} type="button" className={`dropdown-trigger${open ? ' open' : ''}`} style={width != null ? { width } : undefined} onClick={openList}>
@@ -101,7 +106,7 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
       </button>
 
       {open && createPortal(
-        <div className="mudlet-editor-root">
+        <>
           <div className="dropdown-backdrop" onClick={() => setOpen(false)} />
           <div className="dropdown-list" style={listStyle}>
             {searchable && (
@@ -132,8 +137,8 @@ export function DropdownSelect({ label, value, options, onChange, searchable, em
               ))}
             </div>
           </div>
-        </div>,
-        document.body
+        </>,
+        portalTarget
       )}
     </div>
   );

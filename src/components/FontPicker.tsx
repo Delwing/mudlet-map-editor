@@ -78,6 +78,11 @@ export function FontPicker({ value, options, onChange, searchPlaceholder = 'Sear
     return () => document.removeEventListener('keydown', onKey);
   }, [open, highlighted, filtered]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Portal into the editor's scoped root so the prefixed CSS (`.mudlet-editor-root …`)
+  // matches; `document.body` is outside the scope and the popup renders unstyled.
+  const portalTarget =
+    (triggerRef.current?.closest('.mudlet-editor-root') as HTMLElement | null) ?? document.body;
+
   return (
     <div className="dropdown-select" style={{ flex: 1 }}>
       <button
@@ -92,7 +97,7 @@ export function FontPicker({ value, options, onChange, searchPlaceholder = 'Sear
       </button>
 
       {open && createPortal(
-        <div className="mudlet-editor-root">
+        <>
           <div className="dropdown-backdrop" onClick={() => setOpen(false)} />
           <div className="dropdown-list" style={listStyle}>
             <div className="dropdown-search-wrap">
@@ -122,8 +127,8 @@ export function FontPicker({ value, options, onChange, searchPlaceholder = 'Sear
               ))}
             </div>
           </div>
-        </div>,
-        document.body
+        </>,
+        portalTarget
       )}
     </div>
   );

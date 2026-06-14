@@ -39,8 +39,12 @@ export function ScriptHelpModal({ onClose }: Props) {
 
   // Portal out of the side panel — its `backdrop-filter` establishes a new
   // containing block for `position: fixed`, which would otherwise clip us.
+  // Portal into the editor's scoped root (not bare `document.body`) so the
+  // prefixed CSS (`.mudlet-editor-root …`) matches; otherwise the modal renders
+  // unstyled. Body is the fallback for safety.
+  const portalTarget = document.querySelector<HTMLElement>('.mudlet-editor-root') ?? document.body;
+
   return createPortal((
-    <div className="mudlet-editor-root">
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -111,6 +115,5 @@ export function ScriptHelpModal({ onClose }: Props) {
         </div>
       </div>
     </div>
-    </div>
-  ), document.body);
+  ), portalTarget);
 }
