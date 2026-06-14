@@ -21,6 +21,17 @@ export default defineConfig({
       globals: { Buffer: true, process: true },
     }),
   ],
+  // The session-save worker pulls in the binary reader (Buffer, stream, …) just
+  // like the main bundle, so it needs the same polyfills injected.
+  worker: {
+    format: 'es',
+    plugins: () => [
+      nodePolyfills({
+        include: ['buffer', 'events', 'stream', 'process', 'util'],
+        globals: { Buffer: true, process: true },
+      }),
+    ],
+  },
   css: {
     postcss: {
       plugins: [

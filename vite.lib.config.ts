@@ -14,6 +14,12 @@ const fsStub = fileURLToPath(new URL('./src/shims/fs-stub.ts', import.meta.url))
 const EDITOR_ROOT_CLASS = '.mudlet-editor-root';
 
 export default defineConfig({
+  // Relative base so emitted assets — the session-save worker chunk, the
+  // codicon font, etc. — are referenced via relative `import.meta.url` URLs
+  // instead of absolute `/assets/…` paths. Absolute paths resolve against the
+  // consumer's site root (where the files aren't served) and 404; relative ones
+  // can be resolved and re-emitted by the consumer's bundler.
+  base: './',
   plugins: [
     react(),
     nodePolyfills({
@@ -21,6 +27,19 @@ export default defineConfig({
       globals: { Buffer: true, process: true },
     }),
   ],
+  // The session-save worker pulls in the binary reader (Buffer, stream, …) just
+  // like the main bundle, so it needs the same polyfills injected. In library
+  // consumers that can't resolve the emitted worker chunk, sessionSaver falls
+  // back to saving on the main thread.
+  worker: {
+    format: 'es',
+    plugins: () => [
+      nodePolyfills({
+        include: ['buffer', 'events', 'stream', 'process', 'util'],
+        globals: { Buffer: true, process: true },
+      }),
+    ],
+  },
   css: {
     postcss: {
       plugins: [

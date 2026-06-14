@@ -17,7 +17,7 @@ import { copyRoomsToClipboard, pasteClipboard, duplicateRooms } from './editor/c
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import { snap } from './editor/coords';
 import type { Command, ToolId } from './editor/types';
-import { saveSession } from './editor/session';
+import { saveSessionAsync } from './editor/sessionSaver';
 import { loadFileIntoStore } from './editor/loadFile';
 import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
 import { collectWarnings } from './editor/warnings';
@@ -81,7 +81,12 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   const hover = useEditorState((s) => s.hover);
   const spaceHeld = useEditorState((s) => s.spaceHeld);
   const panelCollapsed = useEditorState((s) => s.panelCollapsed);
-  const dataVersion = useEditorState((s) => s.dataVersion);
+  // Auto-save triggers on real map mutations and (re)loads, not on navigation.
+  // Every command (and load/restore) replaces the undo/redo arrays; pure
+  // navigation (area/z switch, "go to room") leaves them untouched — so keying
+  // off these references avoids re-serializing the whole map just to pan around.
+  const undoStack = useEditorState((s) => s.undo);
+  const redoStack = useEditorState((s) => s.redo);
   const panRequest = useEditorState((s) => s.panRequest);
   const [showHelp, setShowHelp] = useState(false);
   const [showUrlLoad, setShowUrlLoad] = useState(false);
@@ -244,12 +249,12 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     const { map, loaded, undo, currentAreaId, currentZ, sessionId } = store.getState();
     if (!map || !loaded) return;
     const timer = setTimeout(() => {
-      saveSession(loaded.fileName, map, undo, currentAreaId, currentZ, sessionId ?? undefined)
+      saveSessionAsync({ fileName: loaded.fileName, map, undoStack: undo, currentAreaId, currentZ, existingId: sessionId ?? undefined })
         .then((id) => { if (!sessionId) store.setState({ sessionId: id }); })
         .catch(console.error);
     }, 1500);
     return () => clearTimeout(timer);
-  }, [dataVersion]);
+  }, [undoStack, redoStack]);
 
   // Keyboard accelerators.
   useEffect(() => {
