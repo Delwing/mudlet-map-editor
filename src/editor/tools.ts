@@ -85,6 +85,60 @@ function roomUnder(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
 /** Minimum render-space travel before an empty-space drag becomes a marquee (not a click). */
 const MARQUEE_THRESHOLD = 0.15;
 
+// Marquee writes `pending`+`selection` to the store, which many React components
+// subscribe to (App, SidePanel, Toolbar…). Writing on every pointermove lets
+// rapid mouse motion push useSyncExternalStore-forced re-renders faster than
+// React can commit them, tripping React's nested-update guard ("Maximum update
+// depth exceeded"). Coalescing the marquee update to at most one per animation
+// frame caps that churn at ~60Hz — imperceptible for the rubber-band, and well
+// within what React handles. The MarqueeEffect (Konva) redraws off the same
+// store write, so the rectangle also updates per frame.
+let __marqueeRaf: number | null = null;
+let __marqueePayload: { ctx: ToolContext; ev: PointerEvent } | null = null;
+
+function __processMarquee(ctx: ToolContext, ev: PointerEvent): void {
+  const s = store.getState();
+  if (s.pending?.kind !== 'marquee') return;
+  const c = mapCoord(ctx, ev);
+  const p = { ...s.pending, currentX: c.x, currentY: c.y };
+  const minX = Math.min(p.startX, c.x);
+  const maxX = Math.max(p.startX, c.x);
+  const minY = Math.min(p.startY, c.y);
+  const maxY = Math.max(p.startY, c.y);
+  const hit = roomsInRect(minX, maxX, minY, maxY, ctx);
+  let newIds: number[];
+  if (p.ctrlHeld) {
+    const pre = new Set(p.preExistingIds);
+    for (const id of hit) { if (pre.has(id)) pre.delete(id); else pre.add(id); }
+    newIds = [...pre];
+  } else if (p.shiftHeld) {
+    const pre = new Set(p.preExistingIds);
+    for (const id of hit) pre.add(id);
+    newIds = [...pre];
+  } else {
+    newIds = hit;
+  }
+  store.setState({
+    pending: p,
+    selection: newIds.length === 0 ? null : { kind: 'room', ids: newIds },
+  });
+}
+
+/** Apply any pending coalesced marquee update immediately (used on pointer-up so
+ *  the final rectangle/selection is committed before finalizing). */
+function flushMarquee(): void {
+  if (__marqueeRaf != null) { cancelAnimationFrame(__marqueeRaf); __marqueeRaf = null; }
+  const pl = __marqueePayload;
+  __marqueePayload = null;
+  if (pl) __processMarquee(pl.ctx, pl.ev);
+}
+
+/** Drop any pending coalesced marquee update without applying it (used on cancel). */
+function cancelMarquee(): void {
+  if (__marqueeRaf != null) { cancelAnimationFrame(__marqueeRaf); __marqueeRaf = null; }
+  __marqueePayload = null;
+}
+
 /**
  * Combo tool: click a room to select it, drag to move it, click empty to clear selection.
  * Drag vs click is detected naturally — a drag only "moves" when the snapped cursor cell
@@ -368,29 +422,16 @@ export const selectTool: Tool = {
     }
 
     if (s.pending?.kind === 'marquee') {
-      const c = mapCoord(ctx, ev);
-      const p = { ...s.pending, currentX: c.x, currentY: c.y };
-      const minX = Math.min(p.startX, c.x);
-      const maxX = Math.max(p.startX, c.x);
-      const minY = Math.min(p.startY, c.y);
-      const maxY = Math.max(p.startY, c.y);
-      const hit = roomsInRect(minX, maxX, minY, maxY, ctx);
-      let newIds: number[];
-      if (p.ctrlHeld) {
-        const pre = new Set(p.preExistingIds);
-        for (const id of hit) { if (pre.has(id)) pre.delete(id); else pre.add(id); }
-        newIds = [...pre];
-      } else if (p.shiftHeld) {
-        const pre = new Set(p.preExistingIds);
-        for (const id of hit) pre.add(id);
-        newIds = [...pre];
-      } else {
-        newIds = hit;
+      // Coalesce to one store write per animation frame (see flushMarquee notes).
+      __marqueePayload = { ctx, ev };
+      if (__marqueeRaf == null) {
+        __marqueeRaf = requestAnimationFrame(() => {
+          __marqueeRaf = null;
+          const pl = __marqueePayload;
+          __marqueePayload = null;
+          if (pl) __processMarquee(pl.ctx, pl.ev);
+        });
       }
-      store.setState({
-        pending: p,
-        selection: newIds.length === 0 ? null : { kind: 'room', ids: newIds },
-      });
       return true;
     }
 
@@ -497,7 +538,10 @@ export const selectTool: Tool = {
 
     if (s.pending?.kind === 'marquee') {
       try { ctx.container.releasePointerCapture(ev.pointerId); } catch {}
-      const p = s.pending;
+      // Apply any frame-coalesced move so the final rect/selection is current.
+      flushMarquee();
+      const p = store.getState().pending;
+      if (p?.kind !== 'marquee') return true;
       const dx = Math.abs(p.currentX - p.startX);
       const dy = Math.abs(p.currentY - p.startY);
       // Selection is already live-updated by onPointerMove. For a bare click
@@ -701,6 +745,7 @@ export const selectTool: Tool = {
   onCancel(ctx) {
     const s = store.getState();
     if (s.pending?.kind === 'marquee') {
+      cancelMarquee();
       store.setState({ pending: null });
       return;
     }

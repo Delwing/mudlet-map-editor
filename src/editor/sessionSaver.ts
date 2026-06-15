@@ -7,6 +7,14 @@ import type { MudletMap } from '../mapIO';
 import type { Command } from './types';
 import { saveSession } from './session';
 import type { SaveSessionRequest, SaveSessionResponse } from './sessionWorker';
+// Inline worker: Vite embeds the compiled worker as a blob and gives us a
+// ready-made constructor. This avoids emitting a separate worker chunk that the
+// main bundle would reference via `new Worker(new URL('…', import.meta.url))`.
+// That URL pattern breaks for library consumers: a consumer's Vite pre-bundles
+// our package through esbuild (optimizeDeps), which neither rewrites the worker
+// URL nor copies the chunk, so `import.meta.url` resolves into `.vite/deps/…`
+// and the worker 404s. Inlining sidesteps the asset-resolution problem entirely.
+import SessionWorker from './sessionWorker?worker&inline';
 
 export interface SaveSessionArgs {
   fileName: string;
@@ -33,10 +41,7 @@ function getWorker(): Worker | null {
   if (workerDisabled) return null;
   if (worker) return worker;
   try {
-    // Separate worker chunk (not inlined). The lib build uses base: './' so this
-    // emits a *relative* import.meta.url reference that a consumer's bundler can
-    // resolve and re-emit; an absolute "/assets/…" path would 404 for consumers.
-    worker = new Worker(new URL('./sessionWorker.ts', import.meta.url), { type: 'module' });
+    worker = new SessionWorker();
     worker.onmessage = (e: MessageEvent<SaveSessionResponse>) => {
       const msg = e.data;
       const p = pending.get(msg.reqId);
