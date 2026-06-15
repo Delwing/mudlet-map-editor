@@ -50,11 +50,16 @@ function getWorker(): Worker | null {
       if ('error' in msg) p.reject(new Error(msg.error));
       else p.resolve(msg.id);
     };
-    worker.onerror = () => {
+    worker.onerror = (e: ErrorEvent) => {
       // Worker failed to load or threw at the top level — disable it for the
-      // rest of the session so callers fall back to the main thread.
+      // rest of the session so callers fall back to the main thread. Preserve
+      // the ErrorEvent's real details (message/source/line) — otherwise the
+      // fallback warning is an opaque "session worker error" with no clue why.
       workerDisabled = true;
-      failAllPending(new Error('session worker error'));
+      const detail = e?.message
+        ? `${e.message}${e.filename ? ` (${e.filename}:${e.lineno ?? 0})` : ''}`
+        : 'worker failed to load';
+      failAllPending(new Error(`session worker error: ${detail}`));
       worker?.terminate();
       worker = null;
     };

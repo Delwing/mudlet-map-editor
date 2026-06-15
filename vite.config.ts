@@ -22,9 +22,13 @@ export default defineConfig({
     }),
   ],
   // The session-save worker pulls in the binary reader (Buffer, stream, …) just
-  // like the main bundle, so it needs the same polyfills injected.
+  // like the main bundle, so it needs the same polyfills injected. `iife`
+  // (classic worker) not `es` — the inlined worker is self-contained, so a
+  // module worker buys nothing but isn't universally supported (older Firefox),
+  // where it fails to load and forces the main-thread fallback. Kept in sync
+  // with vite.lib.config.ts.
   worker: {
-    format: 'es',
+    format: 'iife',
     plugins: () => [
       nodePolyfills({
         include: ['buffer', 'events', 'stream', 'process', 'util'],

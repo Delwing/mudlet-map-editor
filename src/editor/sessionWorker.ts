@@ -2,6 +2,10 @@
 // IndexedDB off the main thread. The full map serialize is the expensive,
 // blocking step in saveSession — running it here keeps the editor responsive
 // while large maps are persisted. See sessionSaver.ts for the client side.
+//
+// Must be first: defines `process`/`global` in worker scope before the binary
+// reader's bundled stream code (which reads bare `process` at top level) runs.
+import './workerPolyfills';
 import { saveSession } from './session';
 import type { MudletMap } from '../mapIO';
 import type { Command } from './types';

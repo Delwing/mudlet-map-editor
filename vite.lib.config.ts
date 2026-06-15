@@ -31,8 +31,14 @@ export default defineConfig({
   // like the main bundle, so it needs the same polyfills injected. In library
   // consumers that can't resolve the emitted worker chunk, sessionSaver falls
   // back to saving on the main thread.
+  //
+  // `iife` (classic worker), not `es`: the inlined worker is fully
+  // self-contained (no static imports), so it gains nothing from being a module
+  // worker — but `{type:"module"}` workers aren't universally supported (e.g.
+  // older Firefox), and there a self-contained blob worker still fails to load
+  // → `worker.onerror` → fallback every save. A classic worker loads everywhere.
   worker: {
-    format: 'es',
+    format: 'iife',
     plugins: () => [
       nodePolyfills({
         include: ['buffer', 'events', 'stream', 'process', 'util'],
