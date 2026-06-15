@@ -58,7 +58,7 @@ import { LanguageSwitcher } from './LanguageSwitcher';
  *  `null` — is rendered as-is, so a plugin can explicitly hide the slot.
  *  `transformActions` is the composed plugin transform applied to the built-in
  *  file-action list (see EditorPlugin#toolbarActions). */
-export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick }: { title?: string; logo?: ReactNode; transformActions?: (actions: ToolbarAction[]) => ToolbarAction[]; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void; onSettingsClick?: () => void }) {
+export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick, onDiffClick }: { title?: string; logo?: ReactNode; transformActions?: (actions: ToolbarAction[]) => ToolbarAction[]; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void; onSettingsClick?: () => void; onDiffClick?: () => void }) {
   const { t } = useTranslation('editor');
   const toolButtons = useToolButtons();
   const activeTool = useEditorState((s) => s.activeTool);
@@ -301,6 +301,16 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
             >
               <span className="tool-key">^F</span>
               <span>{t('toolbar.search')}</span>
+            </button>
+
+            <button
+              type="button"
+              className="tool-btn"
+              title={t('toolbar.diffTitle')}
+              onClick={onDiffClick}
+            >
+              <span className="tool-key">⇄</span>
+              <span>{t('toolbar.diff')}</span>
             </button>
           </>
         )}

@@ -55,6 +55,42 @@ input[type="checkbox"]:disabled {
   cursor: not-allowed;
 }
 
+input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 1px solid rgba(143, 184, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(10, 14, 22, 0.7);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+input[type="radio"]:hover {
+  border-color: rgba(143, 184, 255, 0.4);
+  background: rgba(20, 30, 50, 0.8);
+}
+input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 100, 168, 0.45);
+}
+input[type="radio"]:checked {
+  border-color: rgba(52, 100, 168, 0.9);
+  background-color: rgba(52, 100, 168, 0.85);
+  background-image: radial-gradient(circle, #fff 0, #fff 2.2px, transparent 2.6px);
+}
+input[type="radio"]:checked:hover {
+  background-color: rgba(74, 128, 192, 0.9);
+  border-color: rgba(74, 128, 192, 1);
+}
+input[type="radio"]:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 input[type="color"] {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -1232,7 +1268,7 @@ html, body, #root {
   letter-spacing: 0.05em;
 }
 
-.side-panel .field input:not([type="checkbox"]),
+.side-panel .field input:not([type="checkbox"]):not([type="radio"]),
 .side-panel .field textarea {
   background: rgba(6, 9, 16, 0.6);
   color: #e6e9ef;
@@ -1244,7 +1280,7 @@ html, body, #root {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.side-panel .field input:not([type="checkbox"]):focus,
+.side-panel .field input:not([type="checkbox"]):not([type="radio"]):focus,
 .side-panel .field textarea:focus {
   outline: none;
   border-color: rgba(52, 100, 168, 0.7);
@@ -2261,6 +2297,234 @@ html, body, #root {
 
 .modal.modal-wide {
   width: 560px;
+}
+
+/* --- Map diff modal --- */
+.diff-modal {
+  width: 95vw;
+  max-width: 1800px;
+  height: 88vh;
+  max-height: 88vh;
+}
+
+.diff-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.diff-sidebar {
+  width: 280px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-right: 1px solid rgba(143, 184, 255, 0.08);
+  overflow: hidden;
+}
+
+.diff-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-files {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.diff-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c4ccda;
+  cursor: pointer;
+  user-select: none;
+}
+
+.diff-toggle input {
+  cursor: pointer;
+  accent-color: #3464a8;
+}
+
+.diff-status {
+  font-size: 12px;
+  color: #8a93a6;
+}
+
+.diff-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(6, 9, 16, 0.5);
+  border: 1px solid rgba(143, 184, 255, 0.08);
+  border-radius: 6px;
+}
+
+.diff-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #c4ccda;
+}
+
+.diff-counts {
+  display: flex;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.diff-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diff-group-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6a7588;
+  margin-bottom: 4px;
+}
+
+.diff-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: #c4ccda;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.diff-entry:hover {
+  background: rgba(31, 42, 60, 0.6);
+}
+
+.diff-entry.selected {
+  background: rgba(52, 100, 168, 0.35);
+}
+
+.diff-entry.hovered {
+  background: rgba(143, 184, 255, 0.18);
+  box-shadow: inset 2px 0 0 #ffffff;
+}
+
+.diff-entry-static {
+  cursor: default;
+  color: #8a93a6;
+}
+
+.diff-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.diff-entry-primary {
+  font-weight: 600;
+  flex: none;
+}
+
+.diff-entry-secondary {
+  color: #6a7588;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-panes {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  position: relative;
+}
+
+.diff-pane {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: rgba(6, 9, 16, 0.4);
+}
+
+.diff-pane-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 2;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.diff-pane-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.diff-divider {
+  width: 6px;
+  flex: none;
+  cursor: col-resize;
+  background: rgba(143, 184, 255, 0.12);
+  transition: background 0.15s;
+}
+
+.diff-divider:hover {
+  background: rgba(143, 184, 255, 0.35);
+}
+
+.diff-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(6, 9, 16, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.diff-loading-label {
+  font-size: 13px;
+  color: #8fb8ff;
+  letter-spacing: 0.03em;
+}
+
+.diff-loading-track {
+  width: 240px;
+  max-width: 60%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(143, 184, 255, 0.1);
+  overflow: hidden;
+}
+
+.diff-loading-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(52, 100, 168, 0.85);
+  animation: url-progress-indeterminate 1.4s ease-in-out infinite;
 }
 
 .modal-header {

@@ -29,6 +29,22 @@ export const modalsEn = {
     load: 'Load',
     corsNote: 'The server must allow cross-origin requests (CORS). If loading fails, download the file and use "Load .dat" instead.',
   },
+  diff: {
+    title: 'Changes this session',
+    sessionStart: 'Session start',
+    now: 'Now',
+    computing: 'Computing diff…',
+    noChanges: 'No changes this session',
+    highlights: 'Highlight changes',
+    area: 'Area',
+    level: 'Level',
+    rooms: 'Rooms',
+    labels: 'Labels',
+    areas: 'Areas',
+    label: 'Label',
+    mapProps: 'Map properties',
+    dragHint: 'Drag to resize',
+  },
 } as const;
 
 export type ModalsLocale = { [K in keyof typeof modalsEn]: { [K2 in keyof typeof modalsEn[K]]: string } };

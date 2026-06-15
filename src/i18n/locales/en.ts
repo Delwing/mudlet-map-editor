@@ -13,6 +13,8 @@ export const en = {
     fit: 'Fit',
     search: 'Search',
     searchTitle: 'Search rooms and labels ({{modKey}}+F)',
+    diff: 'Diff',
+    diffTitle: 'Compare this map with another file',
     rendererSettings: 'Renderer settings',
     helpTitle: 'Help (keyboard shortcuts)',
     snapTitle: 'Snap to grid (G)',

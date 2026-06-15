@@ -15,6 +15,8 @@ export const pl: EditorLocale = {
     fit: 'Dopasuj',
     search: 'Szukaj',
     searchTitle: 'Szukaj lokacji i etykiet ({{modKey}}+F)',
+    diff: 'Porównaj',
+    diffTitle: 'Porównaj tę mapę z innym plikiem',
     rendererSettings: 'Ustawienia renderera',
     helpTitle: 'Pomoc (skróty klawiszowe)',
     snapTitle: 'Przyciągaj do siatki (G)',
