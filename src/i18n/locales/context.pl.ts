@@ -10,6 +10,7 @@ export const contextPl: ContextLocale = {
     deleteLabel: 'Usuń etykietę',
     spread: 'Rozciągnij…',
     shrink: 'Ściśnij…',
+    merge: 'Scal w lokację {{id}}',
     back: 'Wstecz',
     move: 'Przenieś',
     area: 'Obszar',
@@ -27,6 +28,7 @@ export const contextPl: ContextLocale = {
     movedRooms: 'Przeniesiono {{count}} lokacji do obszaru {{areaId}} ({{x}}, {{y}}, {{z}})',
     deletedRoom: 'Usunięto lokację {{id}}',
     deletedRooms: 'Usunięto {{count}} lokacji',
+    mergedRooms: 'Scalono {{count}} lokacji w lokację {{id}}',
   },
   spread: {
     spreadTitle: 'Rozciągnij {{count}} lokacji',

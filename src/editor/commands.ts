@@ -1,7 +1,7 @@
 import type { MudletMap } from '../mapIO';
 import { store } from './store';
 import { findNeighborsPointingAt, getExit } from './mapHelpers';
-import type { Command, NeighborEdit } from './types';
+import type { Command, NeighborEdit, Direction } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
 
@@ -919,6 +919,88 @@ export function buildDeleteNeighborEdits(map: MudletMap, roomId: number): Neighb
     dir: n.dir,
     was: getExit(map.rooms[n.roomId], n.dir),
   }));
+}
+
+/**
+ * Build commands that merge `selectedIds` into `keeperId` (which must be one of
+ * them). Every exit — cardinal or special — that pointed at an absorbed room is
+ * re-pointed to the keeper; outgoing exits the keeper lacks are copied onto it;
+ * the absorbed rooms are then deleted. The keeper keeps its own position, name,
+ * symbol, environment and other attributes. Returns an ordered command list
+ * suitable for a single `batch` (fully undo-correct when reverted in reverse).
+ *
+ * Conflicts (keeper already has an exit in a direction a victim also uses) keep
+ * the keeper's exit; the victim's competing exit is dropped. Stubs, doors, exit
+ * weights and custom lines on absorbed rooms are not transferred.
+ */
+export function buildMergeRoomsCommands(
+  map: MudletMap,
+  keeperId: number,
+  selectedIds: number[],
+): Command[] {
+  const keeper = map.rooms[keeperId];
+  if (!keeper) return [];
+  const victims = selectedIds.filter((id) => id !== keeperId && map.rooms[id]);
+  if (victims.length === 0) return [];
+  const victimSet = new Set(victims);
+  const mergeSet = new Set<number>([keeperId, ...victims]);
+  const isRoom = (id: number) => id >= 0 && !!map.rooms[id];
+
+  const cmds: Command[] = [];
+
+  // 1. Re-point incoming exits from rooms outside the merge set onto the keeper.
+  for (const idStr of Object.keys(map.rooms)) {
+    const rid = Number(idStr);
+    if (mergeSet.has(rid)) continue;
+    const room = map.rooms[rid];
+    for (const dir of CARDINAL_DIRECTIONS) {
+      if (victimSet.has(getExit(room, dir))) {
+        cmds.push({ kind: 'addExit', fromId: rid, dir, toId: keeperId, previous: getExit(room, dir), reverse: null });
+      }
+    }
+    for (const [name, target] of Object.entries(room.mSpecialExits ?? {})) {
+      if (victimSet.has(target as number)) {
+        cmds.push({ kind: 'removeSpecialExit', roomId: rid, name, toId: target as number });
+        cmds.push({ kind: 'addSpecialExit', roomId: rid, name, toId: keeperId });
+      }
+    }
+  }
+
+  // 2. Copy outgoing exits from victims that the keeper doesn't already have.
+  const assignedDirs = new Set<Direction>(CARDINAL_DIRECTIONS.filter((dir) => isRoom(getExit(keeper, dir))));
+  const assignedSpecial = new Set<string>(Object.keys(keeper.mSpecialExits ?? {}));
+  for (const v of victims) {
+    const vr = map.rooms[v];
+    for (const dir of CARDINAL_DIRECTIONS) {
+      const target = getExit(vr, dir);
+      if (!isRoom(target) || mergeSet.has(target) || assignedDirs.has(dir)) continue;
+      cmds.push({ kind: 'addExit', fromId: keeperId, dir, toId: target, previous: getExit(keeper, dir), reverse: null });
+      assignedDirs.add(dir);
+    }
+    for (const [name, target] of Object.entries(vr.mSpecialExits ?? {})) {
+      const t = target as number;
+      if (!isRoom(t) || mergeSet.has(t) || assignedSpecial.has(name)) continue;
+      cmds.push({ kind: 'addSpecialExit', roomId: keeperId, name, toId: t });
+      assignedSpecial.add(name);
+    }
+  }
+
+  // 3. Delete victims. After re-pointing, only internal edges (keeper/victim → victim)
+  //    still reference them, so sever just those to avoid dangling exits.
+  for (const v of victims) {
+    const neighborEdits: NeighborEdit[] = [];
+    for (const src of mergeSet) {
+      if (src === v) continue;
+      const sr = map.rooms[src];
+      if (!sr) continue;
+      for (const dir of CARDINAL_DIRECTIONS) {
+        if (getExit(sr, dir) === v) neighborEdits.push({ roomId: src, dir, was: v });
+      }
+    }
+    cmds.push({ kind: 'deleteRoom', id: v, room: { ...map.rooms[v] }, areaId: map.rooms[v].area, neighborEdits });
+  }
+
+  return cmds;
 }
 
 /** O(n) version for batch deletion: one pass over all rooms, results for each deleted id. */

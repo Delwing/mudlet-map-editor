@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
-import { pushCommand, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushBatch, buildCustomLineMoveCommands } from '../editor/commands';
+import { pushCommand, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushBatch, buildCustomLineMoveCommands, buildMergeRoomsCommands } from '../editor/commands';
 import { hitToSelection, hitStatusLabel } from '../editor/tools';
 import type { HitItem } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
@@ -328,6 +328,21 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
     store.setState({ status: t('menu.deletedRoom', { id: menu.roomId }), contextMenu: null });
   };
 
+  const mergeRooms = () => {
+    const st = store.getState();
+    if (!st.map || !multiIds) return close();
+    const cmds = buildMergeRoomsCommands(st.map, menu.roomId, multiIds);
+    if (cmds.length === 0) return close();
+    pushCommand({ kind: 'batch', cmds }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpStructure();
+    store.setState({
+      selection: { kind: 'room', ids: [menu.roomId] },
+      status: t('menu.mergedRooms', { count: multiIds.length, id: menu.roomId }),
+      contextMenu: null,
+    });
+  };
+
   const submitMoveTo = () => {
     if (!moveToDialog || !raw || !s.map) return;
     const newX = parseInt(moveToDialog.x, 10);
@@ -500,6 +515,9 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
             onClick={() => store.setState({ spreadShrink: { mode: 'shrink', factor: 0.5, centerMode: 'centroid', anchorRoomId: null }, contextMenu: null })}
           >
             {t('menu.shrink')}
+          </button>
+          <button type="button" className="context-menu-item" onClick={mergeRooms}>
+            {t('menu.merge', { id: menu.roomId })}
           </button>
         </>
       )}

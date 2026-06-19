@@ -8,6 +8,7 @@ export const contextEn = {
     deleteLabel: 'Delete label',
     spread: 'Spread…',
     shrink: 'Shrink…',
+    merge: 'Merge into room {{id}}',
     back: 'Back',
     move: 'Move',
     area: 'Area',
@@ -25,6 +26,7 @@ export const contextEn = {
     movedRooms: 'Moved {{count}} rooms to area {{areaId}} ({{x}}, {{y}}, {{z}})',
     deletedRoom: 'Deleted room {{id}}',
     deletedRooms: 'Deleted {{count}} rooms',
+    mergedRooms: 'Merged {{count}} rooms into room {{id}}',
   },
   spread: {
     spreadTitle: 'Spread {{count}} rooms',
