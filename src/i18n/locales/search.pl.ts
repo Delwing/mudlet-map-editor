@@ -22,6 +22,7 @@ export const searchPl: SearchLocale = {
   helpStubs: 'ma zalążki wyjść',
   helpDoor: 'ma drzwi',
   helpLocked: 'niezablokowane',
+  helpHidden: 'ukryte lokacje',
   helpSpecial: 'ma wyjścia specjalne',
   helpCustomLine: 'ma linie niestandardowe',
   helpSymbol: 'ma symbol',

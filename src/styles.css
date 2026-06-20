@@ -91,22 +91,65 @@ input[type="radio"]:disabled {
   cursor: not-allowed;
 }
 
+/* All color pickers share the Room Color (.env-pick-btn) swatch style. */
 input[type="color"] {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  border: 1px solid rgba(143, 184, 255, 0.2);
+  border: 2px solid rgba(143, 184, 255, 0.15);
   border-radius: 4px;
   padding: 0;
   background: transparent;
   cursor: pointer;
   overflow: hidden;
   height: 24px;
-  width: 40px;
+  width: 32px;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
 }
+input[type="color"]:hover:not(:disabled) { border-color: rgba(52, 100, 168, 0.6); }
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
-input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 2px; }
+
+/* ColorSwatch: env-style button with the real <input type="color"> hidden behind
+   it (still focusable so blur-based commits keep working; opened via the button). */
+.color-swatch { position: relative; display: inline-flex; flex-shrink: 0; }
+.color-swatch .color-swatch-btn { display: block; }
+/* "No colour set": muted fill with a border-coloured diagonal slash, instead of a
+   misleading solid white swatch. The slash is a rotated pseudo-element so it stays
+   crisp / anti-aliased rather than the stair-stepped edge a hard gradient stop gives. */
+.color-swatch-btn.is-empty {
+  position: relative;
+  overflow: hidden;
+  background: rgba(18, 24, 36, 0.85);
+}
+.color-swatch-btn.is-empty::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 142%;
+  height: 2px;
+  /* Exactly the swatch border colour, so an empty swatch reads as one piece. */
+  background: rgba(143, 184, 255, 0.15);
+  /* -37° ≈ atan(24/32): aligns the slash with the 32×24 swatch's diagonal. */
+  transform: translate(-50%, -50%) rotate(-37deg);
+  pointer-events: none;
+}
+.color-swatch-btn.is-empty:hover:not(:disabled)::after {
+  background: rgba(52, 100, 168, 0.6);
+}
+input[type="color"].color-swatch-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 
 input[type="range"] {
   -webkit-appearance: none;
@@ -1203,16 +1246,8 @@ html, body, #root {
   min-width: 0;
 }
 
-.symbol-color-input {
-  width: 28px;
-  height: 24px;
-  padding: 1px 2px;
-  border: 1px solid #2a3550;
-  border-radius: 3px;
-  background: transparent;
-  cursor: pointer;
-  flex-shrink: 0;
-}
+/* Sizing/border come from the shared input[type="color"] rule for consistency
+   with the Room Color picker; nothing extra needed here. */
 
 .symbol-color-clear {
   background: none;
@@ -1225,6 +1260,48 @@ html, body, #root {
   flex-shrink: 0;
 }
 .symbol-color-clear:hover { color: #e06060; }
+
+.room-flags-row {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+.room-flags-row .field {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.room-flag-hidden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c2c8d4;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 4px 0 5px;
+}
+
+.room-flag-hidden input {
+  cursor: pointer;
+}
+
+.room-border-field {
+  min-width: 0;
+}
+
+.room-border-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.room-border-thickness {
+  width: 64px;
+  flex-shrink: 0;
+}
 
 .side-panel h4 {
   margin: 14px 0 6px;
@@ -1268,7 +1345,7 @@ html, body, #root {
   letter-spacing: 0.05em;
 }
 
-.side-panel .field input:not([type="checkbox"]):not([type="radio"]),
+.side-panel .field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
 .side-panel .field textarea {
   background: rgba(6, 9, 16, 0.6);
   color: #e6e9ef;
@@ -1280,7 +1357,7 @@ html, body, #root {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.side-panel .field input:not([type="checkbox"]):not([type="radio"]):focus,
+.side-panel .field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):focus,
 .side-panel .field textarea:focus {
   outline: none;
   border-color: rgba(52, 100, 168, 0.7);
@@ -1497,10 +1574,19 @@ html, body, #root {
   gap: 5px;
 }
 
+/* Special exit names can be long; let the label take the row's spare width
+   ahead of the location number, which is always short. */
 .special-exits-list .cc-label {
-  max-width: 120px;
+  flex: 1 1 auto;
+  justify-content: flex-start;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.special-exits-list .cc-header .cc-target {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 60px;
 }
 
 .special-exit-add {
@@ -2827,15 +2913,8 @@ html, body, #root {
   gap: 8px;
 }
 
-.settings-color-input {
-  width: 36px;
-  height: 22px;
-  padding: 1px 2px;
-  border: 1px solid rgba(143, 184, 255, 0.18);
-  border-radius: 4px;
-  background: rgba(6, 9, 16, 0.6);
-  cursor: pointer;
-}
+/* Sizing/border come from the shared input[type="color"] rule for consistency
+   with the Room Color picker. */
 
 .settings-color-value {
   font-size: 11px;
@@ -4655,8 +4734,8 @@ kbd {
   border: 1px solid rgba(143, 184, 255, 0.18);
   border-radius: 10px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05);
-  min-width: 260px;
-  max-width: 380px;
+  /* Fixed width so adding a swatch or entering pick mode never reflows the panel. */
+  width: 280px;
   user-select: none;
 }
 
@@ -4845,12 +4924,81 @@ kbd {
 
 .swatch-edit-form {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
   background: rgba(8, 12, 22, 0.6);
   border-top: 1px solid rgba(143, 184, 255, 0.08);
 }
+
+.swatch-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch-edit-actions { gap: 4px; }
+.swatch-edit-spacer { flex: 1; }
+
+/* Property groups: a Symbol group and a Border group, visually boxed apart.
+   Stacked vertically so the Border group (two controls) has the full panel
+   width and never overflows the box or overlaps the Width label. */
+.swatch-edit-props { flex-direction: column; align-items: stretch; gap: 8px; }
+
+.swatch-edit-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  background: rgba(143, 184, 255, 0.04);
+  border: 1px solid rgba(143, 184, 255, 0.09);
+  border-radius: 5px;
+}
+
+.swatch-edit-prop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.swatch-edit-group > .swatch-edit-prop { flex: 1; }
+
+.swatch-edit-prop-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #8a96aa;
+  white-space: nowrap;
+}
+
+.swatch-color-clear {
+  background: none;
+  border: none;
+  color: #55606f;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.swatch-color-clear:hover { color: #ff8080; }
+
+.swatch-thickness-input {
+  width: 44px;
+  background: rgba(10, 14, 22, 0.7);
+  border: 1px solid rgba(143, 184, 255, 0.2);
+  border-radius: 4px;
+  color: #e6e9ef;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 3px 4px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.swatch-thickness-input:focus { outline: none; border-color: rgba(52, 100, 168, 0.7); }
 
 .swatch-edit-name {
   flex: 1;

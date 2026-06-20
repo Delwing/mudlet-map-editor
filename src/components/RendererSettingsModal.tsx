@@ -1,6 +1,8 @@
 import { useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { HiddenRoomMode } from 'mudlet-map-renderer';
 import type { SceneHandle } from '../editor/scene';
+import { ColorSwatch } from './panelShared';
 
 type RoomShape = 'rectangle' | 'circle' | 'roundedRectangle';
 
@@ -15,6 +17,7 @@ export type PersistedRendererSettings = {
   emboss: boolean;
   backgroundColor: string;
   areaName: boolean;
+  hiddenRooms: HiddenRoomMode;
 };
 
 // Matches scene.ts editor overrides on top of createSettings() defaults.
@@ -29,6 +32,7 @@ const DEFAULTS: PersistedRendererSettings = {
   emboss: false,
   backgroundColor: '#000000',
   areaName: false,
+  hiddenRooms: 'dashed',
 };
 
 const RENDERER_SETTINGS_KEY = 'mudlet-renderer-settings';
@@ -59,6 +63,7 @@ export function applyRendererSettings(scene: SceneHandle, settings: Partial<Pers
   if (settings.emboss !== undefined) s.emboss = settings.emboss;
   if (settings.backgroundColor !== undefined) s.backgroundColor = settings.backgroundColor;
   if (settings.areaName !== undefined) s.areaName = settings.areaName;
+  if (settings.hiddenRooms !== undefined) s.hiddenRooms = settings.hiddenRooms;
 }
 
 function toHex(color: string): string {
@@ -88,6 +93,7 @@ export function RendererSettingsModal({
   const [lineColor, setLineColor] = useState(toHex(s?.lineColor ?? DEFAULTS.lineColor));
   const [backgroundColor, setBackgroundColor] = useState(toHex(s?.backgroundColor ?? DEFAULTS.backgroundColor));
   const [areaName, setAreaName] = useState(s?.areaName ?? DEFAULTS.areaName);
+  const [hiddenRooms, setHiddenRooms] = useState<HiddenRoomMode>(s?.hiddenRooms ?? DEFAULTS.hiddenRooms);
 
   function applyLive(patch: Partial<PersistedRendererSettings>) {
     const scene = sceneRef.current;
@@ -108,6 +114,7 @@ export function RendererSettingsModal({
     setLineColor(DEFAULTS.lineColor);
     setBackgroundColor(DEFAULTS.backgroundColor);
     setAreaName(DEFAULTS.areaName);
+    setHiddenRooms(DEFAULTS.hiddenRooms);
     const scene = sceneRef.current;
     if (!scene) return;
     applyRendererSettings(scene, DEFAULTS);
@@ -195,6 +202,24 @@ export function RendererSettingsModal({
                 </label>
               </div>
             </div>
+
+            <div className="settings-row">
+              <span className="settings-label">{t('renderer.hiddenRooms')}</span>
+              <div className="settings-radio-group">
+                {(['dashed', 'faded', 'show', 'hide'] as HiddenRoomMode[]).map((mode) => (
+                  <label key={mode} className="settings-radio">
+                    <input
+                      type="radio"
+                      name="hiddenRooms"
+                      value={mode}
+                      checked={hiddenRooms === mode}
+                      onChange={() => { setHiddenRooms(mode); applyLive({ hiddenRooms: mode }); }}
+                    />
+                    {t(`renderer.hidden_${mode}`)}
+                  </label>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="settings-section">
@@ -222,11 +247,12 @@ export function RendererSettingsModal({
             <div className="settings-row">
               <span className="settings-label">{t('renderer.color')}</span>
               <div className="settings-color-row">
-                <input
-                  type="color"
-                  value={lineColor}
-                  onChange={(e) => { setLineColor(e.target.value); applyLive({ lineColor: e.target.value }); }}
-                  className="settings-color-input"
+                <ColorSwatch
+                  color={lineColor}
+                  inputProps={{
+                    value: lineColor,
+                    onChange: (e) => { const v = (e.target as HTMLInputElement).value; setLineColor(v); applyLive({ lineColor: v }); },
+                  }}
                 />
                 <span className="settings-color-value">{lineColor}</span>
               </div>
@@ -239,11 +265,12 @@ export function RendererSettingsModal({
             <div className="settings-row">
               <span className="settings-label">{t('renderer.color')}</span>
               <div className="settings-color-row">
-                <input
-                  type="color"
-                  value={backgroundColor}
-                  onChange={(e) => { setBackgroundColor(e.target.value); applyLive({ backgroundColor: e.target.value }); }}
-                  className="settings-color-input"
+                <ColorSwatch
+                  color={backgroundColor}
+                  inputProps={{
+                    value: backgroundColor,
+                    onChange: (e) => { const v = (e.target as HTMLInputElement).value; setBackgroundColor(v); applyLive({ backgroundColor: v }); },
+                  }}
                 />
                 <span className="settings-color-value">{backgroundColor}</span>
               </div>

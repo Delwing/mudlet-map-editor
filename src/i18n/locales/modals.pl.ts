@@ -23,6 +23,11 @@ export const modalsPl: ModalsLocale = {
     frame: 'Ramka',
     colored: 'Kolorowy',
     emboss: 'Tłoczony',
+    hiddenRooms: 'Ukryte lokacje',
+    hidden_dashed: 'Przerywane',
+    hidden_faded: 'Wyblakłe',
+    hidden_show: 'Pokaż',
+    hidden_hide: 'Ukryj',
   },
   urlLoad: {
     title: 'Wczytaj mapę z URL',

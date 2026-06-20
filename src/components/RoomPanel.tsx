@@ -11,7 +11,12 @@ import { createDefaultRoom } from '../editor/mapHelpers';
 import { roomAtCell } from '../editor/hitTest';
 import { EnvPicker } from './EnvPicker';
 import { DoorIcon, LockIcon, WeightIcon, CrosshairIcon, CenterOnRoomIcon } from './icons';
-import { RoomLink, Field, UserDataEditor, hexToMudletColor } from './panelShared';
+import { RoomLink, Field, UserDataEditor, ColorSwatch, hexToMudletColor } from './panelShared';
+import {
+  ROOM_UI_HIDDEN, ROOM_UI_BORDER_COLOR, ROOM_UI_BORDER_THICKNESS,
+  HIDDEN_TRUE, isHiddenValue, qtColorToHex, hexToQtColor, clampThickness,
+  BORDER_THICKNESS_MIN, BORDER_THICKNESS_MAX,
+} from '../editor/roomFlags';
 import { warningKey } from './panels/MapPanel';
 import { loadAcks, saveAcks, mapAckKey } from '../editor/warningAcks';
 
@@ -250,6 +255,35 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     pushCommand({ kind: 'setUserDataEntry', roomId: selId, key, from, to }, sceneRef.current);
     sceneRef.current?.refresh();
     store.bumpData();
+  };
+
+  const setRoomUserData = (key: string, to: string | null) => {
+    const from = room.userData?.[key] ?? null;
+    if (from === to) return;
+    pushCommand({ kind: 'setUserDataEntry', roomId: selId, key, from, to }, sceneRef.current);
+    sceneRef.current?.refresh();
+    store.bumpData();
+  };
+
+  const isHidden = isHiddenValue(room.userData?.[ROOM_UI_HIDDEN]);
+  const borderColorRaw = room.userData?.[ROOM_UI_BORDER_COLOR] ?? null;
+  const borderThicknessRaw = room.userData?.[ROOM_UI_BORDER_THICKNESS] ?? null;
+
+  const toggleHidden = (next: boolean) => {
+    setRoomUserData(ROOM_UI_HIDDEN, next ? HIDDEN_TRUE : null);
+    store.setState({ status: next ? t('room.hiddenSet', { id: selId }) : t('room.hiddenCleared', { id: selId }) });
+  };
+
+  const commitBorderColor = (hex: string | null) => {
+    setRoomUserData(ROOM_UI_BORDER_COLOR, hex === null ? null : hexToQtColor(hex));
+  };
+
+  const commitBorderThickness = (raw: string) => {
+    const trimmed = raw.trim();
+    if (trimmed === '') { setRoomUserData(ROOM_UI_BORDER_THICKNESS, null); return; }
+    const n = parseInt(trimmed, 10);
+    if (Number.isNaN(n)) return;
+    setRoomUserData(ROOM_UI_BORDER_THICKNESS, String(clampThickness(n)));
   };
 
   const addExit = (dir: Direction, toId: number) => {
@@ -552,7 +586,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
     <div className="cl-form cl-form-inline">
       <div className="cl-form-row">
         <label className="cl-form-label">{t('room.clColor')}</label>
-        <input type="color" value={clColor} onChange={(e) => setClColor(e.target.value)} />
+        <ColorSwatch color={clColor} inputProps={{ value: clColor, onChange: (e) => setClColor((e.target as HTMLInputElement).value) }} />
         <select value={clStyle} onChange={(e) => setClStyle(Number(e.target.value))} style={{ flex: 1, marginLeft: 6 }}>
           <option value={1}>{t('room.solid')}</option>
           <option value={2}>{t('room.dash')}</option>
@@ -849,13 +883,15 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
               onChange={(e) => setSymbolDraft(e.target.value)}
               onBlur={() => commit('symbol', symbolDraft)}
             />
-            <input
-              type="color"
-              className="symbol-color-input"
-              value={symbolColor ?? '#ffffff'}
+            <ColorSwatch
+              color={symbolColor ?? '#ffffff'}
+              empty={symbolColor === null}
               title={t('room.symbolColorTitle')}
-              onChange={(e) => setSymbolColor(e.target.value)}
-              onBlur={() => { if (symbolColor !== null) commitSymbolColor(symbolColor); }}
+              inputProps={{
+                value: symbolColor ?? '#ffffff',
+                onChange: (e) => setSymbolColor((e.target as HTMLInputElement).value),
+                onBlur: () => { if (symbolColor !== null) commitSymbolColor(symbolColor); },
+              }}
             />
             <button
               type="button"
@@ -866,6 +902,54 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             >X</button>
           </div>
         </Field>
+      </div>
+
+      <div className="room-flags-row">
+        <div className="field room-border-field">
+          <span className="label">{t('room.border')}</span>
+          <div className="room-border-row">
+            <ColorSwatch
+              color={qtColorToHex(borderColorRaw)}
+              empty={borderColorRaw === null}
+              title={t('room.borderColorTitle')}
+              inputProps={{
+                value: qtColorToHex(borderColorRaw),
+                onChange: (e) => commitBorderColor((e.target as HTMLInputElement).value),
+              }}
+            />
+            <button
+              type="button"
+              className="symbol-color-clear"
+              style={{ visibility: borderColorRaw !== null ? 'visible' : 'hidden' }}
+              title={t('room.clearBorderColor')}
+              onClick={() => commitBorderColor(null)}
+            >X</button>
+            <input
+              key={`${selId}-border-thickness-${borderThicknessRaw ?? ''}`}
+              type="number"
+              className="room-border-thickness"
+              min={BORDER_THICKNESS_MIN}
+              max={BORDER_THICKNESS_MAX}
+              placeholder={t('room.borderThicknessPlaceholder')}
+              defaultValue={borderThicknessRaw ?? ''}
+              title={t('room.borderThicknessTitle')}
+              onChange={(e) => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); }}
+              onBlur={(e) => commitBorderThickness(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            />
+          </div>
+        </div>
+        <div className="field room-visibility-field">
+          <span className="label">{t('room.visibility')}</span>
+          <label className="room-flag-hidden" title={t('room.hiddenTitle')}>
+            <input
+              type="checkbox"
+              checked={isHidden}
+              onChange={(e) => toggleHidden(e.target.checked)}
+            />
+            <span>{t('room.hidden')}</span>
+          </label>
+        </div>
       </div>
 
       <h4>{t('room.exits')}</h4>

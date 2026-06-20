@@ -6,7 +6,7 @@ import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor } from '../../mapIO';
 import type { Command, LabelFont, LabelSnapshot } from '../../editor/types';
 import { generateLabelPixmap } from '../../editor/labelPixmap';
-import { CheckboxField, Field, mudletColorToHex, hexToMudletColor } from '../panelShared';
+import { CheckboxField, Field, ColorSwatch, mudletColorToHex, hexToMudletColor } from '../panelShared';
 import { warningKey } from './MapPanel';
 import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
 import { FontPicker } from '../FontPicker';
@@ -413,21 +413,25 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <Field label={t('label.textColor')} as="div">
-            <input
-              type="color"
-              key={`fg-${selection.id}-${fgHex}`}
-              defaultValue={fgHex}
-              onMouseDown={startColorSession}
-              onBlur={(e) => commitColors(hexToMudletColor(e.target.value), snap.bgColor)}
+            <ColorSwatch
+              color={fgHex}
+              onActivate={startColorSession}
+              inputKey={`fg-${selection.id}-${fgHex}`}
+              inputProps={{
+                defaultValue: fgHex,
+                onBlur: (e) => commitColors(hexToMudletColor((e.target as HTMLInputElement).value), snap.bgColor),
+              }}
             />
           </Field>
           <Field label={t('label.bgColor')} as="div">
-            <input
-              type="color"
-              key={`bg-${selection.id}-${bgHex}`}
-              defaultValue={bgHex}
-              onMouseDown={startColorSession}
-              onBlur={(e) => commitColors(snap.fgColor, { ...hexToMudletColor(e.target.value), alpha: snap.bgColor.alpha })}
+            <ColorSwatch
+              color={bgHex}
+              onActivate={startColorSession}
+              inputKey={`bg-${selection.id}-${bgHex}`}
+              inputProps={{
+                defaultValue: bgHex,
+                onBlur: (e) => commitColors(snap.fgColor, { ...hexToMudletColor((e.target as HTMLInputElement).value), alpha: snap.bgColor.alpha }),
+              }}
             />
           </Field>
         </div>
@@ -508,12 +512,15 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         </Field>
 
         <Field label={t('label.outlineColor')} as="div">
-          <input
-            type="color"
-            key={`outline-${selection.id}-${outlineHex}`}
-            defaultValue={outlineHex}
-            onMouseDown={startOutlineSession}
-            onBlur={(e) => commitOutlineColor({ ...outlineBase, ...hexToMudletColor(e.target.value) })}
+          <ColorSwatch
+            color={outlineHex}
+            empty={snap.outlineColor === undefined}
+            onActivate={startOutlineSession}
+            inputKey={`outline-${selection.id}-${outlineHex}`}
+            inputProps={{
+              defaultValue: outlineHex,
+              onBlur: (e) => commitOutlineColor({ ...outlineBase, ...hexToMudletColor((e.target as HTMLInputElement).value) }),
+            }}
           />
         </Field>
 

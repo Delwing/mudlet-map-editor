@@ -1,5 +1,11 @@
 import type { MudletMap, MudletRoom } from '../mapIO';
 import { CARDINAL_DIRECTIONS } from './types';
+import { ROOM_UI_HIDDEN, isHiddenValue } from './roomFlags';
+
+/** Whether a room is flagged hidden via its userData. */
+function isRoomHidden(room: MudletRoom): boolean {
+  return isHiddenValue(room.userData?.[ROOM_UI_HIDDEN]);
+}
 
 /**
  * Structured room-search query language used by the Search panel.
@@ -184,6 +190,7 @@ function buildPredicate(key: string, value: string): RoomPredicate | null {
     case 'customline': return boolField(value, (c) => Object.keys(c.room.customLines ?? {}).length > 0);
     case 'special': return boolField(value, (c) => Object.keys(c.room.mSpecialExits ?? {}).length > 0);
     case 'deadend': return boolField(value, (c) => exitCount(c.room) === 1);
+    case 'hidden': return boolField(value, (c) => isRoomHidden(c.room));
     case 'named': return boolField(value, (c) => (c.room.name ?? '').trim().length > 0);
     // Text fields
     case 'name': {
@@ -204,7 +211,7 @@ function buildPredicate(key: string, value: string): RoomPredicate | null {
 const CANONICAL_KEYS = new Set([
   'env', 'weight', 'exits', 'stubs', 'doors', 'exitlocks', 'z', 'id',
   'locked', 'door', 'stub', 'exitlock', 'customline', 'special', 'deadend',
-  'named', 'name', 'symbol', 'area', 'userdata',
+  'hidden', 'named', 'name', 'symbol', 'area', 'userdata',
 ]);
 
 const ALIASES: Record<string, string> = {
@@ -218,6 +225,7 @@ const ALIASES: Record<string, string> = {
   line: 'customline', cline: 'customline', customlines: 'customline',
   specialexit: 'special', specialexits: 'special', se: 'special',
   deadends: 'deadend', dead: 'deadend',
+  hide: 'hidden', invisible: 'hidden',
   data: 'userdata', ud: 'userdata',
   level: 'z',
 };
@@ -309,6 +317,7 @@ export function describeRoom(ctx: RoomMatchContext, keys: string[]): string {
         break;
       }
       case 'locked': parts.push(room.isLocked ? 'locked' : 'unlocked'); break;
+      case 'hidden': parts.push(isRoomHidden(room) ? 'hidden' : 'visible'); break;
       case 'z': parts.push(`z${room.z}`); break;
       case 'customline': parts.push(`${Object.keys(room.customLines ?? {}).length} custom lines`); break;
       case 'special': parts.push(`${Object.keys(room.mSpecialExits ?? {}).length} special exits`); break;

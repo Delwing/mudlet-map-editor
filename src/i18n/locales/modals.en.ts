@@ -21,6 +21,11 @@ export const modalsEn = {
     frame: 'Frame',
     colored: 'Colored',
     emboss: 'Emboss',
+    hiddenRooms: 'Hidden rooms',
+    hidden_dashed: 'Dashed',
+    hidden_faded: 'Faded',
+    hidden_show: 'Show',
+    hidden_hide: 'Hide',
   },
   urlLoad: {
     title: 'Load map from URL',

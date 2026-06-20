@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { InputHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
 import type { MudletColor } from '../mapIO';
@@ -128,6 +129,60 @@ export function UserDataEditor({ data, onCommit }: UserDataEditorProps) {
         <button type="button" className="ud-add" title={t('shared.addEntry')} onClick={addEntry} disabled={!newKey.trim()}>+</button>
       </div>
     </div>
+  );
+}
+
+interface ColorSwatchProps {
+  /** CSS colour painted across the swatch button (matches the Room Color picker). */
+  color: string;
+  /** When true, no colour is set: show a "none" indicator instead of painting {@link color}. */
+  empty?: boolean;
+  disabled?: boolean;
+  title?: string;
+  /** Fired on pointer-down on the swatch — e.g. to start an undo/coalescing session. */
+  onActivate?: () => void;
+  /** Remount key for the hidden native input (resets an uncontrolled value). */
+  inputKey?: string;
+  /** Props forwarded to the hidden native <input type="color"> (value/onChange/onBlur…). */
+  inputProps?: InputHTMLAttributes<HTMLInputElement>;
+}
+
+/**
+ * A color picker that looks exactly like the Room Color swatch (`.env-pick-btn`):
+ * a solid-filled button. The real `<input type="color">` is kept behind it (hidden
+ * but functional) and opened by forwarding the button's click, so every picker in
+ * the app renders identically regardless of how the browser draws a native swatch.
+ * All the original input handlers still fire on the hidden input; session-style
+ * pickers (which started on the input's `mousedown`) use {@link onActivate} instead.
+ */
+export function ColorSwatch({ color, empty, disabled, title, onActivate, inputKey, inputProps }: ColorSwatchProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <span className="color-swatch">
+      <button
+        type="button"
+        className={`env-pick-btn color-swatch-btn${empty ? ' is-empty' : ''}`}
+        style={empty ? undefined : { background: color }}
+        disabled={disabled}
+        title={title}
+        onPointerDown={disabled ? undefined : onActivate}
+        onClick={() => {
+          // Focus first so the native picker's later blur fires (blur-based commits).
+          ref.current?.focus({ preventScroll: true });
+          ref.current?.click();
+        }}
+      />
+      <input
+        {...inputProps}
+        key={inputKey}
+        ref={ref}
+        type="color"
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="color-swatch-native"
+      />
+    </span>
   );
 }
 

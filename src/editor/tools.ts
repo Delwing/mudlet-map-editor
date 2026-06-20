@@ -11,6 +11,13 @@ import {
   is2DCardinal,
 } from './mapHelpers';
 import { store } from './store';
+import {
+  ROOM_SYMBOL_COLOR,
+  ROOM_UI_BORDER_COLOR,
+  ROOM_UI_BORDER_THICKNESS,
+  qtColorToHex,
+  swatchUserDataEntries,
+} from './roomFlags';
 import { DEFAULT_LABEL_FONT, CARDINAL_DIRECTIONS } from './types';
 import type { Direction, HitItem, HoverTarget, Selection, ToolId } from './types';
 import type { SceneHandle } from './scene';
@@ -190,8 +197,19 @@ export const selectTool: Tool = {
       if (target && s.map) {
         const raw = s.map.rooms[target.id];
         if (raw) {
+          const ud = raw.userData ?? {};
+          const symbolColor = ud[ROOM_SYMBOL_COLOR] ?? null;
+          const borderColorRaw = ud[ROOM_UI_BORDER_COLOR] ?? null;
+          const thicknessRaw = ud[ROOM_UI_BORDER_THICKNESS] ?? null;
+          const borderThickness = thicknessRaw != null && thicknessRaw !== '' ? parseInt(thicknessRaw, 10) : null;
           window.dispatchEvent(new CustomEvent('editor:swatchRoomPicked', {
-            detail: { symbol: raw.symbol ?? '', environment: raw.environment ?? -1 },
+            detail: {
+              symbol: raw.symbol ?? '',
+              environment: raw.environment ?? -1,
+              symbolColor: symbolColor,
+              borderColor: borderColorRaw != null ? qtColorToHex(borderColorRaw) : null,
+              borderThickness: borderThickness != null && Number.isFinite(borderThickness) ? borderThickness : null,
+            },
           }));
         }
       }
@@ -1560,9 +1578,12 @@ function applySwatchAt(ctx: ToolContext, ev: PointerEvent, swatch: import('./typ
   const prevEnv = rawRoom.environment ?? -1;
   ctx.scene.reader.setRoomField(room.id, 'symbol', swatch.symbol);
   ctx.scene.reader.setRoomField(room.id, 'environment', swatch.environment);
+  const entries = swatchUserDataEntries(swatch);
+  const prevUserData = entries.map(({ key }) => ({ key, from: rawRoom.userData?.[key] ?? null }));
+  for (const { key, value } of entries) ctx.scene.reader.setUserDataEntry(room.id, key, value);
   ctx.refresh();
   store.bumpData();
-  const painted = [...s.pending.painted, { id: room.id, prevSymbol, prevEnv }];
+  const painted = [...s.pending.painted, { id: room.id, prevSymbol, prevEnv, prevUserData }];
   store.setState({ pending: { kind: 'paint', painted } });
 }
 
@@ -1597,11 +1618,16 @@ export const paintTool: Tool = {
     const swatch = getActiveSwatch(s);
     if (painted.length > 0 && swatch) {
       const cmds: import('./types').Command[] = [];
-      for (const { id, prevSymbol, prevEnv } of painted) {
+      const entries = swatchUserDataEntries(swatch);
+      for (const { id, prevSymbol, prevEnv, prevUserData } of painted) {
         if (prevSymbol !== swatch.symbol)
           cmds.push({ kind: 'setRoomField', id, field: 'symbol', from: prevSymbol, to: swatch.symbol });
         if (prevEnv !== swatch.environment)
           cmds.push({ kind: 'setRoomField', id, field: 'environment', from: prevEnv, to: swatch.environment });
+        for (const { key, value } of entries) {
+          const from = prevUserData.find((p) => p.key === key)?.from ?? null;
+          if (from !== value) cmds.push({ kind: 'setUserDataEntry', roomId: id, key, from, to: value });
+        }
       }
       if (cmds.length > 0) {
         const cmd = cmds.length === 1 ? cmds[0] : { kind: 'batch' as const, cmds };
@@ -1615,9 +1641,10 @@ export const paintTool: Tool = {
   onCancel(ctx) {
     const s = store.getState();
     if (s.pending?.kind !== 'paint') return;
-    for (const { id, prevSymbol, prevEnv } of s.pending.painted) {
+    for (const { id, prevSymbol, prevEnv, prevUserData } of s.pending.painted) {
       ctx.scene.reader.setRoomField(id, 'symbol', prevSymbol);
       ctx.scene.reader.setRoomField(id, 'environment', prevEnv);
+      for (const { key, from } of prevUserData) ctx.scene.reader.setUserDataEntry(id, key, from);
     }
     if (s.pending.painted.length > 0) ctx.refresh();
     store.setState({ pending: null });

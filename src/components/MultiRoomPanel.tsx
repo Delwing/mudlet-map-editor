@@ -7,7 +7,12 @@ import type { SceneHandle } from '../editor/scene';
 import type { MudletMap } from '../mapIO';
 import { EnvPicker } from './EnvPicker';
 import { LockIcon } from './icons';
-import { RoomLink } from './panelShared';
+import { RoomLink, ColorSwatch } from './panelShared';
+import {
+  ROOM_UI_HIDDEN, ROOM_UI_BORDER_COLOR, ROOM_UI_BORDER_THICKNESS,
+  HIDDEN_TRUE, isHiddenValue, qtColorToHex, hexToQtColor, clampThickness,
+  BORDER_THICKNESS_MIN, BORDER_THICKNESS_MAX,
+} from '../editor/roomFlags';
 
 interface MultiRoomPanelProps {
   selection: { kind: 'room'; ids: number[] };
@@ -35,6 +40,9 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
   const commonEnv = unanimous(rooms.map((r) => r.environment));
   const commonLock = unanimous(rooms.map((r) => r.isLocked ?? false));
   const commonWeight = unanimous(rooms.map((r) => r.weight ?? 1));
+  const commonHidden = unanimous(rooms.map((r) => isHiddenValue(r.userData?.[ROOM_UI_HIDDEN])));
+  const commonBorderColor = unanimous(rooms.map((r) => r.userData?.[ROOM_UI_BORDER_COLOR] ?? null));
+  const commonBorderThickness = unanimous(rooms.map((r) => r.userData?.[ROOM_UI_BORDER_THICKNESS] ?? null));
 
   const [nameEnabled, setNameEnabled] = useState(false);
   const [nameDraft, setNameDraft] = useState(() => (commonName.same ? commonName.value : ''));
@@ -57,7 +65,21 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
   const [weightEnabled, setWeightEnabled] = useState(false);
   const [weightDraft, setWeightDraft] = useState(() => String(commonWeight.same ? commonWeight.value : 1));
 
-  const anyEnabled = nameEnabled || symbolEnabled || symbolColorEnabled || envEnabled || lockEnabled || weightEnabled;
+  const [hiddenEnabled, setHiddenEnabled] = useState(false);
+  const [hiddenDraft, setHiddenDraft] = useState(() => (commonHidden.same ? commonHidden.value : false));
+
+  const [borderColorEnabled, setBorderColorEnabled] = useState(false);
+  const [borderColorDraft, setBorderColorDraft] = useState<string | null>(() =>
+    commonBorderColor.same && commonBorderColor.value !== null ? qtColorToHex(commonBorderColor.value) : '#ffffff',
+  );
+
+  const [borderThicknessEnabled, setBorderThicknessEnabled] = useState(false);
+  const [borderThicknessDraft, setBorderThicknessDraft] = useState(() =>
+    commonBorderThickness.same && commonBorderThickness.value !== null ? commonBorderThickness.value : '',
+  );
+
+  const anyEnabled = nameEnabled || symbolEnabled || symbolColorEnabled || envEnabled || lockEnabled || weightEnabled
+    || hiddenEnabled || borderColorEnabled || borderThicknessEnabled;
 
   const handleApply = () => {
     const cmds: Command[] = [];
@@ -88,6 +110,28 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
         const w = Math.max(1, parseInt(weightDraft, 10) || 1);
         if (w !== (room.weight ?? 1)) {
           cmds.push({ kind: 'setRoomField', id, field: 'weight', from: room.weight ?? 1, to: w });
+        }
+      }
+      if (hiddenEnabled) {
+        const from = room.userData?.[ROOM_UI_HIDDEN] ?? null;
+        const to = hiddenDraft ? HIDDEN_TRUE : null;
+        if (from !== to) {
+          cmds.push({ kind: 'setUserDataEntry', roomId: id, key: ROOM_UI_HIDDEN, from, to });
+        }
+      }
+      if (borderColorEnabled) {
+        const from = room.userData?.[ROOM_UI_BORDER_COLOR] ?? null;
+        const to = borderColorDraft === null ? null : hexToQtColor(borderColorDraft);
+        if (from !== to) {
+          cmds.push({ kind: 'setUserDataEntry', roomId: id, key: ROOM_UI_BORDER_COLOR, from, to });
+        }
+      }
+      if (borderThicknessEnabled) {
+        const from = room.userData?.[ROOM_UI_BORDER_THICKNESS] ?? null;
+        const trimmed = borderThicknessDraft.trim();
+        const to = trimmed === '' ? null : String(clampThickness(parseInt(trimmed, 10)));
+        if (from !== to) {
+          cmds.push({ kind: 'setUserDataEntry', roomId: id, key: ROOM_UI_BORDER_THICKNESS, from, to });
         }
       }
     }
@@ -171,12 +215,14 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
             {t('multiRoom.symbolColor')}
             {!commonColor.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
           </span>
-          <input
-            type="color"
-            className="symbol-color-input"
+          <ColorSwatch
+            color={symbolColorDraft ?? '#ffffff'}
+            empty={symbolColorDraft === null}
             disabled={!symbolColorEnabled || symbolColorDraft === null}
-            value={symbolColorDraft ?? '#ffffff'}
-            onChange={(e) => setSymbolColorDraft(e.target.value)}
+            inputProps={{
+              value: symbolColorDraft ?? '#ffffff',
+              onChange: (e) => setSymbolColorDraft((e.target as HTMLInputElement).value),
+            }}
           />
           <button
             type="button"
@@ -268,6 +314,84 @@ export function MultiRoomPanel({ selection, map, sceneRef }: MultiRoomPanelProps
           >
             <LockIcon locked={lockDraft} />
           </button>
+        </div>
+
+        <div className="multi-field-row">
+          <input
+            type="checkbox"
+            className="multi-field-check"
+            checked={hiddenEnabled}
+            onChange={(e) => setHiddenEnabled(e.target.checked)}
+            title={t('multiRoom.enableHidden')}
+          />
+          <span className="multi-field-label">
+            {t('multiRoom.hidden')}
+            {!commonHidden.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
+          </span>
+          <input
+            type="checkbox"
+            disabled={!hiddenEnabled}
+            checked={hiddenDraft}
+            onChange={(e) => setHiddenDraft(e.target.checked)}
+            title={hiddenDraft ? t('multiRoom.hiddenOn') : t('multiRoom.hiddenOff')}
+          />
+        </div>
+
+        <div className="multi-field-row">
+          <input
+            type="checkbox"
+            className="multi-field-check"
+            checked={borderColorEnabled}
+            onChange={(e) => setBorderColorEnabled(e.target.checked)}
+            title={t('multiRoom.enableBorderColor')}
+          />
+          <span className="multi-field-label">
+            {t('multiRoom.borderColor')}
+            {!commonBorderColor.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
+          </span>
+          <ColorSwatch
+            color={borderColorDraft ?? '#ffffff'}
+            empty={borderColorDraft === null}
+            disabled={!borderColorEnabled || borderColorDraft === null}
+            inputProps={{
+              value: borderColorDraft ?? '#ffffff',
+              onChange: (e) => setBorderColorDraft((e.target as HTMLInputElement).value),
+            }}
+          />
+          <button
+            type="button"
+            className="symbol-color-clear"
+            disabled={!borderColorEnabled}
+            title={borderColorDraft === null ? t('multiRoom.restoreBorderColor') : t('multiRoom.clearBorderColor')}
+            onClick={() => setBorderColorDraft((v) => (v === null ? '#ffffff' : null))}
+          >
+            {borderColorDraft === null ? '+' : '×'}
+          </button>
+        </div>
+
+        <div className="multi-field-row">
+          <input
+            type="checkbox"
+            className="multi-field-check"
+            checked={borderThicknessEnabled}
+            onChange={(e) => setBorderThicknessEnabled(e.target.checked)}
+            title={t('multiRoom.enableBorderThickness')}
+          />
+          <span className="multi-field-label">
+            {t('multiRoom.borderThickness')}
+            {!commonBorderThickness.same && <span className="multi-field-mixed" title={t('multiRoom.differentValues')}>~</span>}
+          </span>
+          <input
+            type="number"
+            className="multi-field-input multi-field-weight"
+            disabled={!borderThicknessEnabled}
+            min={BORDER_THICKNESS_MIN}
+            max={BORDER_THICKNESS_MAX}
+            value={borderThicknessDraft}
+            placeholder={t('multiRoom.borderThicknessPlaceholder')}
+            onChange={(e) => setBorderThicknessDraft(e.target.value.replace(/[^0-9]/g, ''))}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
         </div>
       </div>
 

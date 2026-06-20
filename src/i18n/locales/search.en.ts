@@ -20,6 +20,7 @@ export const searchEn = {
   helpStubs: 'has exit stubs',
   helpDoor: 'has a door',
   helpLocked: 'not locked',
+  helpHidden: 'hidden rooms',
   helpSpecial: 'has special exits',
   helpCustomLine: 'has custom lines',
   helpSymbol: 'has a symbol',

@@ -14,6 +14,7 @@ const FILTER_EXAMPLES: { example: string; descKey: string }[] = [
   { example: 'stubs:>0', descKey: 'helpStubs' },
   { example: 'door:yes', descKey: 'helpDoor' },
   { example: 'locked:no', descKey: 'helpLocked' },
+  { example: 'hidden:yes', descKey: 'helpHidden' },
   { example: 'special:yes', descKey: 'helpSpecial' },
   { example: 'customline:yes', descKey: 'helpCustomLine' },
   { example: 'symbol:yes', descKey: 'helpSymbol' },

@@ -38,7 +38,18 @@ export type LabelSnapshot = {
 
 export type ToolId = 'select' | 'connect' | 'unlink' | 'addRoom' | 'delete' | 'pan' | 'customLine' | 'addLabel' | 'paint';
 
-export type Swatch = { id: string; name: string; symbol: string; environment: number };
+export type Swatch = {
+  id: string;
+  name: string;
+  symbol: string;
+  environment: number;
+  /** `#rrggbb` written to `system.fallback_symbol_color`; null/undefined leaves the room's symbol colour untouched. */
+  symbolColor?: string | null;
+  /** `#rrggbb` (stored as Qt `#aarrggbb`); null/undefined leaves the room's border colour untouched. */
+  borderColor?: string | null;
+  /** 1..10; null/undefined leaves the room's border thickness untouched. */
+  borderThickness?: number | null;
+};
 export type SwatchSet = { id: string; name: string; swatches: Swatch[]; readonly?: boolean };
 
 export type Direction =
@@ -257,7 +268,13 @@ export type PendingMarquee = {
 
 export type PendingPaint = {
   kind: 'paint';
-  painted: { id: number; prevSymbol: string; prevEnv: number }[];
+  painted: {
+    id: number;
+    prevSymbol: string;
+    prevEnv: number;
+    /** Previous values of the userData keys this swatch touches, for live revert / undo. */
+    prevUserData: { key: string; from: string | null }[];
+  }[];
 };
 
 export type PendingPickSwatch = { kind: 'pickSwatch' };

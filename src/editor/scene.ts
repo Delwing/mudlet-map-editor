@@ -37,6 +37,9 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   settings.highlightCurrentRoom = false;
   settings.areaName = false;
   settings.labelRenderMode = 'image'
+  // Keep hidden rooms on-screen so they stay selectable/editable — the renderer's
+  // default "hide" mode would drop them (and their exits) from the scene entirely.
+  settings.hiddenRooms = 'dashed';
 
   container.dataset.editorCursor = 'true';
 

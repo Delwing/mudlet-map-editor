@@ -8,7 +8,7 @@ import {PendingCustomLine, DIR_LONG} from '../../editor/types';
 import { getExit } from '../../editor/mapHelpers';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor, MudletMap } from '../../mapIO';
-import { Field, RoomLink, mudletColorToHex, hexToMudletColor } from '../panelShared';
+import { Field, RoomLink, ColorSwatch, mudletColorToHex, hexToMudletColor } from '../panelShared';
 
 export function CustomLineDrawPanel({ pending, sceneRef }: {
   pending: PendingCustomLine;
@@ -59,7 +59,7 @@ export function CustomLineDrawPanel({ pending, sceneRef }: {
       )}
       <div className="cl-form-row" style={{ marginTop: 8 }}>
         <label className="cl-form-label">{t('room.clColor')}</label>
-        <input type="color" value={colorHex} onChange={(e) => commitAttrPatch({ color: hexToMudletColor(e.target.value) })} />
+        <ColorSwatch color={colorHex} inputProps={{ value: colorHex, onChange: (e) => commitAttrPatch({ color: hexToMudletColor((e.target as HTMLInputElement).value) }) }} />
         <select value={pending.style} onChange={(e) => commitAttrPatch({ style: Number(e.target.value) })} style={{ flex: 1, marginLeft: 6 }}>
           <option value={1}>{t('room.solid')}</option>
           <option value={2}>{t('room.dash')}</option>
@@ -283,11 +283,13 @@ export function CustomLineSelectPanel({ selection, map, sceneRef }: {
       <div className="cl-form" style={{ marginTop: 10 }}>
         <div className="cl-form-row">
           <label className="cl-form-label">{t('room.clColor')}</label>
-          <input
-            type="color"
-            value={colorHex}
-            onChange={(e) => setColorHex(e.target.value)}
-            onBlur={(e) => applyChange({ color: hexToMudletColor(e.target.value) })}
+          <ColorSwatch
+            color={colorHex}
+            inputProps={{
+              value: colorHex,
+              onChange: (e) => setColorHex((e.target as HTMLInputElement).value),
+              onBlur: (e) => applyChange({ color: hexToMudletColor((e.target as HTMLInputElement).value) }),
+            }}
           />
           <select
             value={styleDraft}
