@@ -184,6 +184,9 @@ html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
+  /* Render native controls (number-input spinners, etc.) in dark mode so
+     they match the page instead of showing the OS default white arrows. */
+  color-scheme: dark;
   background: #080c14;
   background-image:
     radial-gradient(ellipse 80% 60% at 20% 0%, rgba(30, 53, 83, 0.35) 0%, transparent 60%),
