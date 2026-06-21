@@ -4,6 +4,18 @@ import { findNeighborsPointingAt, getExit } from './mapHelpers';
 import type { Command, NeighborEdit, Direction } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
+import { dataUrlToBuffer } from './labelPixmap';
+
+/**
+ * Apply a pixmap data URL to a raw label, keeping `pixMap` (Buffer) and
+ * `pixMapBase64` (bare base64) in sync — the renderer reads `pixMapBase64`, so
+ * updating only `pixMap` would leave the rendered image stale. Mirrors
+ * `EditorMapReader.setLabelPixmap` for the reader-less command path.
+ */
+function applyRawLabelPixmap(l: any, dataUrl: string): void {
+  l.pixMap = dataUrlToBuffer(dataUrl);
+  l.pixMapBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+}
 
 function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
   if (fromId === toId) return;
@@ -426,7 +438,7 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
     }
     case 'setLabelPixmap': {
       if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.to);
-      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pixMap = cmd.to; }
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.to); }
       return { structural: false };
     }
     case 'setLabelImageSrc': {
@@ -776,7 +788,7 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
     }
     case 'setLabelPixmap': {
       if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.from);
-      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.pixMap = cmd.from; }
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.from); }
       return { structural: false };
     }
     case 'setLabelImageSrc': {
