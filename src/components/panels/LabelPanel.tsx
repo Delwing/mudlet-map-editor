@@ -4,8 +4,9 @@ import { pushBatch, pushCommand } from '../../editor/commands';
 import { store, useEditorState } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor } from '../../mapIO';
-import type { Command, LabelFont, LabelSnapshot } from '../../editor/types';
+import type { Command, LabelFont, LabelSnapshot, LabelTextAlign } from '../../editor/types';
 import { generateLabelPixmap } from '../../editor/labelPixmap';
+import { getLabelStyles } from '../../editor/labelStyles';
 import { CheckboxField, Field, ColorSwatch, mudletColorToHex, hexToMudletColor } from '../panelShared';
 import { warningKey } from './MapPanel';
 import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
@@ -32,6 +33,22 @@ const outlineEq = (a: MudletColor | undefined, b: MudletColor | undefined) => {
 };
 
 const PX_PER_UNIT = 64;
+
+/** Traditional paragraph-alignment icon: four horizontal bars anchored per side. */
+function AlignIcon({ align }: { align: LabelTextAlign }) {
+  const full = 12;
+  const x0 = 1;
+  return (
+    <svg width={14} height={12} viewBox="0 0 14 12" aria-hidden focusable="false">
+      {[1, 0.6, 1, 0.6].map((frac, i) => {
+        const len = full * frac;
+        const x = align === 'left' ? x0 : align === 'right' ? x0 + (full - len) : x0 + (full - len) / 2;
+        const y = 2 + i * 2.6;
+        return <line key={i} x1={x} y1={y} x2={x + len} y2={y} stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" />;
+      })}
+    </svg>
+  );
+}
 
 export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const { t } = useTranslation('panels');
@@ -148,6 +165,32 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!current || current.showOnTop === val) return;
     pushCommand({ kind: 'setLabelShowOnTop', areaId: selection.areaId, id: selection.id, from: current.showOnTop, to: val }, scene);
+    scene.refresh();
+    store.bumpData();
+  };
+
+  const commitStyle = (styleId: string) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
+    if (!current) return;
+    const to = styleId === 'plain' ? undefined : styleId;
+    if ((current.styleId ?? undefined) === to) return;
+    const next = { ...current, styleId: to };
+    pushBatch([{ kind: 'setLabelStyle', areaId: selection.areaId, id: selection.id, from: current.styleId, to }, ...pixmapCmd(next)], scene);
+    scene.refresh();
+    store.bumpData();
+  };
+
+  const commitAlign = (align: LabelTextAlign) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
+    if (!current) return;
+    const to = align === 'center' ? undefined : align;
+    if ((current.textAlign ?? undefined) === to) return;
+    const next = { ...current, textAlign: to };
+    pushBatch([{ kind: 'setLabelAlign', areaId: selection.areaId, id: selection.id, from: current.textAlign, to }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
@@ -411,6 +454,18 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           />
         </Field>
 
+        <Field label={t('label.style')}>
+          <select
+            value={snap.styleId ?? 'plain'}
+            onChange={(e) => commitStyle(e.target.value)}
+            style={{ flex: 1 }}
+          >
+            {getLabelStyles().map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </Field>
+
         <div style={{ display: 'flex', gap: 8 }}>
           <Field label={t('label.textColor')} as="div">
             <ColorSwatch
@@ -466,7 +521,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         </Field>
 
         <Field label={t('label.size')}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input
               type="number"
               min={1}
@@ -507,6 +562,29 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
                   {label}
                 </button>
               ))}
+            </div>
+            <div style={{ display: 'flex', gap: 4, borderLeft: '1px solid var(--border, #444)', paddingLeft: 8 }}>
+              {(['left', 'center', 'right'] as const).map((value) => {
+                const active = (snap.textAlign ?? 'center') === value;
+                const title = value === 'left' ? t('label.alignLeft') : value === 'right' ? t('label.alignRight') : t('label.alignCenter');
+                return (
+                  <button
+                    key={value}
+                    title={title}
+                    onClick={() => commitAlign(value)}
+                    style={{
+                      width: 24, height: 24, padding: 0,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      background: active ? 'var(--accent, #00e5ff)' : 'var(--bg2, #2a2a2a)',
+                      color: active ? '#000' : 'inherit',
+                      border: '1px solid var(--border, #444)',
+                      borderRadius: 3, cursor: 'pointer',
+                    }}
+                  >
+                    <AlignIcon align={value} />
+                  </button>
+                );
+              })}
             </div>
           </div>
         </Field>

@@ -436,6 +436,16 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.outlineColor = cmd.to ? { ...cmd.to } : undefined; }
       return { structural: false };
     }
+    case 'setLabelStyle': {
+      if (reader) reader.setLabelStyle(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.styleId = cmd.to; }
+      return { structural: false };
+    }
+    case 'setLabelAlign': {
+      if (reader) reader.setLabelAlign(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.textAlign = cmd.to; }
+      return { structural: false };
+    }
     case 'setLabelPixmap': {
       if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.to);
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.to); }
@@ -784,6 +794,16 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
     case 'setLabelOutlineColor': {
       if (reader) reader.setLabelOutlineColor(cmd.areaId, cmd.id, cmd.from);
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.outlineColor = cmd.from ? { ...cmd.from } : undefined; }
+      return { structural: false };
+    }
+    case 'setLabelStyle': {
+      if (reader) reader.setLabelStyle(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.styleId = cmd.from; }
+      return { structural: false };
+    }
+    case 'setLabelAlign': {
+      if (reader) reader.setLabelAlign(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.textAlign = cmd.from; }
       return { structural: false };
     }
     case 'setLabelPixmap': {

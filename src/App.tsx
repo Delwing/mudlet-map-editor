@@ -21,6 +21,7 @@ import type { Command, ToolId } from './editor/types';
 import { saveSessionAsync } from './editor/sessionSaver';
 import { loadFileIntoStore } from './editor/loadFile';
 import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
+import { registerLabelStyles } from './editor/labelStyles';
 import { collectWarnings } from './editor/warnings';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px.
@@ -100,6 +101,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   });
 
   const pluginSwatchSets = useMemo(() => plugins.flatMap((p) => p.swatchSets?.() ?? []), [plugins]);
+  const pluginLabelStyles = useMemo(() => plugins.flatMap((p) => p.labelStyles?.() ?? []), [plugins]);
   const pluginSidebarTabs = useMemo(() => plugins.flatMap((p) => p.sidebarTabs?.() ?? []), [plugins]);
   const pluginRoomSections = useMemo<RoomPanelSection[]>(() => plugins.flatMap((p) => p.roomPanelSections?.() ?? []), [plugins]);
   // First plugin that *defines* renderLogo claims the slot — its return is
@@ -124,6 +126,12 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   useEffect(() => {
     store.setState({ pluginSwatchSets });
   }, [pluginSwatchSets]);
+
+  // Label styles live in a module-level registry (read by the non-React
+  // generateLabelPixmap); refresh it whenever the plugin-contributed set changes.
+  useEffect(() => {
+    registerLabelStyles(pluginLabelStyles);
+  }, [pluginLabelStyles]);
 
   // onAppReady: run all plugins once on mount (fire-and-forget).
   useEffect(() => {

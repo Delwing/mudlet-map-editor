@@ -252,6 +252,10 @@ function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string
       };
     }
   }
+  const styleValue = areaUserData[`editor.labelStyle_${id}`];
+  if (styleValue) rawLabel.styleId = styleValue;
+  const alignValue = areaUserData[`editor.labelAlign_${id}`];
+  if (alignValue === 'left' || alignValue === 'right' || alignValue === 'center') rawLabel.textAlign = alignValue;
 }
 
 /** Write label font/outlineColor back into area userData so the binary map round-trips correctly. */
@@ -269,6 +273,17 @@ function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, str
     // Write default transparent outline so Mudlet always has the entry.
     areaUserData[`system.labelOutlineColor_${id}`] = '0|0|0|0';
   }
+  // Editor-only metadata Mudlet ignores; 'plain'/unset stays out of userData.
+  if (rawLabel.styleId && rawLabel.styleId !== 'plain') {
+    areaUserData[`editor.labelStyle_${id}`] = rawLabel.styleId;
+  } else {
+    delete areaUserData[`editor.labelStyle_${id}`];
+  }
+  if (rawLabel.textAlign && rawLabel.textAlign !== 'center') {
+    areaUserData[`editor.labelAlign_${id}`] = rawLabel.textAlign;
+  } else {
+    delete areaUserData[`editor.labelAlign_${id}`];
+  }
 }
 
 function snapshotFromRawLabel(raw: any): LabelSnapshot {
@@ -283,6 +298,8 @@ function snapshotFromRawLabel(raw: any): LabelSnapshot {
     showOnTop: raw.showOnTop ?? false,
     font: raw.font ? { ...raw.font } : { ...DEFAULT_LABEL_FONT },
     outlineColor: raw.outlineColor ? { ...raw.outlineColor } : undefined,
+    styleId: raw.styleId,
+    textAlign: raw.textAlign,
     pixMap: raw.pixMapBase64 ? `data:image/png;base64,${raw.pixMapBase64}` : '',
     imageSrc: raw.imageSrc,
   };
@@ -854,6 +871,8 @@ export class EditorMapReader {
       showOnTop: snapshot.showOnTop,
       font: { ...snapshot.font },
       outlineColor: snapshot.outlineColor ? { ...snapshot.outlineColor } : undefined,
+      styleId: snapshot.styleId,
+      textAlign: snapshot.textAlign,
     };
     this.raw.labels[areaId].push(raw);
     const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
@@ -868,6 +887,8 @@ export class EditorMapReader {
     if (areaUserData) {
       delete areaUserData[`system.labelFont_${labelId}`];
       delete areaUserData[`system.labelOutlineColor_${labelId}`];
+      delete areaUserData[`editor.labelStyle_${labelId}`];
+      delete areaUserData[`editor.labelAlign_${labelId}`];
     }
     this.syncRendererLabels(areaId);
   }
@@ -925,6 +946,24 @@ export class EditorMapReader {
     const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
     if (!raw) return;
     raw.outlineColor = color ? { ...color } : undefined;
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelStyle(areaId: number, labelId: number, styleId: string | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.styleId = styleId;
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelAlign(areaId: number, labelId: number, align: import('../types').LabelTextAlign | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.textAlign = align;
     const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
     if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
     this.syncRendererLabels(areaId);

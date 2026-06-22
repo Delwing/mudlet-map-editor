@@ -18,6 +18,8 @@ export const DEFAULT_LABEL_FONT: LabelFont = {
   strikeout: false,
 };
 
+export type LabelTextAlign = 'left' | 'center' | 'right';
+
 export type LabelSnapshot = {
   id: number;
   pos: [number, number, number];
@@ -30,6 +32,10 @@ export type LabelSnapshot = {
   font: LabelFont;
   /** Text outline color loaded from area userData (system.labelOutlineColor_N). */
   outlineColor?: MudletColor;
+  /** Registered label style id (see labelStyles.ts); undefined / 'plain' = default rendering. Persisted to area userData as editor.labelStyle_N. */
+  styleId?: string;
+  /** Horizontal text alignment; undefined = 'center' (default). Persisted to area userData as editor.labelAlign_N. */
+  textAlign?: LabelTextAlign;
   /** Base64 PNG data URL, or empty string if no pixmap. */
   pixMap: string;
   /** Original image data URL set by the user (editor-only, not persisted to .dat). */
@@ -346,6 +352,8 @@ export type Command =
   | { kind: 'setLabelShowOnTop'; areaId: number; id: number; from: boolean; to: boolean }
   | { kind: 'setLabelFont'; areaId: number; id: number; from: LabelFont; to: LabelFont }
   | { kind: 'setLabelOutlineColor'; areaId: number; id: number; from: MudletColor | undefined; to: MudletColor | undefined }
+  | { kind: 'setLabelStyle'; areaId: number; id: number; from: string | undefined; to: string | undefined }
+  | { kind: 'setLabelAlign'; areaId: number; id: number; from: LabelTextAlign | undefined; to: LabelTextAlign | undefined }
   | { kind: 'setLabelPixmap'; areaId: number; id: number; from: string; to: string }
   | { kind: 'setLabelImageSrc'; areaId: number; id: number; from: string | undefined; to: string | undefined }
   | { kind: 'resizeLabel'; areaId: number; id: number; fromPos: [number, number, number]; toPos: [number, number, number]; fromSize: [number, number]; toSize: [number, number] }

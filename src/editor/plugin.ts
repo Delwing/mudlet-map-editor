@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { MudletMap, MudletRoom } from '../mapIO';
 import type { SwatchSet } from './types';
 import type { SceneHandle } from './scene';
+import type { LabelStyle } from './labelStyles';
 
 export interface PluginCheckResult {
   /** Stable identifier for this warning instance; used to namespace ack keys. */
@@ -88,6 +89,10 @@ export interface EditorPlugin {
   toolbarActions?(actions: ToolbarAction[]): ToolbarAction[];
   sidebarTabs?(): SidebarTab[];
   swatchSets?(): SwatchSet[];
+  /** Contribute label appearance styles selectable per-label in the label panel.
+   *  Each style hooks into the pixmap draw pipeline (transformText →
+   *  drawBackground → drawText → decorate); see {@link LabelStyle}. */
+  labelStyles?(): LabelStyle[];
   /** Contribute additional sections rendered at the bottom of the room selection panel. */
   roomPanelSections?(): RoomPanelSection[];
   /** Return custom map warnings. Called whenever built-in warnings are recomputed. */
