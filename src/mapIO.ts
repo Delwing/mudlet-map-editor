@@ -18,7 +18,7 @@ export function writeMapToBytes(map: MudletMap): Uint8Array {
   return new Uint8Array(writeMapToBuffer(map));
 }
 
-export function buildRendererInput(map: MudletMap) {
+export function buildRendererInput(map: MudletMap): ReturnType<typeof readerExport> {
   return readerExport(map);
 }
 
