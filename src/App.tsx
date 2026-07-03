@@ -20,6 +20,7 @@ import { snap } from './editor/coords';
 import type { Command, ToolId } from './editor/types';
 import { saveSessionAsync } from './editor/sessionSaver';
 import { loadFileIntoStore } from './editor/loadFile';
+import { builtInFormats, setMapFormats, matchFormatForFile, type MapFormat } from './editor/formats';
 import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
 import { registerLabelStyles } from './editor/labelStyles';
 import { collectWarnings } from './editor/warnings';
@@ -126,6 +127,14 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   useEffect(() => {
     store.setState({ pluginSwatchSets });
   }, [pluginSwatchSets]);
+
+  // Compose plugin format transforms over the built-in Mudlet `.dat` codec and
+  // publish the result to the module-level format registry (read by load/save).
+  useEffect(() => {
+    let list: MapFormat[] = [...builtInFormats];
+    for (const p of plugins) if (p.mapFormats) list = p.mapFormats(list);
+    setMapFormats(list);
+  }, [plugins]);
 
   // Label styles live in a module-level registry (read by the non-React
   // generateLabelPixmap); refresh it whenever the plugin-contributed set changes.
@@ -487,7 +496,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     };
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
-      const file = Array.from(e.dataTransfer?.files ?? []).find((f) => f.name.endsWith('.dat'));
+      const file = Array.from(e.dataTransfer?.files ?? []).find((f) => matchFormatForFile(f.name));
       if (file) loadFileIntoStore(file);
     };
     window.addEventListener('dragover', onDragOver);

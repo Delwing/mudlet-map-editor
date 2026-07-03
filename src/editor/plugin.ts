@@ -3,6 +3,7 @@ import type { MudletMap, MudletRoom } from '../mapIO';
 import type { SwatchSet } from './types';
 import type { SceneHandle } from './scene';
 import type { LabelStyle } from './labelStyles';
+import type { MapFormat } from './formats';
 
 export interface PluginCheckResult {
   /** Stable identifier for this warning instance; used to namespace ack keys. */
@@ -87,6 +88,15 @@ export interface EditorPlugin {
    *    - **Add** a custom button: `[...actions, { id, title, icon, onClick }]`
    *  Plugin transforms are applied in plugin order. */
   toolbarActions?(actions: ToolbarAction[]): ToolbarAction[];
+  /** Reshape the list of import/export formats. Receives the current list
+   *  (built-in Mudlet `.dat` first, then earlier plugins' additions) and returns
+   *  a new list — the same reshape pattern as {@link toolbarActions}:
+   *    - **Add** a format: `[...formats, myJsonFormat]`
+   *    - **Replace** the built-in: `formats.map(f => f.id === 'mudlet-dat' ? myDat : f)`
+   *    - **Remove** the built-in: `formats.filter(f => f.id !== 'mudlet-dat')`
+   *  A {@link MapFormat} is a codec between file bytes and the canonical
+   *  `MudletMap` model. Transforms are applied in plugin order. */
+  mapFormats?(formats: MapFormat[]): MapFormat[];
   sidebarTabs?(): SidebarTab[];
   swatchSets?(): SwatchSet[];
   /** Contribute label appearance styles selectable per-label in the label panel.

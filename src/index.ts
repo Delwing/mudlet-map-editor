@@ -1,6 +1,8 @@
 import './styles.css';
 export { default as App } from './App';
 export type { EditorPlugin, SidebarTab, RoomPanelSection, RoomSectionProps, PluginCheckResult, ToolbarAction } from './editor/plugin';
+export type { MapFormat, MapFormatParseContext } from './editor/formats';
+export { mudletDatFormat, MUDLET_DAT_FORMAT_ID } from './editor/formats';
 export type { LabelStyle, LabelDrawContext } from './editor/labelStyles';
 export type { MudletMap, MudletRoom, MudletColor } from './mapIO';
 export type { SwatchSet, Swatch } from './editor/types';

@@ -49,6 +49,7 @@ interface EditorPlugin {
   renderOverlay?(): ReactNode;
   renderLogo?(): ReactNode;
   toolbarActions?(actions: ToolbarAction[]): ToolbarAction[];
+  mapFormats?(formats: MapFormat[]): MapFormat[];
   sidebarTabs?(): SidebarTab[];
   swatchSets?(): SwatchSet[];
   roomPanelSections?(): RoomPanelSection[];
@@ -168,6 +169,64 @@ toolbarActions(actions) {
 ```
 
 > Note: overriding the `'save'` action's `onClick` replaces only the toolbar button's behaviour. The `onMapSave` hook still fires whenever the editor serialises the map elsewhere.
+
+---
+
+### `mapFormats(formats: MapFormat[]): MapFormat[]`
+
+Defines the import/export formats the editor understands. The map isn't tied to Mudlet `.dat` — a **`MapFormat`** is a codec between raw file bytes and the editor's canonical in-memory model (`MudletMap`). Any format that can translate to and from `MudletMap` works: a different `.dat` variant, SQLite, JSON, plaintext, etc.
+
+The hook receives the current list (built-in Mudlet `.dat` first, then any earlier-plugin additions) and returns a new one — the same reshape pattern as `toolbarActions`. Transforms compose in plugin order.
+
+```typescript
+interface MapFormat {
+  id: string;              // stable id; stored as the active format so saves round-trip
+  label: string;           // shown in the save-format chooser
+  extensions: string[];    // e.g. ['.json']; the first is the default save extension
+  accept?: string;         // load-picker accept string (defaults to extensions joined by ',')
+  matches?(fileName: string): boolean;   // claim a filename (defaults to extension match)
+  parse(bytes: ArrayBuffer, ctx: { fileName: string }): MudletMap | Promise<MudletMap>;
+  serialize(map: MudletMap): Uint8Array | Promise<Uint8Array>;
+}
+```
+
+How formats are used:
+
+- **Load** (file picker, drag-drop, URL): the format whose `matches` claims the filename parses the bytes. The load picker's `accept` is the union of every format's extensions.
+- **Save**: the main Save button always serialises in the active format (the one the map was loaded/last saved with). When more than one format is registered, a caret appears next to it — a split button — whose dropdown lists every format; picking one saves as that format and makes it the new active format. With a single format, there's no caret and Save behaves exactly as before.
+- `getMapBytes()` (library export) serialises the current map with the active format — it is `async` because `serialize` may be.
+
+Common transforms:
+
+```typescript
+import type { MapFormat } from 'mudlet-map-editor';
+
+const csvFormat: MapFormat = {
+  id: 'my-csv',
+  label: 'Room list (.csv)',
+  extensions: ['.csv'],
+  parse: (bytes) => fromCsv(new TextDecoder().decode(bytes)),
+  serialize: (map) => new TextEncoder().encode(toCsv(map)),
+};
+
+export default {
+  mapFormats(formats) {
+    return formats
+      // Add a custom format:
+      .concat(csvFormat)
+      // …or replace the built-in .dat:
+      // .map((f) => (f.id === 'mudlet-dat' ? myDatVariant : f))
+      // …or drop it entirely so the app only supports the custom one:
+      // .filter((f) => f.id !== 'mudlet-dat')
+  },
+} satisfies EditorPlugin;
+```
+
+`parse` and `serialize` may be async — return a promise to await network calls, WASM codecs, etc.
+
+**Built-in formats.** The core app ships two: Mudlet `.dat` (binary) and Mudlet `.json` — the latter is Mudlet's real interchange format (`exportJsonMap`/`importJsonMap`, formatVersion 1), so files save/load in actual Mudlet. Its source, `src/editor/mudletJsonFormat.ts`, is a thorough reference implementation of a non-trivial `MapFormat`: it maps our binary `MudletMap` model to Mudlet's JSON schema (rooms nested in areas, `[x,y,z]` coordinate arrays, exits as a flat array keyed by long direction names, `color24RGB`/`color32RGBA` colours, alphabetically-sorted keys and special exits to match Qt, base64 label pixmaps).
+
+Fidelity was validated by diffing our export of a real 26,988-room map against Mudlet's own export of the same map: the output is **byte-identical except** (a) three rooms' symbol *colour* — the binary-reader model exposes `symbol` as a bare string with no colour, so that datum isn't available to us (it's dropped in the `.dat` editor too), and (b) label pixmap bytes, because Mudlet re-encodes the PNG on export while we preserve the original bytes (same image either way). The reverse direction — parsing Mudlet's own JSON — reconstructs all rooms/areas/labels. The one representational edge case, inherent to Mudlet's schema, is a special exit whose command is literally a compass word (e.g. a special exit named `"southeast"`): it serialises identically to how Mudlet writes it, but re-importing resolves it to a normal exit — exactly as Mudlet's own importer does.
 
 ---
 

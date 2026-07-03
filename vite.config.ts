@@ -69,14 +69,11 @@ export default defineConfig({
     dedupe: ['konva', 'react', 'react-dom'],
   },
   // Vite skips `optimizeDeps` scanning for symlinked packages by default, so
-  // the linked `mudlet-map-binary-reader` (CJS) lands in the browser as raw
-  // CJS — breaks ESM named imports. Include it explicitly to force pre-bundle.
+  // the linked `mudlet-map-binary-reader` lands in the browser unbundled.
+  // Include it explicitly to force pre-bundle.
   optimizeDeps: {
     include: [
       'mudlet-map-binary-reader',
-      // Deep-import workaround for Vite 8's oxc dropping `Object.defineProperty`
-      // named exports from the binary reader's top-level entry — see mapIO.ts.
-      'mudlet-map-binary-reader/dist/map-operations',
     ],
   },
 });

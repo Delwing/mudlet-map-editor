@@ -1,5 +1,5 @@
-import { readMapFromBytes } from '../mapIO';
 import { store } from './store';
+import { pickFormatForFile } from './formats';
 
 export async function loadUrlIntoStore(url: string, onProgress?: (pct: number | null) => void): Promise<void> {
   try {
@@ -26,12 +26,14 @@ export async function loadUrlIntoStore(url: string, onProgress?: (pct: number | 
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
     const fileName = url.split('/').pop()?.split('?')[0] || 'map.dat';
-    const map = readMapFromBytes(merged.buffer);
+    const format = pickFormatForFile(fileName);
+    const map = await format.parse(merged.buffer, { fileName });
     const firstAreaId = Number(Object.keys(map.areaNames)[0] ?? -1);
     const resolvedArea = Number.isNaN(firstAreaId) ? null : firstAreaId;
     store.setState({
       map,
       loaded: { fileName },
+      formatId: format.id,
       currentAreaId: resolvedArea,
       currentZ: 0,
       selection: null,
@@ -53,12 +55,14 @@ export async function loadFileIntoStore(file: File): Promise<void> {
   try {
     store.setState({ status: `Reading ${file.name}…` });
     const bytes = await file.arrayBuffer();
-    const map = readMapFromBytes(bytes);
+    const format = pickFormatForFile(file.name);
+    const map = await format.parse(bytes, { fileName: file.name });
     const firstAreaId = Number(Object.keys(map.areaNames)[0] ?? -1);
     const resolvedArea = Number.isNaN(firstAreaId) ? null : firstAreaId;
     store.setState({
       map,
       loaded: { fileName: file.name },
+      formatId: format.id,
       currentAreaId: resolvedArea,
       currentZ: 0,
       selection: null,

@@ -3,6 +3,7 @@ import type { MudletMap, MudletRoom } from '../mapIO';
 import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
 import type { MapWarning } from './warnings';
 import type { PathFindingAlgorithm, RouteSummary } from './pathfinding';
+import { MUDLET_DAT_FORMAT_ID } from './formats';
 
 export type RoomClipboard = {
   /** Rooms captured at copy time; origId preserved for internal-exit remap. */
@@ -82,6 +83,9 @@ export type RouteState = {
 export interface EditorState {
   map: MudletMap | null;
   loaded: LoadedMap | null;
+  /** Id of the format the current map was loaded with / will be saved as by default.
+   *  Resolved against the format registry (see editor/formats.ts). */
+  formatId: string;
   currentAreaId: number | null;
   currentZ: number;
   activeTool: ToolId;
@@ -169,6 +173,7 @@ const userSettings = loadUserSettings();
 const initial: EditorState = {
   map: null,
   loaded: null,
+  formatId: MUDLET_DAT_FORMAT_ID,
   currentAreaId: null,
   currentZ: 0,
   activeTool: 'select',

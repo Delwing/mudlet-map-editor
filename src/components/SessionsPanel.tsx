@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
+import { pickFormatForFile } from '../editor/formats';
 import { listSessions, clearSession, clearAllSessions, restoreMapFromSession, type SessionData } from '../editor/session';
 
 const AUTODELETE_KEY = 'mudlet-session-autodelete';
@@ -57,6 +58,7 @@ export function SessionsPanel() {
     store.setState({
       map,
       loaded: { fileName: session.fileName },
+      formatId: pickFormatForFile(session.fileName).id,
       currentAreaId: session.currentAreaId,
       currentZ: session.currentZ,
       undo: session.undoStack,

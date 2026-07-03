@@ -100,7 +100,6 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       'mudlet-map-binary-reader',
-      'mudlet-map-binary-reader/dist/map-operations',
     ],
   },
 });

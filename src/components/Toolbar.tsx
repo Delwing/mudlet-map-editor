@@ -47,8 +47,10 @@ function renderToolbarAction(action: ToolbarAction): ReactNode {
 import { useTranslation } from 'react-i18next';
 import { modKey } from '../platform';
 import { store, useEditorState, saveUserSettings } from '../editor/store';
-import { createEmptyMap, writeMapToBytes } from '../mapIO';
+import { createEmptyMap } from '../mapIO';
 import { loadFileIntoStore } from '../editor/loadFile';
+import { combinedAccept, defaultMapFormat, getMapFormats, getMapFormat, type MapFormat } from '../editor/formats';
+import { SaveSplitButton } from './SaveSplitButton';
 import { DropdownSelect } from './DropdownSelect';
 import { useToolButtons } from './HelpModal';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -80,6 +82,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
   const pluginSwatchSets = useEditorState((s) => s.pluginSwatchSets);
   const activeSwatch = [...swatchSets, ...pluginSwatchSets].find(s => s.id === activeSwatchSetId)?.swatches.find(sw => sw.id === activeSwatchId) ?? null;
   const dirty = undoLen !== savedUndoLength;
+  const formatId = useEditorState((s) => s.formatId);
   const structureVersion = useEditorState((s) => s.structureVersion);
 
   const areaOptions = useMemo(() => {
@@ -120,9 +123,11 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
 
   const handleNewMap = () => {
     const map = createEmptyMap();
+    const format = defaultMapFormat();
     store.setState({
       map,
-      loaded: { fileName: 'new-map.dat' },
+      loaded: { fileName: 'new-map' + (format.extensions[0] ?? '.dat') },
+      formatId: format.id,
       currentAreaId: -1,
       currentZ: 0,
       selection: null,
@@ -139,27 +144,44 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
 
   const handleFile = loadFileIntoStore;
 
-  const handleSave = () => {
+  // Strip a known format extension from a filename so we can re-suffix it.
+  const stripKnownExtension = (fileName: string): string => {
+    for (const format of getMapFormats()) {
+      for (const ext of format.extensions) {
+        if (fileName.toLowerCase().endsWith(ext.toLowerCase())) return fileName.slice(0, -ext.length);
+      }
+    }
+    return fileName.replace(/\.[^.]+$/, '');
+  };
+
+  const saveWithFormat = async (format: MapFormat) => {
     const s = store.getState();
     if (!s.map || !s.loaded) return;
     try {
-      const bytes = writeMapToBytes(s.map);
+      const bytes = await format.serialize(s.map);
       const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
       const blob = new Blob([ab], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = s.loaded.fileName.replace(/\.dat$/i, '') + '-edited.dat';
+      a.download = stripKnownExtension(s.loaded.fileName) + '-edited' + (format.extensions[0] ?? '');
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      store.setState((s) => ({ savedUndoLength: s.undo.length, status: t('status.saved', { filename: a.download }) }));
+      // Remember the chosen format so the next save defaults to it.
+      store.setState((s) => ({ savedUndoLength: s.undo.length, formatId: format.id, status: t('status.saved', { filename: a.download }) }));
       onSave?.(bytes);
     } catch (err) {
       store.setState({ status: t('status.saveFailed', { error: (err as Error).message }) });
       console.error(err);
     }
+  };
+
+  // Main save button: serialize in the active format directly. The split
+  // button's caret dropdown (see below) is how the user picks a different one.
+  const handleSave = () => {
+    void saveWithFormat(getMapFormat(formatId) ?? defaultMapFormat());
   };
 
   // Built-in file-action buttons. Plugins reshape this array via the
@@ -187,7 +209,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
           <path d="M8 8v4M6 10l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       ),
-      filePicker: { accept: '.dat', onFile: handleFile },
+      filePicker: { accept: combinedAccept(), onFile: handleFile },
     },
     {
       id: 'loadUrl',
@@ -231,7 +253,24 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
         {(transformActions
           ? transformActions(builtInActions)
           : builtInActions
-        ).map(renderToolbarAction)}
+        ).map((action) =>
+          action.id === 'save' && !action.render && !action.filePicker ? (
+            <SaveSplitButton
+              key={action.id}
+              icon={action.icon}
+              title={action.title}
+              badge={action.badge}
+              style={action.style}
+              disabled={action.disabled}
+              onSave={action.onClick}
+              formats={getMapFormats()}
+              activeFormatId={formatId}
+              onPick={(format) => void saveWithFormat(format)}
+            />
+          ) : (
+            renderToolbarAction(action)
+          ),
+        )}
 
         {mapLoaded && (
           <>
