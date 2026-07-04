@@ -94,9 +94,15 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
 
   const zLevels = useMemo(() => {
     if (!map || currentAreaId == null) return [0];
-    const area = map.areas[currentAreaId];
-    return area?.zLevels?.length ? [...area.zLevels].sort((a, b) => a - b) : [0];
-  }, [map, currentAreaId, structureVersion]);
+    // Derive from actual rooms rather than the parsed `area.zLevels` field, which
+    // goes stale when rooms are moved between areas/levels or added on new levels.
+    const zs = new Set<number>([currentZ]);
+    for (const id of map.areas[currentAreaId]?.rooms ?? []) {
+      const room = map.rooms[id];
+      if (room) zs.add(room.z);
+    }
+    return [...zs].sort((a, b) => a - b);
+  }, [map, currentAreaId, currentZ, structureVersion]);
 
   const [gotoInput, setGotoInput] = useState('');
 
@@ -281,7 +287,9 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
               value={currentAreaId}
               options={areaOptions.map((a) => ({ value: a.id, label: `${a.name} (#${a.id})` }))}
               onChange={(id) => {
-                store.setState({ currentAreaId: id, currentZ: 0, selection: null, pending: null });
+                // Keep room selections across area switches so users can accumulate a
+                // cross-area selection (shift-click/marquee) for copy/move operations.
+                store.setState((s) => ({ currentAreaId: id, currentZ: 0, selection: s.selection?.kind === 'room' ? s.selection : null, pending: null }));
                 store.bumpStructure();
               }}
               searchable
@@ -293,7 +301,8 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
               value={currentZ}
               options={zLevels.map((z) => ({ value: z, label: String(z) }))}
               onChange={(z) => {
-                store.setState({ currentZ: z, selection: null, pending: null });
+                // Same as area switch: room selections survive level changes.
+                store.setState((s) => ({ currentZ: z, selection: s.selection?.kind === 'room' ? s.selection : null, pending: null }));
                 store.bumpStructure();
               }}
             />

@@ -39,7 +39,8 @@ export function AreaPanel({ sceneRef }: AreaPanelProps) {
     if (!trimmed) return;
     const id = nextAreaId(map);
     pushCommand({ kind: 'addArea', id, name: trimmed }, sceneRef.current);
-    store.setState({ currentAreaId: id, currentZ: 0, selection: null, pending: null });
+    // Keep room selections so "create area → move selected rooms into it" flows work.
+    store.setState((s) => ({ currentAreaId: id, currentZ: 0, selection: s.selection?.kind === 'room' ? s.selection : null, pending: null }));
     store.bumpStructure();
     store.setState({ status: t('added', { name: trimmed, id }) });
     setNewName('');

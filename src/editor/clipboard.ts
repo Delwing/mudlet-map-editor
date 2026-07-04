@@ -201,12 +201,14 @@ export function pasteClipboard(
   };
 }
 
-/** Copy → paste-at-offset in one step, without touching the user's clipboard. */
+/** Copy → paste-at-offset in one step, without touching the user's clipboard.
+ *  Z-neutral: each duplicate keeps its source room's z, so cross-level selections
+ *  preserve their vertical relations. */
 export function duplicateRooms(
   map: MudletMap,
   ids: number[],
   offset: { dx: number; dy: number },
-  target: { areaId: number; z: number },
+  target: { areaId: number },
   scene: SceneHandle | null,
 ): PasteResult | null {
   const rooms: RoomClipboard['rooms'] = [];
@@ -225,7 +227,7 @@ export function duplicateRooms(
   };
   return pasteClipboard(
     { rooms, origin },
-    { x: origin.x + offset.dx, y: origin.y + offset.dy, z: target.z, areaId: target.areaId },
+    { x: origin.x + offset.dx, y: origin.y + offset.dy, z: origin.z, areaId: target.areaId },
     scene,
   );
 }

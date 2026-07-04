@@ -336,7 +336,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
           s.map,
           s.selection.ids,
           { dx: s.gridStep, dy: -s.gridStep },
-          { areaId: s.currentAreaId, z: s.currentZ },
+          { areaId: s.currentAreaId },
           sceneRef.current,
         );
         if (!result) return;

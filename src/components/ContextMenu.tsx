@@ -375,11 +375,21 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       const dx = newX - raw.x;
       const dy = newY - raw.y;
       const dz = newZ - raw.z;
-      if (moveToDialog.areaId !== raw.area) {
+      // The selection can span areas — group per source area so each command's
+      // fromAreaId matches the rooms it actually moves.
+      const byArea = new Map<number, number[]>();
+      for (const id of multiIds) {
+        const room = s.map.rooms[id];
+        if (!room || room.area === moveToDialog.areaId) continue;
+        const list = byArea.get(room.area);
+        if (list) list.push(id);
+        else byArea.set(room.area, [id]);
+      }
+      for (const [fromAreaId, roomIds] of byArea) {
         cmds.push({
           kind: 'moveRoomsToArea' as const,
-          roomIds: multiIds,
-          fromAreaId: raw.area,
+          roomIds,
+          fromAreaId,
           toAreaId: moveToDialog.areaId,
         });
       }
