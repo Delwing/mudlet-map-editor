@@ -27,6 +27,10 @@ export const contextEn = {
     deletedRoom: 'Deleted room {{id}}',
     deletedRooms: 'Deleted {{count}} rooms',
     mergedRooms: 'Merged {{count}} rooms into room {{id}}',
+    copyToMap: 'Copy to "{{name}}" ({{rooms}} rooms)',
+    sendingRooms: 'Sending {{count}} rooms to "{{name}}"…',
+    sentRooms: 'Sent {{count}} rooms to "{{name}}"',
+    sendFailed: 'No response from "{{name}}" — tab closed?',
   },
   spread: {
     spreadTitle: 'Spread {{count}} rooms',

@@ -13,6 +13,7 @@ import { MarqueeEffect } from './effects/MarqueeEffect';
 import { LabelHaloEffect } from './effects/LabelHaloEffect';
 import { SelectionCenterEffect } from './effects/SelectionCenterEffect';
 import { GhostRoomsEffect } from './effects/GhostRoomsEffect';
+import { PlacePreviewEffect } from './effects/PlacePreviewEffect';
 import { RouteEffect } from './effects/RouteEffect';
 import { attachPointerController } from './pointerController';
 import { store } from './store';
@@ -59,6 +60,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   const labelHalo = new LabelHaloEffect(sceneRef);
   const selectionCenter = new SelectionCenterEffect(sceneRef);
   const ghostRooms = new GhostRoomsEffect(settings, sceneRef);
+  const placePreview = new PlacePreviewEffect(settings, sceneRef);
   const route = new RouteEffect(sceneRef);
 
   const gridOverlay = new GridOverlayEffect(
@@ -86,6 +88,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   renderer.addLiveEffect('editor.labelHalo', labelHalo);
   renderer.addLiveEffect('editor.selectionCenter', selectionCenter);
   renderer.addLiveEffect('editor.ghostRooms', ghostRooms);
+  renderer.addLiveEffect('editor.placePreview', placePreview);
   renderer.addLiveEffect('editor.route', route);
   renderer.addLiveEffect('editor.gridOverlay', gridOverlay);
 
@@ -112,7 +115,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       renderer.camera.panToMapPoint(mapX, mapY);
       gridOverlay.syncVisibility();
     },
-    refresh() { renderer.refresh(); selectionHalo.syncPositions(); hoverHalo.syncPositions(); snapIndicator.syncPositions(); connectHandles.syncPositions(); labelHalo.syncPositions(); selectionCenter.syncPositions(); ghostRooms.syncPositions(); route.syncPositions(); },
+    refresh() { renderer.refresh(); selectionHalo.syncPositions(); hoverHalo.syncPositions(); snapIndicator.syncPositions(); connectHandles.syncPositions(); labelHalo.syncPositions(); selectionCenter.syncPositions(); ghostRooms.syncPositions(); placePreview.syncPositions(); route.syncPositions(); },
     destroy() {
       delete container.dataset.editorCursor;
       detach();
@@ -138,6 +141,8 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       renderer.removeLiveEffect('editor.selectionCenter');
       ghostRooms.destroy();
       renderer.removeLiveEffect('editor.ghostRooms');
+      placePreview.destroy();
+      renderer.removeLiveEffect('editor.placePreview');
       route.destroy();
       renderer.removeLiveEffect('editor.route');
       gridOverlay.destroy();

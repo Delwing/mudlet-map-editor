@@ -11,10 +11,12 @@ import { SessionsPanel } from './components/SessionsPanel';
 import { SwatchPalette } from './components/SwatchPalette';
 import { SearchPanel } from './components/SearchPanel';
 import { SpreadShrinkPopup } from './components/SpreadShrinkPopup';
+import { IncomingRoomsBanner } from './components/IncomingRoomsBanner';
 import { store, useEditorState, saveUserSettings } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
-import { copyRoomsToClipboard, pasteClipboard, duplicateRooms } from './editor/clipboard';
+import { copyRoomsToClipboard, pasteClipboard, duplicateRooms, buildPasteStatus } from './editor/clipboard';
+import { initPeers, announceSelf } from './editor/peers';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import { snap } from './editor/coords';
 import type { Command, ToolId } from './editor/types';
@@ -51,23 +53,6 @@ const NUDGE: Record<string, { dx: number; dy: number }> = {
   ArrowUp:    { dx:  0, dy:  1 },
   ArrowDown:  { dx:  0, dy: -1 },
 };
-
-import i18n from './i18n';
-
-function buildPasteStatus(
-  verbKey: string,
-  result: { count: number; externalExitsStubbed: number; externalSpecialExitsDropped: number },
-): string {
-  const t = i18n.t.bind(i18n);
-  const parts = [t(`editor:status.${verbKey}`, { count: result.count })];
-  if (result.externalExitsStubbed > 0) {
-    parts.push(t('editor:status.externalExitsStubbed', { count: result.externalExitsStubbed }));
-  }
-  if (result.externalSpecialExitsDropped > 0) {
-    parts.push(t('editor:status.specialExitsDropped', { count: result.externalSpecialExitsDropped }));
-  }
-  return parts.join(' · ');
-}
 
 export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plugins?: EditorPlugin[]; title?: string }) {
   const { t } = useTranslation('editor');
@@ -157,6 +142,11 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     void import('./components/panels/ScriptCodeEditor');
   }, []);
 
+  // Cross-tab peers: open the BroadcastChannel once, re-announce whenever the
+  // loaded map changes so other tabs' "Copy to …" menus stay current.
+  useEffect(() => initPeers(), []);
+  useEffect(() => { announceSelf(); }, [map]);
+
   // onMapOpened / onMapClosed: fire on map identity transitions.
   const prevMapRef = useRef(map);
   useEffect(() => {
@@ -245,7 +235,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         el.removeEventListener('pointercancel', onUp);
       };
     }
-    if (pending?.kind === 'pickExit' || pending?.kind === 'pickSpecialExit' || pending?.kind === 'pickSwatch' || pending?.kind === 'pickRoom') {
+    if (pending?.kind === 'pickExit' || pending?.kind === 'pickSpecialExit' || pending?.kind === 'pickSwatch' || pending?.kind === 'pickRoom' || pending?.kind === 'placeRooms') {
       el.style.cursor = 'crosshair';
       return;
     }
@@ -710,6 +700,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         {!mapLoaded && <SessionsPanel />}
         <Toolbar title={title} logo={pluginLogo} transformActions={transformToolbarActions} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} onSettingsClick={() => setShowSettings(true)} onDiffClick={() => setShowDiff(true)} />
 <SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} pluginRoomSections={pluginRoomSections} />
+        <IncomingRoomsBanner />
       </div>
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}

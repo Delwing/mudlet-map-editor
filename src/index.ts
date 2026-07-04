@@ -10,6 +10,7 @@ export { loadUrlIntoStore } from './editor/loadFile';
 export { getMapBytes } from './editor/mapBytes';
 export { pushCommand } from './editor/commands';
 export { store, useEditorState } from './editor/store';
+export type { PeerInfo, IncomingRooms } from './editor/peers';
 export { addTranslations, changeLanguage, getCurrentLanguage } from './i18n';
 export type { EditorLocale } from './i18n';
 export { LanguageSwitcher } from './components/LanguageSwitcher';

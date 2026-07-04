@@ -53,6 +53,14 @@ export const pl: EditorLocale = {
     externalExitsStubbed: '{{count}} zewnętrznych wyjść → końcówka',
     specialExitsDropped: '{{count}} wyjść specjalnych usuniętych',
   },
+  incoming: {
+    title: 'Otrzymano {{count}} lokacji z "{{name}}"',
+    place: 'Umieść',
+    placeTitle: 'Podgląd podąża za kursorem — kliknij na mapie, aby umieścić, Esc anuluje',
+    placeHint: 'Kliknij na mapie, aby umieścić lokacje · Esc lub prawy przycisk anuluje',
+    noMap: 'Najpierw wczytaj mapę',
+    dismiss: 'Odrzuć',
+  },
   hints: {
     marquee: 'Przytrzymaj Ctrl, aby przełączyć zaznaczenie',
     connect: 'Wybierz cel · Shift = jednokierunkowy · Esc anuluje',

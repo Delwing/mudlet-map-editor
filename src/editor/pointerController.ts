@@ -47,7 +47,7 @@ export function attachPointerController(ctx: ToolContext): () => void {
     }
     const s = store.getState();
     const pendingKind = s.pending?.kind;
-    const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit' || pendingKind === 'pickRoom')
+    const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit' || pendingKind === 'pickRoom' || pendingKind === 'placeRooms')
       ? 'select'
       : effectiveTool();
     const tool = TOOLS[toolId];
@@ -123,7 +123,9 @@ export function attachPointerController(ctx: ToolContext): () => void {
   };
   const onContextMenu = (ev: MouseEvent) => {
     ev.preventDefault();
-    const tool = TOOLS[effectiveTool()];
+    // An armed room placement is select-tool business regardless of active tool.
+    const toolId = store.getState().pending?.kind === 'placeRooms' ? 'select' : effectiveTool();
+    const tool = TOOLS[toolId];
     tool.onContextMenu?.(ev, ctx);
   };
 

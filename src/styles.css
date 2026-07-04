@@ -4567,6 +4567,48 @@ html, body, #root {
   background: rgba(52, 100, 168, 0.55);
 }
 
+.context-menu-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: rgba(143, 184, 255, 0.12);
+  margin: 3px 4px;
+}
+
+/* Cross-tab incoming rooms banner (rooms sent over from another editor tab) */
+.incoming-banner {
+  position: absolute;
+  top: 116px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 14, 24, 0.92);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(143, 184, 255, 0.18);
+  border-radius: 7px;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.7),
+    0 0 0 1px rgba(255,255,255,0.03),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  padding: 8px 12px;
+}
+
+.incoming-banner-text {
+  font-size: 12px;
+  color: #e6e9ef;
+  white-space: nowrap;
+}
+
+.incoming-banner .context-menu-btn {
+  flex: none;
+}
+
 /* Help button */
 .help-btn {
   flex-shrink: 0;

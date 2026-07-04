@@ -1,4 +1,5 @@
 import type { MudletMap, MudletRoom } from '../mapIO';
+import i18n from '../i18n';
 import { store, type RoomClipboard } from './store';
 import { pushCommand } from './commands';
 import { nextRoomId } from './mapHelpers';
@@ -23,7 +24,9 @@ function cloneRoom(room: MudletRoom): MudletRoom {
   };
 }
 
-export function copyRoomsToClipboard(map: MudletMap, ids: number[]): number {
+/** Snapshot rooms + centroid origin without touching store state. The result is
+ *  plain-object only, so it survives structured clone (cross-tab transfer). */
+export function buildRoomClipboard(map: MudletMap, ids: number[]): RoomClipboard | null {
   const rooms: RoomClipboard['rooms'] = [];
   let cx = 0, cy = 0, cz = 0;
   for (const id of ids) {
@@ -32,11 +35,16 @@ export function copyRoomsToClipboard(map: MudletMap, ids: number[]): number {
     rooms.push({ origId: id, room: cloneRoom(room) });
     cx += room.x; cy += room.y; cz += room.z;
   }
-  if (rooms.length === 0) return 0;
+  if (rooms.length === 0) return null;
   const n = rooms.length;
-  const origin = { x: Math.round(cx / n), y: Math.round(cy / n), z: Math.round(cz / n) };
-  store.setState({ clipboard: { rooms, origin } });
-  return n;
+  return { rooms, origin: { x: Math.round(cx / n), y: Math.round(cy / n), z: Math.round(cz / n) } };
+}
+
+export function copyRoomsToClipboard(map: MudletMap, ids: number[]): number {
+  const clipboard = buildRoomClipboard(map, ids);
+  if (!clipboard) return 0;
+  store.setState({ clipboard });
+  return clipboard.rooms.length;
 }
 
 /**
@@ -123,6 +131,21 @@ export type PasteResult = {
   externalExitsStubbed: number;
   externalSpecialExitsDropped: number;
 };
+
+export function buildPasteStatus(
+  verbKey: string,
+  result: { count: number; externalExitsStubbed: number; externalSpecialExitsDropped: number },
+): string {
+  const t = i18n.t.bind(i18n);
+  const parts = [t(`editor:status.${verbKey}`, { count: result.count })];
+  if (result.externalExitsStubbed > 0) {
+    parts.push(t('editor:status.externalExitsStubbed', { count: result.externalExitsStubbed }));
+  }
+  if (result.externalSpecialExitsDropped > 0) {
+    parts.push(t('editor:status.specialExitsDropped', { count: result.externalSpecialExitsDropped }));
+  }
+  return parts.join(' · ');
+}
 
 export function pasteClipboard(
   clipboard: RoomClipboard,

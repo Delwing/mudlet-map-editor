@@ -3,6 +3,7 @@ import type { MudletMap, MudletRoom } from '../mapIO';
 import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
 import type { MapWarning } from './warnings';
 import type { PathFindingAlgorithm, RouteSummary } from './pathfinding';
+import type { IncomingRooms, PeerInfo } from './peers';
 import { MUDLET_DAT_FORMAT_ID } from './formats';
 
 export type RoomClipboard = {
@@ -136,6 +137,10 @@ export interface EditorState {
   warningAckVersion: number;
   /** Cached map warnings; recomputed in App after each command lands. */
   warnings: MapWarning[];
+  /** Other same-origin editor tabs with a map open — cross-tab copy targets. */
+  peers: PeerInfo[];
+  /** Rooms sent from another tab, shown in a banner until placed or dismissed. */
+  incomingRooms: IncomingRooms | null;
 }
 
 export type ContextMenuState =
@@ -211,6 +216,8 @@ const initial: EditorState = {
   route: { fromId: null, toId: null, algorithm: 'astar', summary: null, status: 'idle' },
   warningAckVersion: 0,
   warnings: [],
+  peers: [],
+  incomingRooms: null,
 };
 
 type Listener = (state: EditorState) => void;

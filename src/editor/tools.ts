@@ -1,6 +1,8 @@
 import type { MapRenderer, Settings } from 'mudlet-map-renderer';
+import i18n from '../i18n';
 import { clientToMap, snap } from './coords';
 import { pushCommand, buildDeleteNeighborEdits } from './commands';
+import { pasteClipboard, buildPasteStatus } from './clipboard';
 import { allHitsAt, exitAt, customLineAt, customLinePointAt, customLineSegmentAt, handleDirFor, labelAt, labelResizeHandleAt, roomAtCell, stubAt } from './hitTest';
 import {
   createDefaultRoom,
@@ -158,6 +160,32 @@ export const selectTool: Tool = {
     if (ev.button !== 0) return false;
     const s = store.getState();
     if (s.contextMenu) store.setState({ contextMenu: null });
+
+    if (s.pending?.kind === 'placeRooms') {
+      if (s.map && s.currentAreaId != null) {
+        // Anchor exactly where the ghost preview draws: snap (or round) in raw space.
+        const c = mapCoord(ctx, ev);
+        const snapFn = s.snapToGrid ? (v: number) => snap(v, s.gridStep) : Math.round;
+        const result = pasteClipboard(
+          s.pending.clipboard,
+          { x: snapFn(c.x), y: snapFn(-c.y), z: s.currentZ, areaId: s.currentAreaId },
+          ctx.scene,
+        );
+        if (result) {
+          ctx.refresh();
+          store.bumpStructure();
+          store.setState({
+            pending: null,
+            incomingRooms: null,
+            selection: { kind: 'room', ids: result.newIds },
+            status: buildPasteStatus('pasted', result),
+          });
+          return true;
+        }
+      }
+      store.setState({ pending: null });
+      return true;
+    }
 
     if (s.pending?.kind === 'pickExit') {
       const target = roomUnder(ctx, ev);
@@ -675,6 +703,12 @@ export const selectTool: Tool = {
   onContextMenu(ev, ctx) {
     const s = store.getState();
     if (!s.map) return false;
+
+    // Right-click cancels an armed room placement instead of opening a menu.
+    if (s.pending?.kind === 'placeRooms') {
+      store.setState({ pending: null, status: i18n.t('editor:status.cancelled') });
+      return true;
+    }
 
     // When the spread/shrink popup is open, right-click on any room sets it as the anchor.
     if (s.spreadShrink) {

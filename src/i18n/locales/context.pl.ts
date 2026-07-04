@@ -29,6 +29,10 @@ export const contextPl: ContextLocale = {
     deletedRoom: 'Usunięto lokację {{id}}',
     deletedRooms: 'Usunięto {{count}} lokacji',
     mergedRooms: 'Scalono {{count}} lokacji w lokację {{id}}',
+    copyToMap: 'Kopiuj do "{{name}}" ({{rooms}} lokacji)',
+    sendingRooms: 'Wysyłanie {{count}} lokacji do "{{name}}"…',
+    sentRooms: 'Wysłano {{count}} lokacji do "{{name}}"',
+    sendFailed: 'Brak odpowiedzi od "{{name}}" — karta zamknięta?',
   },
   spread: {
     spreadTitle: 'Rozciągnij {{count}} lokacji',

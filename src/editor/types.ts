@@ -285,7 +285,14 @@ export type PendingPaint = {
 
 export type PendingPickSwatch = { kind: 'pickSwatch' };
 
-export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingPickRoom | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | PendingPaint | PendingPickSwatch | null;
+/** Armed room placement: a ghost preview of `clipboard` follows the cursor;
+ *  a click pastes at that spot, Esc / right-click cancels. */
+export type PendingPlaceRooms = {
+  kind: 'placeRooms';
+  clipboard: import('./store').RoomClipboard;
+};
+
+export type Pending = PendingDrag | PendingConnect | PendingCustomLine | PendingCustomLinePoint | PendingPickExit | PendingPickSpecialExit | PendingPickRoom | PendingMarquee | PendingLabelDrag | PendingLabelRect | PendingLabelResize | PendingPaint | PendingPickSwatch | PendingPlaceRooms | null;
 
 export type RoomSnapshot = MudletRoom;
 

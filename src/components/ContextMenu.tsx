@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store, useEditorState } from '../editor/store';
 import { pushCommand, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushBatch, buildCustomLineMoveCommands, buildMergeRoomsCommands } from '../editor/commands';
+import { buildRoomClipboard } from '../editor/clipboard';
+import { refreshPeers, sendRoomsToPeer, type PeerInfo } from '../editor/peers';
 import { hitToSelection, hitStatusLabel } from '../editor/tools';
 import type { HitItem } from '../editor/types';
 import type { SceneHandle } from '../editor/scene';
@@ -26,6 +28,7 @@ interface MoveLabelToState {
 export function ContextMenu({ sceneRef }: ContextMenuProps) {
   const { t } = useTranslation('context');
   const menu = useEditorState((s) => s.contextMenu);
+  const peers = useEditorState((s) => s.peers);
   const ref = useRef<HTMLDivElement | null>(null);
   const [moveToDialog, setMoveToDialog] = useState<MoveToState | null>(null);
   const [moveLabelToDialog, setMoveLabelToDialog] = useState<MoveLabelToState | null>(null);
@@ -37,6 +40,9 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
       setMoveLabelToDialog(null);
       return;
     }
+    // Room menus list other tabs as copy targets — ask them to re-announce so
+    // file names / room counts are fresh by the time the user reads the menu.
+    if (menu.kind === 'room') refreshPeers();
     const close = () => store.setState({ contextMenu: null });
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
     const onDown = (e: MouseEvent) => {
@@ -328,6 +334,19 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
     store.setState({ status: t('menu.deletedRoom', { id: menu.roomId }), contextMenu: null });
   };
 
+  const copyToPeer = (peer: PeerInfo) => {
+    const st = store.getState();
+    if (!st.map) return close();
+    const ids = multiIds ?? [menu.roomId];
+    const clipboard = buildRoomClipboard(st.map, ids);
+    if (!clipboard) return close();
+    sendRoomsToPeer(peer, clipboard);
+    store.setState({
+      contextMenu: null,
+      status: t('menu.sendingRooms', { count: clipboard.rooms.length, name: peer.fileName }),
+    });
+  };
+
   const mergeRooms = () => {
     const st = store.getState();
     if (!st.map || !multiIds) return close();
@@ -519,6 +538,17 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
           <button type="button" className="context-menu-item" onClick={mergeRooms}>
             {t('menu.merge', { id: menu.roomId })}
           </button>
+        </>
+      )}
+      {peers.length > 0 && (
+        <>
+          <div className="context-menu-separator" />
+          {peers.map((p) => (
+            <button key={p.tabId} type="button" className="context-menu-item" onClick={() => copyToPeer(p)}>
+              {t('menu.copyToMap', { name: p.fileName, rooms: p.roomCount })}
+            </button>
+          ))}
+          <div className="context-menu-separator" />
         </>
       )}
       <button type="button" className="context-menu-item danger" onClick={deleteRoom}>

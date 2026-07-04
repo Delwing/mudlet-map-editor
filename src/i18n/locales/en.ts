@@ -51,6 +51,14 @@ export const en = {
     externalExitsStubbed: '{{count}} external exit(s) → stub',
     specialExitsDropped: '{{count}} special exit(s) dropped',
   },
+  incoming: {
+    title: '{{count}} rooms received from "{{name}}"',
+    place: 'Place',
+    placeTitle: 'A preview follows your cursor — click on the map to place, Esc cancels',
+    placeHint: 'Click on the map to place the rooms · Esc or right-click cancels',
+    noMap: 'Load a map first',
+    dismiss: 'Dismiss',
+  },
   hints: {
     marquee: 'Hold Ctrl to toggle selection',
     connect: 'Pick target · Shift = one-way · Esc cancels',
