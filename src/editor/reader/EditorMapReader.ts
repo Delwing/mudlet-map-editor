@@ -574,7 +574,13 @@ export class EditorMapReader {
     rawRoom.z = z;
     const area = this.areas[rawRoom.area];
     if (!area) return;
-    if (oldZ !== z) area.rebuildPlanes();
+    if (oldZ !== z) {
+      // The room changes plane, and every exit touching it carries a snapshot of
+      // its z (EditorExit.zIndex) that decides which level the link draws on —
+      // stale after a z move, so the links would keep rendering on the old level.
+      area.rebuildPlanes();
+      area.rebuildExits();
+    }
     area.markDirty();
   }
 
