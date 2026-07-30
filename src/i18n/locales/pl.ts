@@ -52,6 +52,7 @@ export const pl: EditorLocale = {
     duplicated: 'Zduplikowano {{count}} lokacji',
     externalExitsStubbed: '{{count}} zewnętrznych wyjść → końcówka',
     specialExitsDropped: '{{count}} wyjść specjalnych usuniętych',
+    hashesDropped: '{{count}} zduplikowanych hashy wyczyszczonych',
     lodNoHitTest: 'Tryb przeglądu — przybliż, aby użyć tego narzędzia',
   },
   loading: {

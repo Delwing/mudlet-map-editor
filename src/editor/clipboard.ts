@@ -8,13 +8,14 @@ import type { Command } from './types';
 import type { SceneHandle } from './scene';
 
 function cloneRoom(room: MudletRoom): MudletRoom {
-  return {
+  const out: MudletRoom = {
     ...room,
     mSpecialExits: { ...room.mSpecialExits },
     mSpecialExitLocks: [...(room.mSpecialExitLocks ?? [])],
     userData: { ...(room.userData ?? {}) },
     customLines: Object.fromEntries(Object.entries(room.customLines ?? {}).map(([k, v]) => [k, v.map(p => [...p] as [number, number])])),
-    customLinesColor: { ...(room.customLinesColor ?? {}) },
+    // Colors are objects — copy them, or the clone shares them with the source room.
+    customLinesColor: Object.fromEntries(Object.entries(room.customLinesColor ?? {}).map(([k, c]) => [k, { ...c }])),
     customLinesStyle: { ...(room.customLinesStyle ?? {}) },
     customLinesArrow: { ...(room.customLinesArrow ?? {}) },
     exitLocks: [...(room.exitLocks ?? [])],
@@ -22,6 +23,23 @@ function cloneRoom(room: MudletRoom): MudletRoom {
     exitWeights: { ...(room.exitWeights ?? {}) },
     doors: { ...(room.doors ?? {}) },
   };
+  // `rawSpecialExits` is the packed on-disk form of mSpecialExits, keyed by the
+  // *source* room ids. The writer regenerates it for every room from
+  // mSpecialExits/mSpecialExitLocks, so a copy would only ever be stale.
+  delete out.rawSpecialExits;
+  return out;
+}
+
+/** Every room hash already spoken for in `map` — a pasted room may not reuse one.
+ *  `room.hash` is the source of truth (the writer rebuilds the index from it), but
+ *  index keys count too: they reserve a hash even if their room is gone. */
+function collectTakenHashes(map: MudletMap): Set<string> {
+  const taken = new Set<string>();
+  for (const room of Object.values(map.rooms)) {
+    if (room?.hash) taken.add(room.hash);
+  }
+  for (const hash of Object.keys(map.mpRoomDbHashToRoomId ?? {})) taken.add(hash);
+  return taken;
 }
 
 /** Snapshot rooms + centroid origin without touching store state. The result is
@@ -53,10 +71,13 @@ export function copyRoomsToClipboard(map: MudletMap, ids: number[]): number {
  *  - exits whose target is external → cleared and the direction is marked as a stub
  * Also drops external special exits / external custom lines since they'd point to
  * rooms not included in the paste.
+ *
+ * Every other field (name, symbol, environment, weight, isLocked, userData, doors…)
+ * is carried over verbatim. `hash` is left alone here — the caller decides whether
+ * it can be kept, since that depends on the destination map.
  */
 function remapRoom(
   src: MudletRoom,
-  newId: number,
   newAreaId: number,
   newCoords: { x: number; y: number; z: number },
   idMap: Map<number, number>,
@@ -68,6 +89,7 @@ function remapRoom(
   out.z = newCoords.z;
 
   const stubSet = new Set<number>(out.stubs);
+  const lockSet = new Set<number>(out.exitLocks);
   for (const dir of CARDINAL_DIRECTIONS) {
     const target = (out as any)[dir] as number;
     if (target == null || target === -1) continue;
@@ -77,16 +99,26 @@ function remapRoom(
     } else {
       (out as any)[dir] = -1;
       stubSet.add(DIR_INDEX[dir]);
+      // No exit left to lock or weight. `doors` stay — Mudlet allows a door on a stub.
+      lockSet.delete(DIR_INDEX[dir]);
+      delete out.exitWeights[DIR_SHORT[dir]];
     }
   }
   out.stubs = Array.from(stubSet).sort((a, b) => a - b);
+  out.exitLocks = Array.from(lockSet).sort((a, b) => a - b);
 
   // Special exits: remap internals, drop externals (plus their metadata).
+  // `mSpecialExitLocks` holds *destination room ids*, not indexes, so it has to be
+  // remapped in step with mSpecialExits or the locks are silently lost — and, when
+  // pasting into another map, a stale id can even collide with a freshly minted one.
+  const srcLocks = new Set<number>(out.mSpecialExitLocks);
   const newSpecial: Record<string, number> = {};
+  const newLocks = new Set<number>();
   for (const [name, target] of Object.entries(out.mSpecialExits)) {
     const remapped = idMap.get(target as number);
     if (remapped != null) {
       newSpecial[name] = remapped;
+      if (srcLocks.has(target as number)) newLocks.add(remapped);
     } else {
       delete out.doors[name];
       delete out.exitWeights[name];
@@ -97,6 +129,7 @@ function remapRoom(
     }
   }
   out.mSpecialExits = newSpecial;
+  out.mSpecialExitLocks = Array.from(newLocks).sort((a, b) => a - b);
 
   // Cardinal custom lines: keep only when the underlying exit survived (now points to a remapped room).
   for (const dir of CARDINAL_DIRECTIONS) {
@@ -110,10 +143,6 @@ function remapRoom(
     }
   }
 
-  // Hash is a Mudlet-side identity; new rooms shouldn't inherit it.
-  if ('hash' in out) delete (out as any).hash;
-  // Give the pasted room a default name so duplicates aren't instantly indistinguishable.
-  out.name = `Room ${newId}`;
   return out;
 }
 
@@ -130,11 +159,13 @@ export type PasteResult = {
   newIds: number[];
   externalExitsStubbed: number;
   externalSpecialExitsDropped: number;
+  /** Rooms whose hash the destination map already had, so the copy went in without one. */
+  hashesDropped: number;
 };
 
 export function buildPasteStatus(
   verbKey: string,
-  result: { count: number; externalExitsStubbed: number; externalSpecialExitsDropped: number },
+  result: { count: number; externalExitsStubbed: number; externalSpecialExitsDropped: number; hashesDropped: number },
 ): string {
   const t = i18n.t.bind(i18n);
   const parts = [t(`editor:status.${verbKey}`, { count: result.count })];
@@ -143,6 +174,9 @@ export function buildPasteStatus(
   }
   if (result.externalSpecialExitsDropped > 0) {
     parts.push(t('editor:status.specialExitsDropped', { count: result.externalSpecialExitsDropped }));
+  }
+  if (result.hashesDropped > 0) {
+    parts.push(t('editor:status.hashesDropped', { count: result.hashesDropped }));
   }
   return parts.join(' · ');
 }
@@ -169,6 +203,13 @@ export function pasteClipboard(
 
   let externalExits = 0;
   let externalSpecial = 0;
+  let hashesDropped = 0;
+  // A room hash is Mudlet's content identity for a room. Duplicating it inside one
+  // map would make the on-disk index ambiguous (the writer warns and keeps only the
+  // last room), so a colliding hash is dropped. Pasting into a *different* map —
+  // the cross-tab case — keeps it, since that is exactly what lets Mudlet recognise
+  // the transferred rooms.
+  const takenHashes = collectTakenHashes(map);
   const cmds: Command[] = [];
   for (const { origId, room } of clipboard.rooms) {
     const newId = idMap.get(origId)!;
@@ -180,12 +221,20 @@ export function pasteClipboard(
     for (const t of Object.values(room.mSpecialExits)) {
       if (!idMap.has(t as number)) externalSpecial += 1;
     }
-    const remapped = remapRoom(room, newId, target.areaId, {
+    const remapped = remapRoom(room, target.areaId, {
       x: room.x + dx,
       y: room.y + dy,
       z: room.z + dz,
     }, idMap);
     translateCustomLines(remapped, dx, dy);
+    if (remapped.hash) {
+      if (takenHashes.has(remapped.hash)) {
+        delete remapped.hash;
+        hashesDropped += 1;
+      } else {
+        takenHashes.add(remapped.hash);
+      }
+    }
     cmds.push({ kind: 'addRoom', id: newId, room: remapped, areaId: target.areaId });
   }
 
@@ -198,6 +247,7 @@ export function pasteClipboard(
     newIds,
     externalExitsStubbed: externalExits,
     externalSpecialExitsDropped: externalSpecial,
+    hashesDropped,
   };
 }
 

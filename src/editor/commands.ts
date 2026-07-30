@@ -1,4 +1,4 @@
-import type { MudletMap } from '../mapIO';
+import type { MudletMap, MudletRoom } from '../mapIO';
 import { store } from './store';
 import { findNeighborsPointingAt, getExit } from './mapHelpers';
 import type { Command, NeighborEdit, Direction } from './types';
@@ -30,11 +30,9 @@ function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
     area.rooms = area.rooms.map((id) => id === fromId ? toId : id);
   }
 
-  if (map.mRoomIdHash && Object.prototype.hasOwnProperty.call(map.mRoomIdHash, fromId)) {
-    map.mRoomIdHash[toId] = map.mRoomIdHash[fromId];
-    delete map.mRoomIdHash[fromId];
-  }
-
+  // `mRoomIdHash` is deliberately untouched: it maps Mudlet profile name → the
+  // player's current room, not room id → anything. A renamed room is not worth
+  // chasing there.
   for (const hash of Object.keys(map.mpRoomDbHashToRoomId ?? {})) {
     if (map.mpRoomDbHashToRoomId[hash] === fromId) map.mpRoomDbHashToRoomId[hash] = toId;
   }
@@ -47,7 +45,26 @@ function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
     for (const [name, targetId] of Object.entries(raw.mSpecialExits ?? {})) {
       if (targetId === fromId) raw.mSpecialExits[name] = toId;
     }
+    // Special-exit locks are stored as destination room ids, so they move with the rename.
+    if (raw.mSpecialExitLocks?.includes(fromId)) {
+      raw.mSpecialExitLocks = raw.mSpecialExitLocks.map((id) => (id === fromId ? toId : id));
+    }
   }
+}
+
+/** Register a room's hash in `map.mpRoomDbHashToRoomId`, the index Mudlet keeps
+ *  alongside the rooms. `room.hash` is the source of truth and the writer rebuilds
+ *  the index from it on save, but panels and paste-time collision checks read the
+ *  index, so it must not go stale while editing. */
+function indexRoomHash(map: MudletMap, id: number, room: MudletRoom): void {
+  if (room.hash) map.mpRoomDbHashToRoomId[room.hash] = id;
+}
+
+/** Inverse of {@link indexRoomHash} — drop the entry a removed room owned, so a
+ *  later room reusing that id doesn't inherit a phantom hash. */
+function unindexRoomHash(map: MudletMap, id: number): void {
+  const hash = map.rooms[id]?.hash;
+  if (hash && map.mpRoomDbHashToRoomId[hash] === id) delete map.mpRoomDbHashToRoomId[hash];
 }
 
 function remapRoomIdInStore(fromId: number, toId: number): void {
@@ -158,6 +175,7 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       map.rooms[cmd.id] = { ...cmd.room };
       const area = map.areas[cmd.areaId];
       if (area && !area.rooms.includes(cmd.id)) area.rooms.push(cmd.id);
+      indexRoomHash(map, cmd.id, map.rooms[cmd.id]);
       if (reader) reader.addRoom(cmd.id, map.rooms[cmd.id]);
       return { structural: true };
     }
@@ -166,6 +184,7 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
         const neighbor = map.rooms[edit.roomId];
         if (neighbor) (neighbor as any)[edit.dir] = -1;
       }
+      unindexRoomHash(map, cmd.id);
       if (reader) {
         reader.removeRoom(cmd.id);
       } else {
@@ -494,6 +513,7 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
                 const neighbor = map.rooms[edit.roomId];
                 if (neighbor) (neighbor as any)[edit.dir] = -1;
               }
+              unindexRoomHash(map, c.id);
             }
             batchReader.removeRooms(run.map(c => c.id));
             structural = true;
@@ -503,6 +523,7 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
               map.rooms[c.id] = { ...c.room };
               const area = map.areas[c.areaId];
               if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
+              indexRoomHash(map, c.id, map.rooms[c.id]);
             }
             batchReader.addRooms(run.map(c => ({ id: c.id, room: map.rooms[c.id] })));
             structural = true;
@@ -533,6 +554,7 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       return { structural: false };
     }
     case 'addRoom': {
+      unindexRoomHash(map, cmd.id);
       if (reader) reader.removeRoom(cmd.id);
       else {
         delete map.rooms[cmd.id];
@@ -548,6 +570,7 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       map.rooms[cmd.id] = { ...cmd.room };
       const area = map.areas[cmd.areaId];
       if (area && !area.rooms.includes(cmd.id)) area.rooms.push(cmd.id);
+      indexRoomHash(map, cmd.id, map.rooms[cmd.id]);
       if (reader) reader.addRoom(cmd.id, map.rooms[cmd.id]);
       for (const edit of cmd.neighborEdits) {
         const neighbor = map.rooms[edit.roomId];
@@ -874,6 +897,7 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
               map.rooms[c.id] = { ...c.room };
               const area = map.areas[c.areaId];
               if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
+              indexRoomHash(map, c.id, map.rooms[c.id]);
             }
             for (const c of run) {
               for (const edit of c.neighborEdits) {
@@ -885,6 +909,7 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
             structural = true;
           } else if (kind === 'addRoom' && i - start > 0) {
             const run = cmd.cmds.slice(start, i + 1) as Extract<Command, { kind: 'addRoom' }>[];
+            for (const c of run) unindexRoomHash(map, c.id);
             batchReader.removeRooms(run.map(c => c.id));
             structural = true;
           } else {

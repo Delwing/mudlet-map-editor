@@ -81,6 +81,7 @@ function makeLiveRoom(id: number, raw: MudletRoom): LiveRoom {
   ro('stubs');
   ro('exitWeights');
   ro('mSpecialExitLocks');
+  ro('hash');
   Object.defineProperty(live, 'env', {
     get() { return raw.environment || undefined; },
     enumerable: true, configurable: true,

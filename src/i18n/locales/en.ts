@@ -50,6 +50,7 @@ export const en = {
     duplicated: 'Duplicated {{count}} rooms',
     externalExitsStubbed: '{{count}} external exit(s) → stub',
     specialExitsDropped: '{{count}} special exit(s) dropped',
+    hashesDropped: '{{count}} duplicate hash(es) cleared',
     lodNoHitTest: 'Overview mode — zoom in to use this tool',
   },
   loading: {
