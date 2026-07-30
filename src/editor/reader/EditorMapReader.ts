@@ -338,6 +338,9 @@ export class EditorArea {
   private planes: Record<number, EditorPlane> = {};
   private exits: Map<string, EditorExit> = new Map();
   private version = 0;
+  private suspendCount = 0;
+  private pendingPlanes = false;
+  private pendingExits = false;
 
   constructor(
     private readonly areaId: number,
@@ -420,7 +423,24 @@ export class EditorArea {
     this.markDirty();
   }
 
+  /**
+   * Defer `rebuildPlanes`/`rebuildExits` until the matching `resumeRebuilds`.
+   * Nestable. While suspended the rooms/labels arrays still mutate immediately —
+   * only the derived plane/exit structures are stale, and nothing reads those
+   * between a suspend and its resume.
+   */
+  suspendRebuilds(): void { this.suspendCount++; }
+
+  resumeRebuilds(): void {
+    if (this.suspendCount === 0) return;
+    this.suspendCount--;
+    if (this.suspendCount > 0) return;
+    if (this.pendingPlanes) { this.pendingPlanes = false; this.rebuildPlanes(); }
+    if (this.pendingExits) { this.pendingExits = false; this.rebuildExits(); }
+  }
+
   rebuildPlanes(): void {
+    if (this.suspendCount > 0) { this.pendingPlanes = true; return; }
     const grouped: Record<number, LiveRoom[]> = {};
     for (const r of this.rooms) {
       const arr = grouped[r.z] ?? (grouped[r.z] = []);
@@ -436,6 +456,7 @@ export class EditorArea {
   }
 
   rebuildExits(): void {
+    if (this.suspendCount > 0) { this.pendingExits = true; return; }
     this.exits = buildExitsFor(this.rooms);
   }
 }
@@ -509,6 +530,20 @@ export class EditorMapReader {
         rawLabels.map(l => this.toRendererLabel(l, areaId)),
       );
     }
+  }
+
+  /**
+   * Suspend per-mutation plane/exit rebuilds across every area until the
+   * matching `endBatch`. Use around a run of mutations that would otherwise pay
+   * a full rebuild each — a 40-room merge goes from ~80 rebuilds to one per
+   * area. Nestable; always pair in a `try/finally`.
+   */
+  beginBatch(): void {
+    for (const area of this.getAreas()) area.suspendRebuilds();
+  }
+
+  endBatch(): void {
+    for (const area of this.getAreas()) area.resumeRebuilds();
   }
 
   private toRendererLabel(l: any, areaId: number): any {

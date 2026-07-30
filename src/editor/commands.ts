@@ -467,32 +467,55 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       return { structural: false };
     }
     case 'batch': {
-      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'deleteRoom')) {
-        // Fast path: sever neighbor exits in raw map first, then bulk-remove from renderer once.
-        for (const c of cmd.cmds) {
-          if (c.kind !== 'deleteRoom') continue;
-          for (const edit of c.neighborEdits) {
-            const neighbor = map.rooms[edit.roomId];
-            if (neighbor) (neighbor as any)[edit.dir] = -1;
-          }
-        }
-        const ids = (cmd.cmds as Extract<Command, { kind: 'deleteRoom' }>[]).map(c => c.id);
-        scene.reader.removeRooms(ids);
-        return { structural: true };
+      const batchReader = scene?.reader;
+      if (!batchReader || cmd.cmds.length <= 1) {
+        let structural = false;
+        for (const c of cmd.cmds) { if (applyCommand(map, c, scene).structural) structural = true; }
+        return { structural };
       }
-      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'addRoom')) {
-        // Fast path: one rebuild per affected area instead of one per added room.
-        const addCmds = cmd.cmds as Extract<Command, { kind: 'addRoom' }>[];
-        for (const c of addCmds) {
-          map.rooms[c.id] = { ...c.room };
-          const area = map.areas[c.areaId];
-          if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
-        }
-        scene.reader.addRooms(addCmds.map(c => ({ id: c.id, room: map.rooms[c.id] })));
-        return { structural: true };
-      }
+      // Consecutive runs of room adds/removes go through the reader's bulk
+      // variants (one rebuild per area instead of one per room); everything in
+      // between runs with rebuilds suspended, so a mixed batch — e.g. merge,
+      // which re-points exits and then deletes N rooms — costs one rebuild.
       let structural = false;
-      for (const c of cmd.cmds) { if (applyCommand(map, c, scene).structural) structural = true; }
+      batchReader.beginBatch();
+      try {
+        for (let i = 0; i < cmd.cmds.length;) {
+          const kind = cmd.cmds[i].kind;
+          let j = i + 1;
+          if (kind === 'deleteRoom' || kind === 'addRoom') {
+            while (j < cmd.cmds.length && cmd.cmds[j].kind === kind) j++;
+          }
+          if (kind === 'deleteRoom' && j - i > 1) {
+            // Sever neighbor exits in the raw map first — removeRooms expects that.
+            const run = cmd.cmds.slice(i, j) as Extract<Command, { kind: 'deleteRoom' }>[];
+            for (const c of run) {
+              for (const edit of c.neighborEdits) {
+                const neighbor = map.rooms[edit.roomId];
+                if (neighbor) (neighbor as any)[edit.dir] = -1;
+              }
+            }
+            batchReader.removeRooms(run.map(c => c.id));
+            structural = true;
+          } else if (kind === 'addRoom' && j - i > 1) {
+            const run = cmd.cmds.slice(i, j) as Extract<Command, { kind: 'addRoom' }>[];
+            for (const c of run) {
+              map.rooms[c.id] = { ...c.room };
+              const area = map.areas[c.areaId];
+              if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
+            }
+            batchReader.addRooms(run.map(c => ({ id: c.id, room: map.rooms[c.id] })));
+            structural = true;
+          } else {
+            for (let k = i; k < j; k++) {
+              if (applyCommand(map, cmd.cmds[k], scene).structural) structural = true;
+            }
+          }
+          i = j;
+        }
+      } finally {
+        batchReader.endBatch();
+      }
       return { structural };
     }
   }
@@ -827,33 +850,53 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       return { structural: false };
     }
     case 'batch': {
-      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'deleteRoom')) {
-        // Fast path: mirror of applyCommand's bulk-delete — restore raw rooms and
-        // neighbor exits in one pass, then bulk-add to the reader (one rebuild per area).
-        const deleteCmds = cmd.cmds as Extract<Command, { kind: 'deleteRoom' }>[];
-        for (const c of deleteCmds) {
-          map.rooms[c.id] = { ...c.room };
-          const area = map.areas[c.areaId];
-          if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
-        }
-        for (const c of deleteCmds) {
-          for (const edit of c.neighborEdits) {
-            const neighbor = map.rooms[edit.roomId];
-            if (neighbor) (neighbor as any)[edit.dir] = edit.was;
-          }
-        }
-        scene.reader.addRooms(deleteCmds.map(c => ({ id: c.id, room: map.rooms[c.id] })));
-        return { structural: true };
+      const batchReader = scene?.reader;
+      if (!batchReader || cmd.cmds.length <= 1) {
+        let structural = false;
+        for (const c of [...cmd.cmds].reverse()) { if (revertCommand(map, c, scene).structural) structural = true; }
+        return { structural };
       }
-      if (scene?.reader && cmd.cmds.length > 1 && cmd.cmds.every(c => c.kind === 'addRoom')) {
-        // Fast path: mirror of applyCommand's bulk-add — bulk-remove in one call.
-        const addCmds = cmd.cmds as Extract<Command, { kind: 'addRoom' }>[];
-        const ids = addCmds.map(c => c.id);
-        scene.reader.removeRooms(ids);
-        return { structural: true };
-      }
+      // Mirror of applyCommand's batch: walk backwards, coalescing the same
+      // add/remove runs into bulk reader calls with rebuilds suspended.
       let structural = false;
-      for (const c of [...cmd.cmds].reverse()) { if (revertCommand(map, c, scene).structural) structural = true; }
+      batchReader.beginBatch();
+      try {
+        for (let i = cmd.cmds.length - 1; i >= 0;) {
+          const kind = cmd.cmds[i].kind;
+          let start = i;
+          if (kind === 'deleteRoom' || kind === 'addRoom') {
+            while (start > 0 && cmd.cmds[start - 1].kind === kind) start--;
+          }
+          if (kind === 'deleteRoom' && i - start > 0) {
+            // Restore raw rooms and neighbor exits in one pass, then bulk-add.
+            const run = cmd.cmds.slice(start, i + 1) as Extract<Command, { kind: 'deleteRoom' }>[];
+            for (const c of run) {
+              map.rooms[c.id] = { ...c.room };
+              const area = map.areas[c.areaId];
+              if (area && !area.rooms.includes(c.id)) area.rooms.push(c.id);
+            }
+            for (const c of run) {
+              for (const edit of c.neighborEdits) {
+                const neighbor = map.rooms[edit.roomId];
+                if (neighbor) (neighbor as any)[edit.dir] = edit.was;
+              }
+            }
+            batchReader.addRooms(run.map(c => ({ id: c.id, room: map.rooms[c.id] })));
+            structural = true;
+          } else if (kind === 'addRoom' && i - start > 0) {
+            const run = cmd.cmds.slice(start, i + 1) as Extract<Command, { kind: 'addRoom' }>[];
+            batchReader.removeRooms(run.map(c => c.id));
+            structural = true;
+          } else {
+            for (let k = i; k >= start; k--) {
+              if (revertCommand(map, cmd.cmds[k], scene).structural) structural = true;
+            }
+          }
+          i = start - 1;
+        }
+      } finally {
+        batchReader.endBatch();
+      }
       return { structural };
     }
   }
