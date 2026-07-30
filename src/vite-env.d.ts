@@ -14,11 +14,5 @@ declare module 'qtdatastream/src/buffer' {
   }
 }
 
-// monaco-editor's package.json only declares types for the top-level entry.
-// We import the trimmed `edcore.main` at runtime but reuse the same public
-// type surface via the re-export below.
-declare module 'monaco-editor/esm/vs/editor/edcore.main' {
-  export * from 'monaco-editor';
-}
-declare module 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution';
-declare module 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
+declare module 'monaco-editor/features/register.all';
+declare module 'monaco-editor/languages/definitions/javascript/register';

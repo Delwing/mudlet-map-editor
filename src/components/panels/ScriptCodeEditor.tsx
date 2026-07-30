@@ -1,18 +1,20 @@
 import { useRef } from 'react';
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
-// Import the trimmed entry: core editor + contributions, NO basic-languages, NO
-// CSS/HTML/JSON language services. Register only the tokenizer for JavaScript
-// and the TypeScript language service (which powers JS diagnostics, hover, and
-// completion). This drops ~80 language contribution chunks from the build.
-import * as monaco from 'monaco-editor/esm/vs/editor/edcore.main';
-import 'monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution';
-// Use the named exports of this contribution module directly. Monaco's public
-// types already mark `languages.typescript` as deprecated in favor of a top-
-// level `typescript` namespace, which IS this module's exports — so skip the
+// Import the trimmed entry: core editor + all editor features, NO language
+// definitions, NO CSS/HTML/JSON language services. Register only the tokenizer
+// for JavaScript and the TypeScript language service (which powers JS
+// diagnostics, hover, and completion). This drops ~80 language contribution
+// chunks from the build.
+import * as monaco from 'monaco-editor/editor';
+import 'monaco-editor/features/register.all';
+import 'monaco-editor/languages/definitions/javascript/register';
+// Use the named exports of this register module directly. Monaco's public types
+// already mark `languages.typescript` as deprecated in favor of a top-level
+// `typescript` namespace, which IS this module's exports — so skip the
 // attachment dance and talk to it straight.
-import * as tsLang from 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker&inline';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline';
+import * as tsLang from 'monaco-editor/languages/features/typescript/register';
+import editorWorker from 'monaco-editor/editor/editor.worker?worker&inline';
+import tsWorker from 'monaco-editor/languages/features/typescript/ts.worker?worker&inline';
 import { SCRIPT_TYPES_DTS } from '../../editor/scriptTypes';
 
 // One-time worker + bundler setup. Vite resolves the `?worker` imports to
