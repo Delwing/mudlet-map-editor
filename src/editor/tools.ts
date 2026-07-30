@@ -842,7 +842,10 @@ export const selectTool: Tool = {
 function roomsInRect(minX: number, maxX: number, minY: number, maxY: number, ctx: ToolContext): number[] {
   const s = store.getState();
   if (s.currentAreaId == null) return [];
-  const rooms = ctx.scene.reader.getArea(s.currentAreaId)?.getPlane(s.currentZ)?.getRooms() ?? [];
+  // Whole level, not the viewport: the rect is screen-drawn so its rooms are on
+  // screen anyway, but `getRooms()` is narrowed to the window the renderer last
+  // applied, which lags a pan by a frame.
+  const rooms = ctx.scene.reader.getArea(s.currentAreaId)?.getPlane(s.currentZ)?.getAllRooms() ?? [];
   const ids: number[] = [];
   for (const room of rooms) {
     // LiveRoom.x/.y are already render-space (y flipped).

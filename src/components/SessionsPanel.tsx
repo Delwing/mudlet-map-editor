@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
 import { pickFormatForFile } from '../editor/formats';
 import { listSessions, clearSession, clearAllSessions, restoreMapFromSession, type SessionData } from '../editor/session';
+import { yieldToPaint } from '../editor/loadFile';
 
 const AUTODELETE_KEY = 'mudlet-session-autodelete';
 
@@ -53,7 +54,11 @@ export function SessionsPanel() {
       .catch(() => setLoaded(true));
   }, []);
 
-  const handleLoad = (session: SessionData) => {
+  const handleLoad = async (session: SessionData) => {
+    // Restoring rebuilds the whole map and then the scene — same multi-second
+    // block as a file load on a big map, so show the same overlay.
+    store.setState({ loading: { phase: 'preparing', fileName: session.fileName, pct: null } });
+    await yieldToPaint();
     const map = restoreMapFromSession(session);
     store.setState({
       map,

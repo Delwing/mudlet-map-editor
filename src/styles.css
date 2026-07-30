@@ -2910,6 +2910,18 @@ html, body, #root {
   text-align: right;
 }
 
+.settings-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #7d8798;
+}
+
+.settings-slider-group input[type="range"]:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .settings-color-row {
   display: flex;
   align-items: center;
@@ -4607,6 +4619,131 @@ html, body, #root {
 
 .incoming-banner .context-menu-btn {
   flex: none;
+}
+
+/* Map loading overlay — sits above modals; the load blocks the main thread */
+.map-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 12, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.map-loading-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 6px 14px;
+  min-width: 300px;
+  max-width: 420px;
+  padding: 18px 22px;
+  border-radius: 10px;
+  background: rgba(10, 14, 24, 0.96);
+  border: 1px solid rgba(143, 184, 255, 0.18);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+/* transform-only + will-change keeps this on the compositor, so it keeps
+   spinning while the main thread is blocked parsing/building the map. */
+.map-loading-spinner {
+  grid-row: 1 / span 2;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(143, 184, 255, 0.18);
+  border-top-color: #8fb8ff;
+  will-change: transform;
+  animation: map-loading-spin 0.8s linear infinite;
+}
+
+@keyframes map-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.map-loading-phase {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e6e9ef;
+}
+
+.map-loading-file {
+  margin-top: 2px;
+  font-size: 11px;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #7d8798;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-loading-hint {
+  grid-column: 2;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #7d8798;
+}
+
+.map-loading-bar {
+  grid-column: 2;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(143, 184, 255, 0.14);
+  overflow: hidden;
+}
+
+.map-loading-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #8fb8ff;
+  transition: width 0.12s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-loading-spinner { animation-duration: 2.4s; }
+}
+
+/* LOD badge — renderer drawing the current level below full detail */
+.lod-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 12;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(10, 14, 24, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(143, 184, 255, 0.18);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  font-size: 11px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.lod-badge-mode {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #8fb8ff;
+}
+
+.lod-badge-hint {
+  color: #7d8798;
+}
+
+/* Raster tier also costs pointer picking — warn rather than inform. */
+.lod-badge-raster {
+  border-color: rgba(255, 190, 92, 0.3);
+}
+
+.lod-badge-raster .lod-badge-mode {
+  color: #ffbe5c;
 }
 
 /* Help button */

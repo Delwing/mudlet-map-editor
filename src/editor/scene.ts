@@ -1,4 +1,4 @@
-import { MapRenderer, createSettings, type Settings } from 'mudlet-map-renderer';
+import { MapRenderer, createSettings, type LodEventDetail, type Settings } from 'mudlet-map-renderer';
 import type { MudletMap } from '../mapIO';
 import { EditorMapReader, type LiveRoom } from './reader/EditorMapReader';
 import { SelectionHaloEffect } from './effects/SelectionHaloEffect';
@@ -41,6 +41,19 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   // Keep hidden rooms on-screen so they stay selectable/editable — the renderer's
   // default "hide" mode would drop them (and their exits) from the scene entirely.
   settings.hiddenRooms = 'dashed';
+
+  // Big maps: let the renderer fall back to its cheaper tiers on a dense plane
+  // (rooms-only vector, then a raster overview) instead of building a vector
+  // scene it can't afford. The switch is zoom-based, so zooming in always
+  // returns to full detail.
+  settings.lodEnabled = true;
+  // …but never trade away pointer picking: every editor tool picks through
+  // `renderer.hitTester`. The budget is measured against the rooms a plane
+  // materialises, which EditorMapReader narrows to the viewport — so this only
+  // ever fires where the vector tier itself is already at its room budget, and
+  // losing picking there costs more than the index does. Raster mode drops the
+  // index regardless; that we handle with a hint (see LodBadge).
+  settings.lodHitTestBudget = Number.POSITIVE_INFINITY;
 
   container.dataset.editorCursor = 'true';
 
@@ -92,12 +105,25 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   renderer.addLiveEffect('editor.route', route);
   renderer.addLiveEffect('editor.gridOverlay', gridOverlay);
 
+  // Mirror the renderer's LOD decision into the store (badge + tool guards).
+  // Emitted on every scene build, so guard against redundant store writes.
+  const onLod = (d: LodEventDetail) => {
+    const prev = store.getState().lod;
+    if (prev && prev.mode === d.mode && prev.planeRoomCount === d.planeRoomCount &&
+        prev.visibleEstimate === d.visibleEstimate && prev.hitTestActive === d.hitTestActive) return;
+    store.setState({ lod: { ...d } });
+  };
+  renderer.on('lod', onLod);
+
   const handle: SceneHandle = {
     renderer,
     reader,
     settings,
     getRenderRoom(id) { return reader.getRoom(id); },
     setArea(areaId, z, insets?) {
+      // An empty plane emits no `lod` event, so clear first rather than leave
+      // the previous plane's tier showing.
+      store.setState({ lod: null });
       renderer.drawArea(areaId, z);
       const area = reader.getArea(areaId);
       const isEmpty = !area || area.getRooms().every(r => r.z !== z);
@@ -106,19 +132,29 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       } else {
         renderer.fitArea(insets);
       }
+      // `drawArea` built the scene for the camera as it was *before* the fit, and
+      // with a viewport-narrowed reader that window can hold none of the new
+      // area. The renderer notices the camera moved and schedules a rebuild on
+      // the next animation frame; rebuild now instead, so the area is right in
+      // this frame — and at all in a hidden tab, where rAF never runs.
+      renderer.refresh();
       // Renderer skips applyViewportToStage for empty areas, so the grid overlay
       // won't get updateViewport. Sync it explicitly here.
       gridOverlay.syncVisibility();
     },
     setAreaAt(areaId, z, mapX, mapY) {
+      store.setState({ lod: null });
       renderer.drawArea(areaId, z);
       renderer.camera.panToMapPoint(mapX, mapY);
+      renderer.refresh();   // same reason as setArea: don't wait for the scheduled frame
       gridOverlay.syncVisibility();
     },
     refresh() { renderer.refresh(); selectionHalo.syncPositions(); hoverHalo.syncPositions(); snapIndicator.syncPositions(); connectHandles.syncPositions(); labelHalo.syncPositions(); selectionCenter.syncPositions(); ghostRooms.syncPositions(); placePreview.syncPositions(); route.syncPositions(); },
     destroy() {
       delete container.dataset.editorCursor;
       detach();
+      renderer.off('lod', onLod);
+      store.setState({ lod: null });
       renderer.removeLiveEffect('editor.selection');
       renderer.removeLiveEffect('editor.hover');
       renderer.removeLiveEffect('editor.rubberband');

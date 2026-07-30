@@ -26,6 +26,12 @@ export const modalsEn = {
     hidden_faded: 'Faded',
     hidden_show: 'Show',
     hidden_hide: 'Hide',
+    bigMaps: 'Big maps',
+    lod: 'Level of detail',
+    lodEnabled: 'Reduce detail on dense levels',
+    lodRoomBudget: 'Room budget',
+    lodExitBudget: 'Exit budget',
+    lodNote: 'Levels with more rooms than the budget are drawn with exit lines hidden, then as a flat overview, while zoomed out. Zooming in always restores full detail. Pointer tools need full detail, so the overview is view-only.',
   },
   urlLoad: {
     title: 'Load map from URL',

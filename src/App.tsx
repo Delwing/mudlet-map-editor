@@ -12,6 +12,8 @@ import { SwatchPalette } from './components/SwatchPalette';
 import { SearchPanel } from './components/SearchPanel';
 import { SpreadShrinkPopup } from './components/SpreadShrinkPopup';
 import { IncomingRoomsBanner } from './components/IncomingRoomsBanner';
+import { LodBadge } from './components/LodBadge';
+import { MapLoadingOverlay } from './components/MapLoadingOverlay';
 import { store, useEditorState, saveUserSettings } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
@@ -189,6 +191,10 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     if (currentAreaId != null) {
       scene.setArea(currentAreaId, currentZ, getViewInsets());
     }
+    // The scene is on screen, so the map is genuinely interactive now — this is
+    // the only honest place to drop a "loading" indicator, since building the
+    // scene is the most expensive phase of a load (see loadFile.ts).
+    if (store.getState().loading) store.setState({ loading: null });
     return () => {
       scene.destroy();
       sceneRef.current = null;
@@ -701,6 +707,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
         <Toolbar title={title} logo={pluginLogo} transformActions={transformToolbarActions} onHelpClick={() => setShowHelp(true)} onLoadFromUrl={() => setShowUrlLoad(true)} onSave={(bytes) => { for (const p of plugins) p.onMapSave?.(bytes); }} onSearchClick={() => setShowSearch((v) => !v)} onSettingsClick={() => setShowSettings(true)} onDiffClick={() => setShowDiff(true)} />
 <SidePanel sceneRef={sceneRef} extraTabs={pluginSidebarTabs} pluginRoomSections={pluginRoomSections} />
         <IncomingRoomsBanner />
+        <LodBadge />
       </div>
       <ContextMenu sceneRef={sceneRef} />
       {swatchPaletteOpen && <SwatchPalette sceneRef={sceneRef} />}
@@ -713,6 +720,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
       {showSettings && mapLoaded && <RendererSettingsModal onClose={() => setShowSettings(false)} sceneRef={sceneRef} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {showDiff && mapLoaded && <MapDiffModal onClose={() => setShowDiff(false)} />}
+      <MapLoadingOverlay />
       {(showUrlLoad || autoLoadUrl) && (
         <UrlLoadModal
           initialUrl={autoLoadUrl ?? undefined}

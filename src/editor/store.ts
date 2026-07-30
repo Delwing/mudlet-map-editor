@@ -72,6 +72,33 @@ export type SpreadShrinkState = {
   anchorRoomId: number | null;
 };
 
+/**
+ * Progress of an in-flight map load. Each phase is a long *synchronous* block on
+ * the main thread (~0.5s parse, ~1s scene build for a 27k-room map), so the flag
+ * is set — and the browser given a frame to paint it — before the block starts,
+ * not during it. Cleared once the scene is on screen (see App).
+ */
+export type LoadingState = {
+  phase: 'fetching' | 'parsing' | 'preparing';
+  fileName: string;
+  /** Download completion 0–100. Only ever set while `fetching`, and only when the server sent a length. */
+  pct: number | null;
+};
+
+/**
+ * Latest level-of-detail tier the renderer reported for the displayed plane
+ * (mirror of its `lod` event). `null` while no map/plane is drawn — a plane the
+ * renderer skips as empty emits nothing, so scene.setArea clears this first.
+ */
+export type LodState = {
+  /** 'vector' = full detail, 'roomsOnly' = exit lines dropped, 'raster' = pixel overview. */
+  mode: 'vector' | 'roomsOnly' | 'raster';
+  planeRoomCount: number;
+  visibleEstimate: number;
+  /** False when pointer picking is unavailable — tools that need a hit bail out. */
+  hitTestActive: boolean;
+};
+
 /** Route-finder (speedwalk) panel state. `summary.path` is what RouteEffect draws. */
 export type RouteState = {
   fromId: number | null;
@@ -141,6 +168,10 @@ export interface EditorState {
   peers: PeerInfo[];
   /** Rooms sent from another tab, shown in a banner until placed or dismissed. */
   incomingRooms: IncomingRooms | null;
+  /** Renderer LOD tier for the displayed plane — drives the overview badge and tool guards. */
+  lod: LodState | null;
+  /** In-flight map load, or null. Drives MapLoadingOverlay. */
+  loading: LoadingState | null;
 }
 
 export type ContextMenuState =
@@ -218,6 +249,8 @@ const initial: EditorState = {
   warnings: [],
   peers: [],
   incomingRooms: null,
+  lod: null,
+  loading: null,
 };
 
 type Listener = (state: EditorState) => void;

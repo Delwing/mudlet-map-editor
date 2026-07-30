@@ -2,6 +2,7 @@ import { useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HiddenRoomMode } from 'mudlet-map-renderer';
 import type { SceneHandle } from '../editor/scene';
+import { store } from '../editor/store';
 import { ColorSwatch } from './panelShared';
 
 type RoomShape = 'rectangle' | 'circle' | 'roundedRectangle';
@@ -18,6 +19,10 @@ export type PersistedRendererSettings = {
   backgroundColor: string;
   areaName: boolean;
   hiddenRooms: HiddenRoomMode;
+  /** Level-of-detail fallbacks for dense levels — see scene.ts. */
+  lodEnabled: boolean;
+  lodRoomBudget: number;
+  lodExitBudget: number;
 };
 
 // Matches scene.ts editor overrides on top of createSettings() defaults.
@@ -33,6 +38,9 @@ const DEFAULTS: PersistedRendererSettings = {
   backgroundColor: '#000000',
   areaName: false,
   hiddenRooms: 'dashed',
+  lodEnabled: true,
+  lodRoomBudget: 16000,
+  lodExitBudget: 12000,
 };
 
 const RENDERER_SETTINGS_KEY = 'mudlet-renderer-settings';
@@ -64,6 +72,16 @@ export function applyRendererSettings(scene: SceneHandle, settings: Partial<Pers
   if (settings.backgroundColor !== undefined) s.backgroundColor = settings.backgroundColor;
   if (settings.areaName !== undefined) s.areaName = settings.areaName;
   if (settings.hiddenRooms !== undefined) s.hiddenRooms = settings.hiddenRooms;
+  if (settings.lodEnabled !== undefined) {
+    s.lodEnabled = settings.lodEnabled;
+    // With LOD off the renderer stops emitting `lod` events, so the badge would
+    // keep showing whatever tier was last reported.
+    if (!settings.lodEnabled) store.setState({ lod: null });
+  }
+  if (settings.lodRoomBudget !== undefined) s.lodRoomBudget = settings.lodRoomBudget;
+  if (settings.lodExitBudget !== undefined) s.lodExitBudget = settings.lodExitBudget;
+  // `lodHitTestBudget` is deliberately not exposed — scene.ts pins it to
+  // Infinity so pointer picking survives on dense levels.
 }
 
 function toHex(color: string): string {
@@ -94,6 +112,9 @@ export function RendererSettingsModal({
   const [backgroundColor, setBackgroundColor] = useState(toHex(s?.backgroundColor ?? DEFAULTS.backgroundColor));
   const [areaName, setAreaName] = useState(s?.areaName ?? DEFAULTS.areaName);
   const [hiddenRooms, setHiddenRooms] = useState<HiddenRoomMode>(s?.hiddenRooms ?? DEFAULTS.hiddenRooms);
+  const [lodEnabled, setLodEnabled] = useState(s?.lodEnabled ?? DEFAULTS.lodEnabled);
+  const [lodRoomBudget, setLodRoomBudget] = useState(s?.lodRoomBudget ?? DEFAULTS.lodRoomBudget);
+  const [lodExitBudget, setLodExitBudget] = useState(s?.lodExitBudget ?? DEFAULTS.lodExitBudget);
 
   function applyLive(patch: Partial<PersistedRendererSettings>) {
     const scene = sceneRef.current;
@@ -115,6 +136,9 @@ export function RendererSettingsModal({
     setBackgroundColor(DEFAULTS.backgroundColor);
     setAreaName(DEFAULTS.areaName);
     setHiddenRooms(DEFAULTS.hiddenRooms);
+    setLodEnabled(DEFAULTS.lodEnabled);
+    setLodRoomBudget(DEFAULTS.lodRoomBudget);
+    setLodExitBudget(DEFAULTS.lodExitBudget);
     const scene = sceneRef.current;
     if (!scene) return;
     applyRendererSettings(scene, DEFAULTS);
@@ -283,6 +307,68 @@ export function RendererSettingsModal({
                 {t('renderer.showOnMap')}
               </label>
             </div>
+          </section>
+
+          <section className="settings-section">
+            <h3 className="settings-section-title">{t('renderer.bigMaps')}</h3>
+
+            <div className="settings-row">
+              <span className="settings-label">{t('renderer.lod')}</span>
+              <label className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={lodEnabled}
+                  onChange={(e) => { setLodEnabled(e.target.checked); applyLive({ lodEnabled: e.target.checked }); }}
+                />
+                {t('renderer.lodEnabled')}
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label" style={lodEnabled ? undefined : { opacity: 0.4 }}>{t('renderer.lodRoomBudget')}</span>
+              <div className="settings-slider-group">
+                <input
+                  type="range"
+                  min={2000}
+                  max={64000}
+                  step={1000}
+                  value={lodRoomBudget}
+                  disabled={!lodEnabled}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setLodRoomBudget(v);
+                    // The renderer needs exitBudget ≤ roomBudget for the
+                    // rooms-only tier to be reachable at all.
+                    const exits = Math.min(lodExitBudget, v);
+                    setLodExitBudget(exits);
+                    applyLive({ lodRoomBudget: v, lodExitBudget: exits });
+                  }}
+                />
+                <span className="settings-value">{(lodRoomBudget / 1000) + 'k'}</span>
+              </div>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label" style={lodEnabled ? undefined : { opacity: 0.4 }}>{t('renderer.lodExitBudget')}</span>
+              <div className="settings-slider-group">
+                <input
+                  type="range"
+                  min={1000}
+                  max={lodRoomBudget}
+                  step={1000}
+                  value={lodExitBudget}
+                  disabled={!lodEnabled}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setLodExitBudget(v);
+                    applyLive({ lodExitBudget: v });
+                  }}
+                />
+                <span className="settings-value">{(lodExitBudget / 1000) + 'k'}</span>
+              </div>
+            </div>
+
+            <p className="settings-note">{t('renderer.lodNote')}</p>
           </section>
 
         </div>

@@ -3,6 +3,7 @@ import type { LabelSnapshot } from '../types';
 import { buildRendererInput } from '../../mapIO';
 import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelFont } from '../types';
 import { generateLabelPixmap, dataUrlToBuffer } from '../labelPixmap';
+import { PlaneRoomIndex, INFINITE_BOUNDS, type Bounds } from './PlaneRoomIndex';
 
 /** Editor-side Exit — mirrors the renderer's Exit type. */
 export interface EditorExit {
@@ -126,8 +127,18 @@ function makeLiveRoom(id: number, raw: MudletRoom): LiveRoom {
   return live as LiveRoom;
 }
 
-/** Build an EditorExit set for a set of rooms. Mirrors Area.createExits in the renderer. */
-function buildExitsFor(rooms: LiveRoom[]): Map<string, EditorExit> {
+/**
+ * Build the EditorExit set for `rooms`. Mirrors Area.createExits in the renderer.
+ *
+ * `rooms` is the set being drawn (a viewport window, not necessarily the whole
+ * area), while `resolve` looks up any room of the same area by id. Halves are
+ * gathered from BOTH endpoints via `resolve`, so a link whose far end is
+ * off-screen still pairs and renders two-way exactly as in a full-area build —
+ * unlike the renderer's SkeletonArea, which degrades those to one-way.
+ * `resolve` must be area-scoped: cross-area links stay one-sided (that is what
+ * makes the renderer draw them as area exits).
+ */
+function buildExitsFor(rooms: readonly LiveRoom[], resolve: (id: number) => LiveRoom | undefined): Map<string, EditorExit> {
   type HalfExit = { origin: number; target: number; z: number; dir: Direction };
   const OPPOSITE: Partial<Record<Direction, Direction>> = {
     north: 'south', south: 'north',
@@ -138,16 +149,38 @@ function buildExitsFor(rooms: LiveRoom[]): Map<string, EditorExit> {
     in: 'out', out: 'in',
   };
 
+  // Collect the room pairs at least one drawn room links to, then gather every
+  // half of each pair from the endpoints themselves — a pair is visited once
+  // however many of its endpoints are in `rooms`, so this also dedupes.
   const halvesByPair = new Map<string, HalfExit[]>();
+  // `LiveRoom.exits` is a getter that builds a fresh object per access; this runs
+  // on every scene build (so on every drag frame), so read each room's exits once.
+  const exitsCache = new Map<number, Record<string, number>>();
+  const exitsOf = (room: LiveRoom): Record<string, number> => {
+    let e = exitsCache.get(room.id);
+    if (!e) { e = room.exits; exitsCache.set(room.id, e); }
+    return e;
+  };
+  const addHalves = (room: LiveRoom | undefined, pairKey: string, other: number) => {
+    if (!room) return;
+    for (const [dir, targetId] of Object.entries(exitsOf(room))) {
+      if (targetId !== other) continue;
+      let arr = halvesByPair.get(pairKey);
+      if (!arr) { arr = []; halvesByPair.set(pairKey, arr); }
+      arr.push({ origin: room.id, target: targetId, z: room.z, dir: dir as Direction });
+    }
+  };
+  const seenPairs = new Set<string>();
   for (const room of rooms) {
-    for (const [dir, targetId] of Object.entries(room.exits)) {
+    for (const targetId of Object.values(exitsOf(room))) {
       if (room.id === targetId) continue;
       const a = Math.min(room.id, targetId);
       const b = Math.max(room.id, targetId);
       const key = `${a}-${b}`;
-      let arr = halvesByPair.get(key);
-      if (!arr) { arr = []; halvesByPair.set(key, arr); }
-      arr.push({ origin: room.id, target: targetId, z: room.z, dir: dir as Direction });
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      addHalves(resolve(a), key, b);
+      addHalves(resolve(b), key, a);
     }
   }
 
@@ -306,11 +339,44 @@ function snapshotFromRawLabel(raw: any): LabelSnapshot {
 }
 
 
-export class EditorPlane {
-  constructor(private rooms: LiveRoom[], private labels: any[]) {}
+/**
+ * The window the renderer last pushed through `EditorMapReader.setViewport`,
+ * shared by reference with every area and plane. `revision` changes whenever
+ * `bounds` does, so derived results can be cached against it.
+ */
+export type ViewportWindow = { bounds: Bounds; revision: number };
 
-  getRooms(): LiveRoom[] { return this.rooms; }
+export class EditorPlane {
+  private index: PlaneRoomIndex;
+  /** Narrowed room list, cached against (viewport, index) revisions. */
+  private visible: LiveRoom[] | null = null;
+  private visibleKey = '';
+
+  constructor(private rooms: LiveRoom[], private labels: any[], private readonly viewport: ViewportWindow) {
+    this.index = new PlaneRoomIndex(rooms);
+  }
+
+  /**
+   * Rooms inside the current viewport window — this is what the renderer builds
+   * a scene from, so it is what bounds the cost of a rebuild. Editor code that
+   * reasons about the level as a whole (marquee, bounds, counts) wants
+   * {@link getAllRooms} instead.
+   */
+  getRooms(): LiveRoom[] {
+    const key = `${this.viewport.revision}:${this.index.getRevision()}`;
+    if (this.visible && this.visibleKey === key) return this.visible;
+    this.visible = this.index.collectInBounds(this.viewport.bounds);
+    this.visibleKey = key;
+    return this.visible;
+  }
+
+  /** Every room on the plane, viewport or not. */
+  getAllRooms(): LiveRoom[] { return this.rooms; }
+
+  getIndex(): PlaneRoomIndex { return this.index; }
+
   getLabels(): any[] { return this.labels; }
+  /** Full-plane extent (NOT the viewport) so fitArea keeps framing the whole level. */
   getBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const r of this.rooms) {
@@ -330,31 +396,42 @@ export class EditorPlane {
     return { minX, maxX, minY, maxY };
   }
 
-  setRooms(rooms: LiveRoom[]) { this.rooms = rooms; }
+  setRooms(rooms: LiveRoom[]) {
+    this.rooms = rooms;
+    this.index = new PlaneRoomIndex(rooms);
+    this.visible = null;
+  }
   setLabels(labels: any[]) { this.labels = labels; }
 }
 
 export class EditorArea {
   private planes: Record<number, EditorPlane> = {};
-  private exits: Map<string, EditorExit> = new Map();
+  /** Own rooms by id — the area-scoped resolver `buildExitsFor` pairs halves through. */
+  private byId = new Map<number, LiveRoom>();
   private version = 0;
   private suspendCount = 0;
   private pendingPlanes = false;
-  private pendingExits = false;
+  /** Exits of one plane, cached against (area version, viewport, plane index). */
+  private exitCache: { key: string; exits: EditorExit[] } | null = null;
 
   constructor(
     private readonly areaId: number,
     private readonly areaName: string,
     private rooms: LiveRoom[],
     private labels: any[],
+    private readonly viewport: ViewportWindow,
   ) {
     this.rebuildPlanes();
-    this.rebuildExits();
   }
 
   getAreaId(): number { return this.areaId; }
   getAreaName(): string { return this.areaName; }
-  getVersion(): number { return this.version; }
+  /**
+   * Content version. Includes the viewport revision because the plane content the
+   * renderer sees is viewport-dependent — the `ViewportDataSource` contract
+   * requires areas to look stale when the window moves.
+   */
+  getVersion(): number { return this.version + this.viewport.revision; }
   markDirty(): void { this.version++; }
 
   getPlane(z: number): EditorPlane { return this.planes[z]; }
@@ -377,8 +454,23 @@ export class EditorArea {
     );
   }
 
+  /**
+   * Exits to draw on level `zIndex`, paired over the rooms the plane currently
+   * materialises — so this costs O(viewport), not O(area). Pairing happens per
+   * build instead of being cached area-wide, which is also why nothing has to
+   * invalidate exits after a room changes z-level or area: the zIndex snapshot
+   * that used to go stale is now recomputed every time.
+   */
   getLinkExits(zIndex: number): EditorExit[] {
-    return Array.from(this.exits.values()).filter(e => e.zIndex.includes(zIndex));
+    const plane = this.planes[zIndex];
+    if (!plane) return [];
+    const key = `${zIndex}:${this.version}:${this.viewport.revision}:${plane.getIndex().getRevision()}`;
+    if (this.exitCache && this.exitCache.key === key) return this.exitCache.exits;
+    const resolve = (id: number) => this.byId.get(id);
+    const exits = Array.from(buildExitsFor(plane.getRooms(), resolve).values())
+      .filter(e => e.zIndex.includes(zIndex));
+    this.exitCache = { key, exits };
+    return exits;
   }
 
   setLabels(labels: any[]): void {
@@ -391,43 +483,47 @@ export class EditorArea {
   addRoomLive(room: LiveRoom): void {
     this.rooms.push(room);
     this.rebuildPlanes();
-    this.rebuildExits();
     this.markDirty();
   }
 
   addRoomsLive(newRooms: LiveRoom[]): void {
     this.rooms.push(...newRooms);
     this.rebuildPlanes();
-    this.rebuildExits();
     this.markDirty();
   }
 
   removeRoomById(id: number): void {
     this.rooms = this.rooms.filter(r => r.id !== id);
     this.rebuildPlanes();
-    this.rebuildExits();
     this.markDirty();
   }
 
   removeRoomsById(ids: Set<number>): void {
     this.rooms = this.rooms.filter(r => !ids.has(r.id));
     this.rebuildPlanes();
-    this.rebuildExits();
     this.markDirty();
   }
 
   renameRoomId(fromId: number, toId: number): void {
     this.rooms = this.rooms.map((room) => room.id === fromId ? makeLiveRoom(toId, room.__raw) : room);
     this.rebuildPlanes();
-    this.rebuildExits();
     this.markDirty();
   }
 
   /**
-   * Defer `rebuildPlanes`/`rebuildExits` until the matching `resumeRebuilds`.
-   * Nestable. While suspended the rooms/labels arrays still mutate immediately —
-   * only the derived plane/exit structures are stale, and nothing reads those
-   * between a suspend and its resume.
+   * Re-file a room in its plane's spatial index after its coordinates changed.
+   * A move within one plane needs nothing else: exits are paired per build and
+   * the room objects are live views over the raw map.
+   */
+  roomMoved(room: LiveRoom): void {
+    this.planes[room.z]?.getIndex().update(room);
+  }
+
+  /**
+   * Defer `rebuildPlanes` until the matching `resumeRebuilds`. Nestable. While
+   * suspended the rooms/labels arrays still mutate immediately — only the
+   * derived planes are stale, and nothing reads those between a suspend and its
+   * resume.
    */
   suspendRebuilds(): void { this.suspendCount++; }
 
@@ -436,28 +532,26 @@ export class EditorArea {
     this.suspendCount--;
     if (this.suspendCount > 0) return;
     if (this.pendingPlanes) { this.pendingPlanes = false; this.rebuildPlanes(); }
-    if (this.pendingExits) { this.pendingExits = false; this.rebuildExits(); }
   }
 
   rebuildPlanes(): void {
     if (this.suspendCount > 0) { this.pendingPlanes = true; return; }
     const grouped: Record<number, LiveRoom[]> = {};
+    const byId = new Map<number, LiveRoom>();
     for (const r of this.rooms) {
       const arr = grouped[r.z] ?? (grouped[r.z] = []);
       arr.push(r);
+      byId.set(r.id, r);
     }
+    this.byId = byId;
     const next: Record<number, EditorPlane> = {};
     for (const [zStr, rs] of Object.entries(grouped)) {
       const z = Number(zStr);
       const labels = this.labels.filter(l => l.Z === z);
-      next[z] = new EditorPlane(rs, labels);
+      next[z] = new EditorPlane(rs, labels, this.viewport);
     }
     this.planes = next;
-  }
-
-  rebuildExits(): void {
-    if (this.suspendCount > 0) { this.pendingExits = true; return; }
-    this.exits = buildExitsFor(this.rooms);
+    this.exitCache = null;
   }
 }
 
@@ -488,11 +582,20 @@ const defaultColor: ColorEntry = {
  *  - Mutation methods are public: `moveRoom`, `setExit`, `addRoom`, `removeRoom`,
  *    `setRoomField`. Each updates the raw map and invalidates the relevant Area
  *    cache, so `renderer.refresh()` picks up the change.
+ *  - It is a `ViewportDataSource`: planes hand the renderer only the rooms inside
+ *    the window pushed by `setViewport`, so a scene rebuild — one per pointer
+ *    event while dragging — costs O(viewport) rather than O(level). The renderer
+ *    detects this by duck-typing `viewportAware` and rebuilds on pan when the
+ *    camera leaves the padded window it last applied.
  */
 export class EditorMapReader {
+  readonly viewportAware = true as const;
+
   private readonly rooms: Record<number, LiveRoom> = {};
   private readonly areas: Record<number, EditorArea> = {};
   private readonly colors: Record<number, ColorEntry> = {};
+  /** Shared by reference with every area/plane; `revision` bumps on each change. */
+  private readonly viewport: ViewportWindow = { bounds: INFINITE_BOUNDS, revision: 0 };
 
   constructor(private readonly raw: MudletMap) {
     // Reuse binary reader's color generation (pure, no room cloning).
@@ -528,8 +631,40 @@ export class EditorMapReader {
         raw.areaNames[areaId] ?? `Area ${areaId}`,
         areaRooms,
         rawLabels.map(l => this.toRendererLabel(l, areaId)),
+        this.viewport,
       );
     }
+  }
+
+  // --- ViewportDataSource (see mudlet-map-renderer/src/reader/ViewportDataSource.ts) ---
+
+  /** Narrow what planes materialise. Bounds are render space, same as the renderer reports. */
+  setViewport(bounds: Bounds): void {
+    const v = this.viewport.bounds;
+    if (bounds.minX === v.minX && bounds.maxX === v.maxX &&
+        bounds.minY === v.minY && bounds.maxY === v.maxY) return;
+    this.viewport.bounds = { ...bounds };
+    this.viewport.revision++;
+  }
+
+  getViewport(): Bounds { return this.viewport.bounds; }
+
+  /** Rooms on the whole (area, z) plane — the input to the renderer's LOD tier decision. */
+  getPlaneRoomCount(areaId: number, z: number): number {
+    return this.areas[areaId]?.getPlane(z)?.getAllRooms().length ?? 0;
+  }
+
+  estimateVisibleCount(areaId: number, z: number, bounds: Bounds): number {
+    const index = this.areas[areaId]?.getPlane(z)?.getIndex();
+    return index ? index.countInBounds(bounds) : 0;
+  }
+
+  forEachInBounds(
+    areaId: number, z: number, bounds: Bounds,
+    fn: (x: number, y: number, envId: number) => void,
+  ): void {
+    const index = this.areas[areaId]?.getPlane(z)?.getIndex();
+    index?.forEachInBounds(bounds, room => fn(room.x, room.y, room.env ?? 0));
   }
 
   /**
@@ -610,11 +745,12 @@ export class EditorMapReader {
     const area = this.areas[rawRoom.area];
     if (!area) return;
     if (oldZ !== z) {
-      // The room changes plane, and every exit touching it carries a snapshot of
-      // its z (EditorExit.zIndex) that decides which level the link draws on —
-      // stale after a z move, so the links would keep rendering on the old level.
+      // The room changed plane — regroup so it lands in the right one (and gets
+      // indexed there).
       area.rebuildPlanes();
-      area.rebuildExits();
+    } else {
+      const live = this.rooms[id];
+      if (live) area.roomMoved(live);
     }
     area.markDirty();
   }
@@ -626,7 +762,6 @@ export class EditorMapReader {
     (rawRoom as any)[dir] = toId;
     const area = this.areas[rawRoom.area];
     if (!area) return;
-    area.rebuildExits();
     area.markDirty();
   }
 
@@ -664,11 +799,10 @@ export class EditorMapReader {
 
     const area = this.areas[rawRoom.area];
     area?.renameRoomId(fromId, toId);
+    // Other areas may hold exits pointing at the renamed room; their next build
+    // pairs afresh, they just need to look stale.
     for (const otherArea of this.getAreas()) {
-      if (otherArea !== area) {
-        otherArea.rebuildExits();
-        otherArea.markDirty();
-      }
+      if (otherArea !== area) otherArea.markDirty();
     }
   }
 
@@ -682,7 +816,7 @@ export class EditorMapReader {
     this.areas[rawRoom.area]?.addRoomLive(live);
   }
 
-  /** Bulk-add many rooms. Does one rebuildPlanes/rebuildExits per affected area. */
+  /** Bulk-add many rooms. Does one rebuildPlanes per affected area. */
   addRooms(rooms: Array<{ id: number; room: MudletRoom }>): void {
     const byArea = new Map<number, LiveRoom[]>();
     for (const { id, room } of rooms) {
@@ -699,11 +833,10 @@ export class EditorMapReader {
     for (const [areaId, liveRooms] of byArea) {
       this.areas[areaId]?.addRoomsLive(liveRooms);
     }
+    // Untouched areas can still hold exits into the new rooms — mark them stale
+    // so their next build re-pairs.
     for (const otherArea of this.getAreas()) {
-      if (!affectedAreaIds.has(otherArea.getAreaId())) {
-        otherArea.rebuildExits();
-        otherArea.markDirty();
-      }
+      if (!affectedAreaIds.has(otherArea.getAreaId())) otherArea.markDirty();
     }
   }
 
@@ -778,7 +911,6 @@ export class EditorMapReader {
       const i = rawRoom.stubs.indexOf(idx);
       if (i !== -1) rawRoom.stubs.splice(i, 1);
     }
-    this.areas[rawRoom.area]?.rebuildExits();
     this.areas[rawRoom.area]?.markDirty();
   }
 
@@ -835,7 +967,7 @@ export class EditorMapReader {
       userData: {},
     };
     this.raw.areaNames[id] = name;
-    this.areas[id] = new EditorArea(id, name, [], []);
+    this.areas[id] = new EditorArea(id, name, [], [], this.viewport);
   }
 
   removeArea(id: number): void {
@@ -1041,8 +1173,8 @@ export class EditorMapReader {
   /**
    * Bulk-delete an entire area and its rooms. Assumes the caller has already
    * severed cross-area incoming exits on raw rooms (same pattern as `deleteRoom`
-   * using `neighborEdits`). Rebuilds exit caches on `affectedOtherAreaIds` once
-   * at the end — cheap, vs. N× rebuild-all-areas from the per-room path.
+   * using `neighborEdits`); `affectedOtherAreaIds` are marked stale so they
+   * re-pair their exits on the next build.
    */
   removeAreaWithRooms(areaId: number, roomIds: number[], affectedOtherAreaIds: number[]): void {
     for (const id of roomIds) {
@@ -1051,7 +1183,7 @@ export class EditorMapReader {
     delete this.areas[areaId];
     for (const otherId of affectedOtherAreaIds) {
       const a = this.areas[otherId];
-      if (a) { a.rebuildExits(); a.markDirty(); }
+      if (a) a.markDirty();
     }
   }
 
@@ -1068,10 +1200,10 @@ export class EditorMapReader {
       this.rooms[id] = live;
       liveRooms.push(live);
     }
-    this.areas[areaId] = new EditorArea(areaId, areaName, liveRooms, []);
+    this.areas[areaId] = new EditorArea(areaId, areaName, liveRooms, [], this.viewport);
     for (const otherId of affectedOtherAreaIds) {
       const a = this.areas[otherId];
-      if (a) { a.rebuildExits(); a.markDirty(); }
+      if (a) a.markDirty();
     }
   }
 
@@ -1097,15 +1229,16 @@ export class EditorMapReader {
     const area = this.areas[areaId];
     if (area) {
       area.removeRoomById(id);
-      // Other areas that had incoming exits to this room need their exits rebuilt.
+      // Other areas may have had incoming exits to this room — stale, so they
+      // re-pair on their next build.
       for (const otherArea of this.getAreas()) {
-        if (otherArea !== area) otherArea.rebuildExits();
+        if (otherArea !== area) otherArea.markDirty();
       }
     }
   }
 
   /** Bulk-remove many rooms. Caller must have already severed neighbor exits in raw map.
-   *  Does one rebuildPlanes/rebuildExits per affected area instead of one per room. */
+   *  Does one rebuildPlanes per affected area instead of one per room. */
   removeRooms(ids: number[]): void {
     const deletedSet = new Set(ids);
     const affectedAreaIds = new Set<number>();
@@ -1122,7 +1255,7 @@ export class EditorMapReader {
       this.areas[areaId]?.removeRoomsById(deletedSet);
     }
     for (const otherArea of this.getAreas()) {
-      if (!affectedAreaIds.has(otherArea.getAreaId())) otherArea.rebuildExits();
+      if (!affectedAreaIds.has(otherArea.getAreaId())) otherArea.markDirty();
     }
   }
 }

@@ -28,6 +28,12 @@ export const modalsPl: ModalsLocale = {
     hidden_faded: 'Wyblakłe',
     hidden_show: 'Pokaż',
     hidden_hide: 'Ukryj',
+    bigMaps: 'Duże mapy',
+    lod: 'Poziom szczegółowości',
+    lodEnabled: 'Obniżaj szczegółowość na gęstych poziomach',
+    lodRoomBudget: 'Limit lokacji',
+    lodExitBudget: 'Limit wyjść',
+    lodNote: 'Poziomy z większą liczbą lokacji niż limit są przy oddaleniu rysowane bez linii wyjść, a następnie jako płaski przegląd. Przybliżenie zawsze przywraca pełną szczegółowość. Narzędzia wskaźnika wymagają pełnej szczegółowości, więc przegląd służy tylko do oglądania.',
   },
   urlLoad: {
     title: 'Wczytaj mapę z URL',

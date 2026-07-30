@@ -1,7 +1,17 @@
+import i18n from '../i18n';
 import { store } from './store';
 import { TOOLS, type ToolContext } from './tools';
 import { clientToMap } from './coords';
 import type { ToolId } from './types';
+
+/**
+ * Tools whose every gesture begins with a pointer pick through
+ * `renderer.hitTester`. In the renderer's raster LOD tier there is no hit index
+ * (the vector scene isn't built at all), so these would silently do nothing —
+ * say why instead. `select` stays enabled: marquee and empty-space drags read
+ * room positions straight from the reader and work in every tier.
+ */
+const PICK_ONLY_TOOLS: ReadonlySet<ToolId> = new Set<ToolId>(['connect', 'unlink', 'delete', 'customLine', 'paint']);
 
 export function attachPointerController(ctx: ToolContext): () => void {
   const { container } = ctx;
@@ -50,6 +60,11 @@ export function attachPointerController(ctx: ToolContext): () => void {
     const toolId = (pendingKind === 'pickSwatch' || pendingKind === 'pickExit' || pendingKind === 'pickSpecialExit' || pendingKind === 'pickRoom' || pendingKind === 'placeRooms')
       ? 'select'
       : effectiveTool();
+    if (s.lod?.hitTestActive === false && PICK_ONLY_TOOLS.has(toolId)) {
+      store.setState({ status: i18n.t('editor:status.lodNoHitTest') });
+      stopAll(ev);
+      return;
+    }
     const tool = TOOLS[toolId];
     if (!tool.onPointerDown || !shouldActivelyHandle(ev)) return;
     const consumed = tool.onPointerDown(ev, ctx);

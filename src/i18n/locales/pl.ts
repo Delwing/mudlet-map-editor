@@ -52,6 +52,20 @@ export const pl: EditorLocale = {
     duplicated: 'Zduplikowano {{count}} lokacji',
     externalExitsStubbed: '{{count}} zewnętrznych wyjść → końcówka',
     specialExitsDropped: '{{count}} wyjść specjalnych usuniętych',
+    lodNoHitTest: 'Tryb przeglądu — przybliż, aby użyć tego narzędzia',
+  },
+  loading: {
+    fetching: 'Pobieranie mapy…',
+    parsing: 'Czytanie pliku mapy…',
+    preparing: 'Budowanie mapy…',
+    hint: 'Duże mapy mogą zająć kilka sekund — edytor może nie odpowiadać do zakończenia.',
+  },
+  lod: {
+    title: 'Ten poziom ma {{count}} lokacji — renderer rysuje go w obniżonej szczegółowości',
+    mode_roomsOnly: 'Wyjścia ukryte',
+    mode_raster: 'Przegląd',
+    hintExits: 'przybliż, aby zobaczyć linie wyjść',
+    hintZoomIn: 'przybliż, aby edytować',
   },
   incoming: {
     title: 'Otrzymano {{count}} lokacji z "{{name}}"',

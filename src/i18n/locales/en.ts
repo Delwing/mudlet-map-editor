@@ -50,6 +50,20 @@ export const en = {
     duplicated: 'Duplicated {{count}} rooms',
     externalExitsStubbed: '{{count}} external exit(s) → stub',
     specialExitsDropped: '{{count}} special exit(s) dropped',
+    lodNoHitTest: 'Overview mode — zoom in to use this tool',
+  },
+  loading: {
+    fetching: 'Downloading map…',
+    parsing: 'Reading map file…',
+    preparing: 'Building the map…',
+    hint: 'Large maps can take a few seconds — the editor may not respond until this finishes.',
+  },
+  lod: {
+    title: 'This level holds {{count}} rooms — the renderer is drawing it at reduced detail',
+    mode_roomsOnly: 'Exits hidden',
+    mode_raster: 'Overview',
+    hintExits: 'zoom in for exit lines',
+    hintZoomIn: 'zoom in to edit',
   },
   incoming: {
     title: '{{count}} rooms received from "{{name}}"',
