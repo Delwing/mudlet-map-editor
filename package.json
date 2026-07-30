@@ -52,7 +52,7 @@
     "konva": "^10.2.5",
     "monaco-editor": "^0.55.1",
     "mudlet-map-binary-reader": "^1.0.3",
-    "mudlet-map-renderer": "^2.4.0",
+    "mudlet-map-renderer": "^2.6.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-i18next": "^17.0.6"
