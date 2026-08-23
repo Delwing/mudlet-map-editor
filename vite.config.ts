@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { fileURLToPath } from 'node:url';
 import prefixSelector from 'postcss-prefix-selector';
+import { monacoDompurify } from './vite.plugins.ts';
 
 const fsStub = fileURLToPath(new URL('./src/shims/fs-stub.ts', import.meta.url));
 
@@ -16,6 +17,7 @@ export default defineConfig({
   base: process.env.VITE_BASE_PATH ?? '/',
   plugins: [
     react(),
+    monacoDompurify(),
     nodePolyfills({
       include: ['buffer', 'events', 'stream', 'process', 'util'],
       globals: { Buffer: true, process: true },

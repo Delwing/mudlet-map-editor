@@ -5,6 +5,7 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "composite": true,
@@ -12,5 +13,5 @@
     "outDir": "./node_modules/.tmp/tsc-node",
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vite.lib.config.ts", "src/types/**/*.d.ts"]
+  "include": ["vite.config.ts", "vite.lib.config.ts", "vite.plugins.ts", "src/types/**/*.d.ts"]
 }
