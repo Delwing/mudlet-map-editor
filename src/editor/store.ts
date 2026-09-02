@@ -288,6 +288,19 @@ class Store {
 
 export const store = new Store();
 
+/**
+ * Mark the map as saved at the current undo depth, clearing the toolbar's dirty
+ * marker.
+ *
+ * The built-in save folds this into its own state update. Exported for plugins
+ * that take over the save action via `EditorPlugin.toolbarActions` and persist
+ * the map somewhere other than a file: without it their save would leave the
+ * asterisk showing.
+ */
+export function markMapSaved(): void {
+  store.setState((s) => ({ savedUndoLength: s.undo.length }));
+}
+
 export function useEditorState<T>(selector: (s: EditorState) => T): T {
   return useSyncExternalStore(
     store.subscribe,

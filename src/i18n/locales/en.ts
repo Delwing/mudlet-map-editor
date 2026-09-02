@@ -4,6 +4,7 @@ export const en = {
     loadDat: 'Load .dat',
     loadFromUrl: 'Load .dat from URL',
     saveDat: 'Save .dat',
+    saveAs: 'Save to file…',
     area: 'Area',
     level: 'Level',
     room: 'Room',
@@ -124,4 +125,18 @@ export const en = {
 } as const;
 
 type StringValues<T> = { [K in keyof T]: T[K] extends string ? string : StringValues<T[K]> };
-export type EditorLocale = StringValues<typeof en>;
+type PartialStringValues<T> = { [K in keyof T]?: T[K] extends string ? string : PartialStringValues<T[K]> };
+
+/**
+ * The editor namespace with every key required. Used by the translations
+ * bundled here, so a newly added string cannot be forgotten in one language.
+ */
+export type EditorLocaleComplete = StringValues<typeof en>;
+
+/**
+ * The shape consumers pass to override editor strings. Every key is optional —
+ * anything omitted falls back to English at runtime anyway, and keeping it that
+ * way means adding a string here stays a non-breaking change instead of a
+ * compile error in every downstream translation.
+ */
+export type EditorLocale = PartialStringValues<typeof en>;

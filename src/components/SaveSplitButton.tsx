@@ -18,6 +18,7 @@ export function SaveSplitButton({
   badge,
   style,
   disabled,
+  menuTitle,
   onSave,
   formats,
   activeFormatId,
@@ -28,6 +29,8 @@ export function SaveSplitButton({
   badge?: ReactNode;
   style?: CSSProperties;
   disabled?: boolean;
+  /** Tooltip for the caret. Supplied by Toolbar (i18n, or a plugin override). */
+  menuTitle?: string;
   onSave?: () => void;
   formats: MapFormat[];
   activeFormatId: string;
@@ -71,7 +74,7 @@ export function SaveSplitButton({
         <button
           ref={caretRef}
           type="button"
-          title="Save as…"
+          title={menuTitle}
           disabled={disabled}
           onClick={() => (open ? setOpen(false) : openList())}
           style={{

@@ -60,7 +60,7 @@ import { LanguageSwitcher } from './LanguageSwitcher';
  *  `null` — is rendered as-is, so a plugin can explicitly hide the slot.
  *  `transformActions` is the composed plugin transform applied to the built-in
  *  file-action list (see EditorPlugin#toolbarActions). */
-export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick, onDiffClick }: { title?: string; logo?: ReactNode; transformActions?: (actions: ToolbarAction[]) => ToolbarAction[]; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array) => void; onSearchClick?: () => void; onSettingsClick?: () => void; onDiffClick?: () => void }) {
+export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, onHelpClick, onLoadFromUrl, onSave, onSearchClick, onSettingsClick, onDiffClick }: { title?: string; logo?: ReactNode; transformActions?: (actions: ToolbarAction[]) => ToolbarAction[]; onHelpClick: () => void; onLoadFromUrl: () => void; onSave?: (bytes: Uint8Array, format: MapFormat) => void; onSearchClick?: () => void; onSettingsClick?: () => void; onDiffClick?: () => void }) {
   const { t } = useTranslation('editor');
   const toolButtons = useToolButtons();
   const activeTool = useEditorState((s) => s.activeTool);
@@ -177,7 +177,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
       URL.revokeObjectURL(url);
       // Remember the chosen format so the next save defaults to it.
       store.setState((s) => ({ savedUndoLength: s.undo.length, formatId: format.id, status: t('status.saved', { filename: a.download }) }));
-      onSave?.(bytes);
+      onSave?.(bytes, format);
     } catch (err) {
       store.setState({ status: t('status.saveFailed', { error: (err as Error).message }) });
       console.error(err);
@@ -268,6 +268,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
               badge={action.badge}
               style={action.style}
               disabled={action.disabled}
+              menuTitle={action.menuTitle ?? t('toolbar.saveAs')}
               onSave={action.onClick}
               formats={getMapFormats()}
               activeFormatId={formatId}

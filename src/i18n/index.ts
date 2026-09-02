@@ -18,9 +18,9 @@ import { contextEn } from './locales/context.en';
 import { contextPl } from './locales/context.pl';
 import { swatchesEn } from './locales/swatches.en';
 import { swatchesPl } from './locales/swatches.pl';
-import type { EditorLocale } from './locales/en';
+import type { EditorLocale, EditorLocaleComplete } from './locales/en';
 
-export { type EditorLocale };
+export { type EditorLocale, type EditorLocaleComplete };
 
 function readStoredLang(): string {
   try { return localStorage.getItem('lang') ?? 'en'; } catch { return 'en'; }

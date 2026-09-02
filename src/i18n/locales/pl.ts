@@ -1,11 +1,12 @@
-import type { EditorLocale } from './en';
+import type { EditorLocaleComplete } from './en';
 
-export const pl: EditorLocale = {
+export const pl: EditorLocaleComplete = {
   toolbar: {
     newMap: 'Nowa mapa',
     loadDat: 'Wczytaj .dat',
     loadFromUrl: 'Wczytaj .dat z URL',
     saveDat: 'Zapisz .dat',
+    saveAs: 'Zapisz do pliku…',
     area: 'Obszar',
     level: 'Poziom',
     room: 'Lokacja',

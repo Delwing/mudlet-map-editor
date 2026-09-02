@@ -51,6 +51,9 @@ export interface ToolbarAction {
    *  type="file">`; clicking opens the OS file picker and the chosen file is
    *  passed to `onFile`. Used by the built-in "load .dat" entry. */
   filePicker?: { accept: string; onFile: (file: File) => void };
+  /** Tooltip for the split-button caret, when the action renders as one.
+   *  Defaults to the built-in "save as" label. */
+  menuTitle?: string;
   /** Disable the button (greys out + ignores clicks). */
   disabled?: boolean;
   /** Overlay node rendered on top of the button — used by the built-in
@@ -70,7 +73,10 @@ export interface EditorPlugin {
   onAppReady?(): Promise<void>;
   onMapOpened?(map: MudletMap): void;
   onMapClosed?(): void;
-  onMapSave?(bytes: Uint8Array): void;
+  /** Fired after the editor serialises the map to file bytes. `format` is the
+   *  format the user picked, so plugins that stage the bytes for somewhere else
+   *  can ignore saves in a format that destination does not accept. */
+  onMapSave?(bytes: Uint8Array, format: MapFormat): void;
   renderOverlay?(): ReactNode;
   /** Replace the toolbar logo. The first plugin that defines this hook claims
    *  the slot — its return value is rendered as-is (including `null`, which
