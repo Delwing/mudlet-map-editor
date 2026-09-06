@@ -58,6 +58,25 @@ npm run build     # Type-check and bundle for production
 npm run preview   # Preview the production build
 ```
 
+## Using as a library
+
+The published package ships only `dist-lib`, and everything the editor renders
+*with* is left external rather than bundled — so a host application resolves one
+copy of each and the editor renders through the same React, Konva and renderer
+instances the host already uses. They are declared as peer dependencies and must
+be installed alongside it:
+
+```bash
+npm install mudlet-map-editor \
+  react react-dom konva mudlet-map-renderer mudlet-map-binary-reader \
+  i18next react-i18next
+```
+
+npm 7+ installs peers for you; Yarn 1 does not, so add them to your own
+`dependencies` there. Resolving any of them twice re-introduces the
+duplicate-instance failures this avoids — two Reacts break hooks, two Konvas
+split the stage registry, two renderers disagree on scene structure.
+
 ## Extending with plugins
 
 Drop a file at `src/plugins/<name>/index.ts` with a default export implementing `EditorPlugin` and it is picked up automatically at build time. Plugins can add sidebar tabs, room panel sections, swatch presets, map check warnings, and lifecycle hooks (map open/close/save, app ready, custom overlay UI).
