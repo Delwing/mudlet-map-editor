@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { store, useEditorState } from '../editor/store';
+import { useEditorState } from '../editor/store';
 import { parseRoomQuery, describeRoom } from '../editor/roomSearch';
+import { revealPoint } from '../editor/navigate';
 
 type SearchMode = 'rooms' | 'labels';
 
@@ -147,41 +148,10 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
   }, [results]);
 
   const navigateTo = (result: SearchResult) => {
-    const s = store.getState();
-    const sameArea = s.currentAreaId === result.areaId && s.currentZ === result.z;
-    if (result.kind === 'room') {
-      if (sameArea) {
-        store.setState({
-          selection: { kind: 'room', ids: [result.id] },
-          panRequest: { mapX: result.x, mapY: -result.y },
-        });
-      } else {
-        store.setState({
-          currentAreaId: result.areaId,
-          currentZ: result.z,
-          navigateTo: { mapX: result.x, mapY: -result.y },
-          selection: { kind: 'room', ids: [result.id] },
-          pending: null,
-        });
-        store.bumpStructure();
-      }
-    } else {
-      if (sameArea) {
-        store.setState({
-          selection: { kind: 'label', id: result.id, areaId: result.areaId },
-          panRequest: { mapX: result.x, mapY: -result.y },
-        });
-      } else {
-        store.setState({
-          currentAreaId: result.areaId,
-          currentZ: result.z,
-          navigateTo: { mapX: result.x, mapY: -result.y },
-          selection: { kind: 'label', id: result.id, areaId: result.areaId },
-          pending: null,
-        });
-        store.bumpStructure();
-      }
-    }
+    const selection = result.kind === 'room'
+      ? { kind: 'room' as const, ids: [result.id] }
+      : { kind: 'label' as const, id: result.id, areaId: result.areaId };
+    revealPoint({ areaId: result.areaId, z: result.z, mapX: result.x, mapY: -result.y }, { selection, pending: null });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -14,7 +14,7 @@ import { SpreadShrinkPopup } from './components/SpreadShrinkPopup';
 import { IncomingRoomsBanner } from './components/IncomingRoomsBanner';
 import { LodBadge } from './components/LodBadge';
 import { MapLoadingOverlay } from './components/MapLoadingOverlay';
-import { store, useEditorState, saveUserSettings } from './editor/store';
+import { store, useEditorState, saveUserSettings, registerPluginSidebarTabs } from './editor/store';
 import { createScene, type SceneHandle } from './editor/scene';
 import { buildCustomLineMoveCommands, buildDeleteNeighborEdits, buildDeleteNeighborEditsForMany, pushCommand, redoOnce, undoOnce } from './editor/commands';
 import { copyRoomsToClipboard, pasteClipboard, duplicateRooms, buildPasteStatus } from './editor/clipboard';
@@ -122,6 +122,13 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     for (const p of plugins) if (p.mapFormats) list = p.mapFormats(list);
     setMapFormats(list);
   }, [plugins]);
+
+  // Plugin tabs join the module-level tab registry: store.setState reads their
+  // selection-awareness defaults from it, and the settings modal lists them
+  // alongside the built-in tabs so the user can override those defaults.
+  useEffect(() => {
+    registerPluginSidebarTabs(pluginSidebarTabs);
+  }, [pluginSidebarTabs]);
 
   // Label styles live in a module-level registry (read by the non-React
   // generateLabelPixmap); refresh it whenever the plugin-contributed set changes.

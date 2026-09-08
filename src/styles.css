@@ -2887,6 +2887,44 @@ html, body, #root {
   cursor: not-allowed;
 }
 
+.settings-tab-grid {
+  display: grid;
+  grid-template-columns: 1fr max-content max-content;
+  align-items: center;
+  column-gap: 18px;
+  row-gap: 6px;
+  margin-top: 10px;
+}
+
+.settings-tab-grid-head {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #97a1b5;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2b3242;
+}
+
+.settings-tab-grid-head:not(:first-child) {
+  text-align: center;
+}
+
+.settings-tab-name {
+  font-size: 12px;
+  color: #e6e9ef;
+}
+
+.settings-tab-check {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.settings-tab-check input[type="checkbox"] {
+  accent-color: #8fb8ff;
+  cursor: pointer;
+}
+
 .settings-slider-group {
   display: flex;
   align-items: center;

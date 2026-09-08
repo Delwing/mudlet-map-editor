@@ -20,6 +20,14 @@ export interface SidebarTab {
   id: string;
   label: ReactNode;
   render(sceneRef: { current: SceneHandle | null }): ReactNode;
+  /** Keep this tab open when a single element is selected, instead of jumping to
+   *  the Selection tab. For panels that work *on* the current selection.
+   *  This is only the default: the tab is listed in the settings modal next to
+   *  the built-ins, and a user override wins. */
+  selectionAware?: boolean;
+  /** Same, but for multi-room selections. Set both to never lose the tab while
+   *  the user reselects rooms. */
+  multiSelectionAware?: boolean;
 }
 
 export interface RoomSectionProps {

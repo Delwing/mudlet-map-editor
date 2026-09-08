@@ -9,6 +9,7 @@ import type { MudletMap } from '../mapIO';
 import type { RoomPanelSection } from '../editor/plugin';
 import { createDefaultRoom } from '../editor/mapHelpers';
 import { roomAtCell } from '../editor/hitTest';
+import { revealRoom } from '../editor/navigate';
 import { EnvPicker } from './EnvPicker';
 import { DoorIcon, LockIcon, WeightIcon, CrosshairIcon, CenterOnRoomIcon } from './icons';
 import { RoomLink, Field, UserDataEditor, ColorSwatch, hexToMudletColor } from './panelShared';
@@ -775,12 +776,7 @@ export function RoomPanel({ selection, room, map, sceneRef, pluginSections = [] 
             type="button"
             className="room-center-btn"
             title={t('room.centerView')}
-            onClick={() => {
-              const scene = sceneRef.current;
-              if (!scene) return;
-              scene.renderer.camera.panToMapPoint(room.x, -room.y);
-              scene.refresh();
-            }}
+            onClick={() => { revealRoom(selId); }}
           >
             <CenterOnRoomIcon />
           </button>

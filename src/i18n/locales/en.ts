@@ -16,7 +16,7 @@ export const en = {
     searchTitle: 'Search rooms and labels ({{modKey}}+F)',
     diff: 'Diff',
     diffTitle: 'Compare this map with another file',
-    rendererSettings: 'Renderer settings',
+    rendererSettings: 'Settings',
     helpTitle: 'Help (keyboard shortcuts)',
     snapTitle: 'Snap to grid (G)',
     snap: 'Snap',

@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 import type { MudletMap, MudletRoom } from '../mapIO';
+import type { SidebarTab } from './plugin';
 import type { Command, HitItem, HoverTarget, LoadedMap, Pending, Selection, SwatchSet, ToolId } from './types';
 import type { MapWarning } from './warnings';
 import type { PathFindingAlgorithm, RouteSummary } from './pathfinding';
@@ -22,16 +24,19 @@ const USER_SETTINGS_KEY = 'mudlet-editor-settings';
 interface UserSettings {
   snapToGrid: boolean;
   panelWidth: number;
+  /** Per-tab overrides of the selection-awareness defaults, keyed by tab id. */
+  tabAwareness: Record<string, TabSelectionAwareness>;
 }
 
 const DEFAULT_PANEL_WIDTH = 440;
+const DEFAULT_USER_SETTINGS: UserSettings = { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH, tabAwareness: {} };
 
 function loadUserSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(USER_SETTINGS_KEY);
-    if (raw) return { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH, ...JSON.parse(raw) };
+    if (raw) return { ...DEFAULT_USER_SETTINGS, ...JSON.parse(raw) };
   } catch {}
-  return { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH };
+  return { ...DEFAULT_USER_SETTINGS };
 }
 
 export function saveUserSettings(patch: Partial<UserSettings>): void {
@@ -253,6 +258,81 @@ const initial: EditorState = {
   loading: null,
 };
 
+/** How a sidebar tab reacts to the selection changing. A tab that claims the
+ *  matching flag stays open; anything else yields to the Selection tab. */
+export interface TabSelectionAwareness {
+  selectionAware?: boolean;
+  multiSelectionAware?: boolean;
+}
+
+/** A tab the settings modal can configure. Built-ins carry no label — the modal
+ *  translates `panels:sidebar.<id>`; plugin tabs bring their own label node. */
+export interface RegisteredTab {
+  id: string;
+  label: ReactNode | null;
+}
+
+/** Built-in tab ids, in tab-bar order. The Selection tab itself is the fallback
+ *  every other tab falls back *to*, so it is never listed. */
+const BUILTIN_CONFIGURABLE_TABS = ['areas', 'envs', 'history', 'map', 'script', 'route'] as const;
+
+const BUILTIN_TAB_AWARENESS: Record<string, TabSelectionAwareness> = {
+  // The script panel operates on whatever is selected, so reselecting rooms
+  // must not yank the user out of a half-written script.
+  script: { selectionAware: true, multiSelectionAware: true },
+};
+
+/** Plugin-contributed tabs, with the awareness defaults they declared. */
+let pluginTabs: SidebarTab[] = [];
+/** User overrides from the settings modal — they win over both default layers. */
+let userTabAwareness: Record<string, TabSelectionAwareness> = userSettings.tabAwareness;
+
+/**
+ * Publish the plugin-contributed sidebar tabs to the registry. Replaces any
+ * previous registration. Their `selectionAware` / `multiSelectionAware` flags
+ * become that tab's defaults, and the tab shows up in the settings modal next
+ * to the built-ins so the user can override them like any other.
+ */
+export function registerPluginSidebarTabs(tabs: SidebarTab[]): void {
+  pluginTabs = tabs;
+}
+
+/** Every tab whose selection behaviour is user-configurable, built-ins first. */
+export function listConfigurableTabs(): RegisteredTab[] {
+  return [
+    ...BUILTIN_CONFIGURABLE_TABS.map((id) => ({ id, label: null })),
+    ...pluginTabs.map((tab) => ({ id: tab.id, label: tab.label })),
+  ];
+}
+
+/** Effective awareness of a tab: built-in default, plugin default, user override. */
+export function getTabSelectionAwareness(tabId: string): TabSelectionAwareness {
+  const plugin = pluginTabs.find((tab) => tab.id === tabId);
+  return {
+    ...BUILTIN_TAB_AWARENESS[tabId],
+    ...(plugin && { selectionAware: plugin.selectionAware, multiSelectionAware: plugin.multiSelectionAware }),
+    ...userTabAwareness[tabId],
+  };
+}
+
+/** Persist a user override for one tab. */
+export function setTabSelectionAwareness(tabId: string, patch: TabSelectionAwareness): void {
+  userTabAwareness = { ...userTabAwareness, [tabId]: { ...getTabSelectionAwareness(tabId), ...patch } };
+  saveUserSettings({ tabAwareness: userTabAwareness });
+}
+
+/** Drop every user override, restoring built-in and plugin defaults. */
+export function resetTabSelectionAwareness(): void {
+  userTabAwareness = {};
+  saveUserSettings({ tabAwareness: {} });
+}
+
+function tabKeepsSelection(tabId: string, selection: Selection): boolean {
+  const caps = getTabSelectionAwareness(tabId);
+  const multi = selection?.kind === 'room' && selection.ids.length > 1;
+  return multi ? !!caps.multiSelectionAware : !!caps.selectionAware;
+}
+
 type Listener = (state: EditorState) => void;
 
 class Store {
@@ -263,9 +343,15 @@ class Store {
 
   setState = (patch: Partial<EditorState> | ((s: EditorState) => Partial<EditorState>)) => {
     let next = typeof patch === 'function' ? patch(this.state) : patch;
-    // Selecting an element normally jumps to the Selection tab — but not while the
-    // Route tab is open, so picking endpoints / following the route keeps it visible.
-    if ('selection' in next && next.selection !== this.state.selection && next.selection !== null && !('sidebarTab' in next) && this.state.sidebarTab !== 'route') {
+    // Selecting an element normally jumps to the Selection tab — unless the open
+    // tab declares itself selection-aware (see registerSelectionAwareTabs).
+    if (
+      'selection' in next &&
+      next.selection !== this.state.selection &&
+      next.selection !== null &&
+      !('sidebarTab' in next) &&
+      !tabKeepsSelection(this.state.sidebarTab, next.selection ?? null)
+    ) {
       next = { ...next, sidebarTab: 'selection' };
     }
     this.state = { ...this.state, ...next };

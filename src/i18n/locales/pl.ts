@@ -18,7 +18,7 @@ export const pl: EditorLocaleComplete = {
     searchTitle: 'Szukaj lokacji i etykiet ({{modKey}}+F)',
     diff: 'Porównaj',
     diffTitle: 'Porównaj tę mapę z innym plikiem',
-    rendererSettings: 'Ustawienia renderera',
+    rendererSettings: 'Ustawienia',
     helpTitle: 'Pomoc (skróty klawiszowe)',
     snapTitle: 'Przyciągaj do siatki (G)',
     snap: 'Siatka',

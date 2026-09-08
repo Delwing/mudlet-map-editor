@@ -1,8 +1,15 @@
-import { useState, type RefObject } from 'react';
+import { Fragment, useMemo, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HiddenRoomMode } from 'mudlet-map-renderer';
 import type { SceneHandle } from '../editor/scene';
-import { store } from '../editor/store';
+import {
+  store,
+  listConfigurableTabs,
+  getTabSelectionAwareness,
+  setTabSelectionAwareness,
+  resetTabSelectionAwareness,
+  type RegisteredTab,
+} from '../editor/store';
 import { ColorSwatch } from './panelShared';
 
 type RoomShape = 'rectangle' | 'circle' | 'roundedRectangle';
@@ -100,6 +107,8 @@ export function RendererSettingsModal({
 }) {
   const { t } = useTranslation('modals');
   const s = sceneRef.current?.settings;
+  // Bumped by "Reset" so the tab section re-reads the (now default) awareness.
+  const [resetSignal, setResetSignal] = useState(0);
 
   const [roomShape, setRoomShape] = useState<RoomShape>(s?.roomShape ?? DEFAULTS.roomShape);
   const [roomSize, setRoomSize] = useState(s?.roomSize ?? DEFAULTS.roomSize);
@@ -139,6 +148,8 @@ export function RendererSettingsModal({
     setLodEnabled(DEFAULTS.lodEnabled);
     setLodRoomBudget(DEFAULTS.lodRoomBudget);
     setLodExitBudget(DEFAULTS.lodExitBudget);
+    resetTabSelectionAwareness();
+    setResetSignal((n) => n + 1);
     const scene = sceneRef.current;
     if (!scene) return;
     applyRendererSettings(scene, DEFAULTS);
@@ -371,8 +382,71 @@ export function RendererSettingsModal({
             <p className="settings-note">{t('renderer.lodNote')}</p>
           </section>
 
+          <TabAwarenessSection resetSignal={resetSignal} />
+
         </div>
       </div>
     </div>
   );
+}
+
+/**
+ * Per-tab "keep this tab open when the selection changes" switches, driven by
+ * the tab registry in store.ts — built-in tabs plus whatever the loaded plugins
+ * contributed. Awareness lives in that module-level registry rather than editor
+ * state, so this section keeps its own copy and writes through on every toggle.
+ */
+function TabAwarenessSection({ resetSignal }: { resetSignal: number }) {
+  const { t } = useTranslation(['modals', 'panels']);
+  const tabs = useMemo(() => listConfigurableTabs(), []);
+  const [awareness, setAwareness] = useState(() => readAwareness(tabs));
+  const [signal, setSignal] = useState(resetSignal);
+  // Re-read after a reset without an effect round-trip.
+  if (signal !== resetSignal) {
+    setSignal(resetSignal);
+    setAwareness(readAwareness(tabs));
+  }
+
+  function toggle(tabId: string, key: 'selectionAware' | 'multiSelectionAware', value: boolean) {
+    setTabSelectionAwareness(tabId, { [key]: value });
+    setAwareness(readAwareness(tabs));
+  }
+
+  return (
+    <section className="settings-section">
+      <h3 className="settings-section-title">{t('renderer.tabs')}</h3>
+      <p className="settings-note">{t('renderer.tabsNote')}</p>
+
+      <div className="settings-tab-grid">
+        <span className="settings-tab-grid-head">{t('renderer.tabColumn')}</span>
+        <span className="settings-tab-grid-head">{t('renderer.keepOnSelect')}</span>
+        <span className="settings-tab-grid-head">{t('renderer.keepOnMultiSelect')}</span>
+        {tabs.map((tab) => {
+          // Built-ins carry no label of their own — the registry is id-only for
+          // them so the modal can translate; plugin tabs bring their own node.
+          const label = tab.label ?? t(`panels:sidebar.${tab.id}`);
+          const caps = awareness[tab.id] ?? {};
+          return (
+            <Fragment key={tab.id}>
+              <span className="settings-tab-name">{label}</span>
+              {(['selectionAware', 'multiSelectionAware'] as const).map((key) => (
+                <label key={key} className="settings-tab-check">
+                  <input
+                    type="checkbox"
+                    checked={!!caps[key]}
+                    onChange={(e) => toggle(tab.id, key, e.target.checked)}
+                    aria-label={`${typeof label === 'string' ? label : tab.id} — ${key === 'selectionAware' ? t('renderer.keepOnSelect') : t('renderer.keepOnMultiSelect')}`}
+                  />
+                </label>
+              ))}
+            </Fragment>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function readAwareness(tabs: RegisteredTab[]) {
+  return Object.fromEntries(tabs.map((tab) => [tab.id, getTabSelectionAwareness(tab.id)]));
 }

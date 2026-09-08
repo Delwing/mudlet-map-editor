@@ -261,7 +261,6 @@ export const selectTool: Tool = {
         store.setState({
           hitCycle: { x: cellX, y: cellY, index: newIndex },
           selection: hitToSelection(hit),
-          sidebarTab: 'selection',
           status: `Selected ${hitStatusLabel(hit)} (${newIndex + 1}/${hits.length})`,
         });
       }
@@ -341,7 +340,6 @@ export const selectTool: Tool = {
             offsetX: c.x - labelRenderX,
             offsetY: c.y - labelRenderY,
           } : null,
-          sidebarTab: 'selection',
         });
         ctx.container.setPointerCapture(ev.pointerId);
         return true;
@@ -756,7 +754,6 @@ export const selectTool: Tool = {
         store.setState({
           selection: { kind: 'label', id: lblHit.id, areaId: lblHit.areaId },
           contextMenu: { kind: 'label', areaId: lblHit.areaId, labelId: lblHit.id, screenX: ev.clientX, screenY: ev.clientY },
-          sidebarTab: 'selection',
         });
         return true;
       }
@@ -1587,7 +1584,6 @@ export const addLabelTool: Tool = {
       activeTool: 'select',
       pending: null,
       selection: { kind: 'label', id, areaId: p.areaId },
-      sidebarTab: 'selection',
       status: `Added label at (${x}, ${-y})`,
     });
     return true;

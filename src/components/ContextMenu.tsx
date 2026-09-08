@@ -99,19 +99,16 @@ export function ContextMenu({ sceneRef }: ContextMenuProps) {
         store.setState({
           selection: hitToSelection(hit),
           contextMenu: { kind: 'room', roomId: hit.id, screenX: menu.screenX, screenY: menu.screenY },
-          sidebarTab: 'selection',
         });
       } else if (hit.kind === 'label') {
         store.setState({
           selection: hitToSelection(hit),
           contextMenu: { kind: 'label', areaId: hit.areaId, labelId: hit.id, screenX: menu.screenX, screenY: menu.screenY },
-          sidebarTab: 'selection',
         });
       } else {
         store.setState({
           selection: hitToSelection(hit),
           contextMenu: null,
-          sidebarTab: 'selection',
           status: `Selected ${hitStatusLabel(hit)}`,
         });
       }

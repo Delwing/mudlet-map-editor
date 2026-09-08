@@ -1,6 +1,6 @@
 export const modalsEn = {
   renderer: {
-    title: 'Renderer Settings',
+    title: 'Settings',
     reset: 'Reset',
     resetTitle: 'Reset all to defaults',
     closeTitle: 'Close',
@@ -32,6 +32,11 @@ export const modalsEn = {
     lodRoomBudget: 'Room budget',
     lodExitBudget: 'Exit budget',
     lodNote: 'Levels with more rooms than the budget are drawn with exit lines hidden, then as a flat overview, while zoomed out. Zooming in always restores full detail. Pointer tools need full detail, so the overview is view-only.',
+    tabs: 'Side panel tabs',
+    tabsNote: 'Selecting something on the map normally jumps to the Selection tab. Tick a tab below to keep it open instead — one column for selecting a single element, one for selecting several rooms at once.',
+    tabColumn: 'Tab',
+    keepOnSelect: 'Single selection',
+    keepOnMultiSelect: 'Multiple rooms',
   },
   urlLoad: {
     title: 'Load map from URL',

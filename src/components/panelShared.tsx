@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
 import { store } from '../editor/store';
+import { revealRoom } from '../editor/navigate';
 import type { MudletColor } from '../mapIO';
 
 export function RoomLink({ id, name, className }: { id: number; name?: string | null; className?: string }) {
@@ -10,25 +11,8 @@ export function RoomLink({ id, name, className }: { id: number; name?: string | 
       type="button"
       className={className ?? 'exit-target'}
       onClick={() => {
-        const s = store.getState();
-        const room = s.map?.rooms[id];
-        if (!room) { store.setState({ selection: { kind: 'room', ids: [id] } }); return; }
-        const areaChanged = room.area !== s.currentAreaId;
-        const zChanged = room.z !== s.currentZ;
-        if (areaChanged || zChanged) {
-          store.setState({
-            selection: { kind: 'room', ids: [id] },
-            currentAreaId: room.area,
-            currentZ: room.z,
-            navigateTo: { mapX: room.x, mapY: -room.y },
-          });
-          store.bumpStructure();
-        } else {
-          store.setState({
-            selection: { kind: 'room', ids: [id] },
-            panRequest: { mapX: room.x, mapY: -room.y },
-          });
-        }
+        const selection = { kind: 'room' as const, ids: [id] };
+        if (!revealRoom(id, { selection })) store.setState({ selection });
       }}
       onMouseEnter={() => store.setState({ hover: { kind: 'room', id, handleDir: null } })}
       onMouseLeave={() => store.setState({ hover: null })}

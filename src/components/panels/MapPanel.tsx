@@ -2,6 +2,7 @@ import { useState, useLayoutEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorState, store } from '../../editor/store';
 import { pushCommand } from '../../editor/commands';
+import { revealPoint, revealRoom } from '../../editor/navigate';
 import { UserDataEditor } from '../panelShared';
 import type { SceneHandle } from '../../editor/scene';
 import { loadAcks, saveAcks, mapAckKey, loadAckInUserdata, saveAckInUserdata, ACKS_USERDATA_KEY } from '../../editor/warningAcks';
@@ -15,51 +16,14 @@ interface MapPanelProps {
 }
 
 function goToLabel(w: Extract<MapWarning, { kind: 'zeroSizeLabel' }>) {
-  const s = store.getState();
-  const areaChanged = w.areaId !== s.currentAreaId;
-  const zChanged = w.z !== s.currentZ;
-  const mapX = w.x;
-  const mapY = -w.y;
-  if (areaChanged || zChanged) {
-    store.setState({
-      selection: { kind: 'label', id: w.labelId, areaId: w.areaId },
-      currentAreaId: w.areaId,
-      currentZ: w.z,
-      navigateTo: { mapX, mapY },
-      sidebarTab: 'selection',
-    });
-    store.bumpStructure();
-  } else {
-    store.setState({
-      selection: { kind: 'label', id: w.labelId, areaId: w.areaId },
-      panRequest: { mapX, mapY },
-      sidebarTab: 'selection',
-    });
-  }
+  revealPoint(
+    { areaId: w.areaId, z: w.z, mapX: w.x, mapY: -w.y },
+    { selection: { kind: 'label', id: w.labelId, areaId: w.areaId }, sidebarTab: 'selection' },
+  );
 }
 
 function goToRoom(roomId: number) {
-  const s = store.getState();
-  const room = s.map?.rooms[roomId];
-  if (!room) return;
-  const areaChanged = room.area !== s.currentAreaId;
-  const zChanged = room.z !== s.currentZ;
-  if (areaChanged || zChanged) {
-    store.setState({
-      selection: { kind: 'room', ids: [roomId] },
-      currentAreaId: room.area,
-      currentZ: room.z,
-      navigateTo: { mapX: room.x, mapY: -room.y },
-      sidebarTab: 'selection',
-    });
-    store.bumpStructure();
-  } else {
-    store.setState({
-      selection: { kind: 'room', ids: [roomId] },
-      panRequest: { mapX: room.x, mapY: -room.y },
-      sidebarTab: 'selection',
-    });
-  }
+  revealRoom(roomId, { selection: { kind: 'room', ids: [roomId] }, sidebarTab: 'selection' });
 }
 
 export function MapPanel({ sceneRef }: MapPanelProps) {

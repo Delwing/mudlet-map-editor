@@ -2,7 +2,7 @@ import type { ModalsLocale } from './modals.en';
 
 export const modalsPl: ModalsLocale = {
   renderer: {
-    title: 'Ustawienia renderera',
+    title: 'Ustawienia',
     reset: 'Resetuj',
     resetTitle: 'Resetuj wszystko do domyślnych',
     closeTitle: 'Zamknij',
@@ -34,6 +34,11 @@ export const modalsPl: ModalsLocale = {
     lodRoomBudget: 'Limit lokacji',
     lodExitBudget: 'Limit wyjść',
     lodNote: 'Poziomy z większą liczbą lokacji niż limit są przy oddaleniu rysowane bez linii wyjść, a następnie jako płaski przegląd. Przybliżenie zawsze przywraca pełną szczegółowość. Narzędzia wskaźnika wymagają pełnej szczegółowości, więc przegląd służy tylko do oglądania.',
+    tabs: 'Zakładki panelu bocznego',
+    tabsNote: 'Zaznaczenie czegoś na mapie zwykle przełącza na zakładkę Zaznaczenie. Zaznacz pole obok zakładki, aby zamiast tego pozostała otwarta — jedna kolumna dla pojedynczego elementu, druga dla zaznaczenia wielu lokacji.',
+    tabColumn: 'Zakładka',
+    keepOnSelect: 'Pojedyncze zaznaczenie',
+    keepOnMultiSelect: 'Wiele lokacji',
   },
   urlLoad: {
     title: 'Wczytaj mapę z URL',
