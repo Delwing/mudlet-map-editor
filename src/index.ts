@@ -9,6 +9,7 @@ export type { SwatchSet, Swatch } from './editor/types';
 export { loadUrlIntoStore } from './editor/loadFile';
 export { getMapBytes } from './editor/mapBytes';
 export { pushCommand } from './editor/commands';
+export { revealRoom, revealPoint } from './editor/navigate';
 export { store, useEditorState, markMapSaved } from './editor/store';
 export type { PeerInfo, IncomingRooms } from './editor/peers';
 export { addTranslations, changeLanguage, getCurrentLanguage } from './i18n';
