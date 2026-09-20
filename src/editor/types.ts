@@ -20,6 +20,17 @@ export const DEFAULT_LABEL_FONT: LabelFont = {
 
 export type LabelTextAlign = 'left' | 'center' | 'right';
 
+/** An outline drawn around the whole label rect, independent of the label style. */
+export type LabelBorder = {
+  /** Stroke width in pixmap px (same scale as the font size). */
+  width: number;
+  /** Stroke colour; its `alpha` carries the border's opacity. */
+  color: MudletColor;
+};
+
+/** Inner padding (pixmap px) used when a label carries none of its own. */
+export const DEFAULT_LABEL_PADDING = 8;
+
 export type LabelSnapshot = {
   id: number;
   pos: [number, number, number];
@@ -36,6 +47,10 @@ export type LabelSnapshot = {
   styleId?: string;
   /** Horizontal text alignment; undefined = 'center' (default). Persisted to area userData as editor.labelAlign_N. */
   textAlign?: LabelTextAlign;
+  /** Inner padding in pixmap px kept free of text on every side; undefined = {@link DEFAULT_LABEL_PADDING}. Persisted as editor.labelPadding_N. */
+  padding?: number;
+  /** Border around the label rect; undefined = none. Persisted as editor.labelBorder_N. */
+  border?: LabelBorder;
   /** Base64 PNG data URL, or empty string if no pixmap. */
   pixMap: string;
   /** Original image data URL set by the user (editor-only, not persisted to .dat). */
@@ -256,6 +271,8 @@ export type PendingLabelResize = {
   /** LabelSnapshot.pos of origin (renderX, mudletY, z). */
   originPos: [number, number, number];
   originSize: [number, number];
+  /** Pixmap at drag start — the resize re-renders it live, so undo needs the original. */
+  originPixMap: string;
 };
 
 export type PendingMarquee = {
@@ -361,6 +378,8 @@ export type Command =
   | { kind: 'setLabelOutlineColor'; areaId: number; id: number; from: MudletColor | undefined; to: MudletColor | undefined }
   | { kind: 'setLabelStyle'; areaId: number; id: number; from: string | undefined; to: string | undefined }
   | { kind: 'setLabelAlign'; areaId: number; id: number; from: LabelTextAlign | undefined; to: LabelTextAlign | undefined }
+  | { kind: 'setLabelPadding'; areaId: number; id: number; from: number | undefined; to: number | undefined }
+  | { kind: 'setLabelBorder'; areaId: number; id: number; from: LabelBorder | undefined; to: LabelBorder | undefined }
   | { kind: 'setLabelPixmap'; areaId: number; id: number; from: string; to: string }
   | { kind: 'setLabelImageSrc'; areaId: number; id: number; from: string | undefined; to: string | undefined }
   | { kind: 'resizeLabel'; areaId: number; id: number; fromPos: [number, number, number]; toPos: [number, number, number]; fromSize: [number, number]; toSize: [number, number] }

@@ -1,5 +1,5 @@
 import type { MudletColor } from '../mapIO';
-import type { LabelSnapshot } from './types';
+import type { LabelFont, LabelSnapshot } from './types';
 
 /**
  * Drawing context handed to a {@link LabelStyle} hook. It exposes the live
@@ -18,10 +18,29 @@ export interface LabelDrawContext {
   label: LabelSnapshot;
   /** Text after `transformText` has run (defaults to `label.text`). */
   text: string;
+  /** Inset to keep text clear of on every side — the label's padding plus any border. */
+  padding: number;
   /** Run the built-in centered multi-line text layout (font, outline, underline/strikeout). */
   defaultDrawText(): void;
   /** Convert a Mudlet color to a CSS `rgba()` string. */
   colorToCss(c: MudletColor): string;
+}
+
+/**
+ * Context for {@link LabelStyle.measureText} — the metrics counterpart of
+ * {@link LabelDrawContext}, used by "fit to text" and "auto-fit font size".
+ */
+export interface LabelMeasureContext {
+  /** Scratch 2D context for `measureText`; nothing drawn on it is shown. */
+  ctx: CanvasRenderingContext2D;
+  /** The label being measured. */
+  label: LabelSnapshot;
+  /** Text after `transformText` has run. */
+  text: string;
+  /** CSS `font` shorthand for the label's font at a given size. */
+  fontString(font: LabelFont, size?: number): string;
+  /** Size of the text under the built-in layout. */
+  defaultMeasure(): { width: number; height: number };
 }
 
 /**
@@ -31,6 +50,8 @@ export interface LabelDrawContext {
  * Every hook is optional — omitted stages fall back to the default rendering,
  * so a style only overrides what it cares about. The draw order is:
  *   transformText → drawBackground → drawText → decorate
+ * The label's border, being a label property rather than part of a style, is
+ * stroked after all of them.
  */
 export interface LabelStyle {
   /** Stable id persisted on the label and in area userData. */
@@ -43,36 +64,36 @@ export interface LabelStyle {
   drawBackground?(c: LabelDrawContext): void;
   /** Draw the text. Return `true` to fully replace the built-in layout; otherwise the default runs. */
   drawText?(c: LabelDrawContext): boolean | void;
-  /** Final pass drawn on top of background + text — borders, glow, shadow, etc. */
+  /** Final pass drawn on top of background + text — glow, shadow, ornaments, etc. */
   decorate?(c: LabelDrawContext): void;
+  /** Measure the laid-out text. Needed only by styles whose `drawText` lays text
+   *  out differently from the built-in, so sizing to the text stays accurate. */
+  measureText?(c: LabelMeasureContext): { width: number; height: number };
 }
 
 /** The built-in default: plain text, no extra styling. Equivalent to no style. */
 export const PLAIN_STYLE: LabelStyle = { id: 'plain', name: 'Plain' };
 
-/**
- * Reference style: an inset border in the label's text color. Serves as a
- * copy-paste template for plugin authors and exercises the `decorate` seam.
- */
-const BORDER_STYLE: LabelStyle = {
-  id: 'border',
-  name: 'Border',
-  decorate(c) {
-    const { ctx, width, height, label } = c;
-    const lw = Math.max(2, Math.round(Math.min(width, height) * 0.04));
-    const inset = lw * 1.5;
-    ctx.strokeStyle = c.colorToCss(label.fgColor);
-    ctx.lineWidth = lw;
-    ctx.lineJoin = 'miter';
-    ctx.strokeRect(inset, inset, Math.max(0, width - inset * 2), Math.max(0, height - inset * 2));
-  },
-};
+/** Per-glyph sizing used by {@link CAPS_BIG_INITIALS_STYLE}: the first glyph of
+ *  every word keeps the label's font size, the rest shrink. */
+function capsSegments(line: string, bigSize: number, smallSize: number): { ch: string; size: number }[] {
+  const segs: { ch: string; size: number }[] = [];
+  let atWordStart = true;
+  for (const ch of line) {
+    if (ch === ' ') { atWordStart = true; segs.push({ ch, size: smallSize }); continue; }
+    segs.push({ ch, size: atWordStart ? bigSize : smallSize });
+    atWordStart = false;
+  }
+  return segs;
+}
+
+const capsSmallSize = (size: number) => Math.max(1, Math.round(size / 1.7));
 
 /**
  * Reference style: forces UPPERCASE and renders the first letter of every word
  * larger than the rest. Demonstrates a full `drawText` takeover (per-glyph
- * sizing, which the default all-or-nothing layout can't express) alongside a
- * `transformText` hook.
+ * sizing, which the default all-or-nothing layout can't express) alongside
+ * `transformText` and the matching `measureText`.
  */
 const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
   id: 'capsBigInitials',
@@ -82,7 +103,7 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
     const { ctx, width, height, label, text } = c;
     const { font } = label;
     const bigSize = font.size;
-    const smallSize = Math.max(1, Math.round(font.size / 1.7));
+    const smallSize = capsSmallSize(font.size);
     const fontStr = (size: number) => [
       font.italic ? 'italic' : '',
       font.bold ? 'bold' : '',
@@ -98,21 +119,14 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
     ctx.textAlign = 'left';
 
     const align = label.textAlign ?? 'center';
-    const pad = align === 'center' ? 0 : Math.max(2, Math.round(smallSize * 0.2));
+    const pad = c.padding;
 
     const lines = text.split('\n');
     const lineHeight = bigSize * 1.25;
     const startY = (height - lines.length * lineHeight) / 2 + lineHeight / 2;
 
     for (let i = 0; i < lines.length; i++) {
-      // First non-space glyph of every word is rendered at bigSize.
-      const segs: { ch: string; size: number }[] = [];
-      let atWordStart = true;
-      for (const ch of lines[i]) {
-        if (ch === ' ') { atWordStart = true; segs.push({ ch, size: smallSize }); continue; }
-        segs.push({ ch, size: atWordStart ? bigSize : smallSize });
-        atWordStart = false;
-      }
+      const segs = capsSegments(lines[i], bigSize, smallSize);
 
       let lineW = 0;
       for (const s of segs) { ctx.font = fontStr(s.size); lineW += ctx.measureText(s.ch).width; }
@@ -139,9 +153,26 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
     }
     return true;
   },
+  measureText(c) {
+    const { ctx, label, text } = c;
+    if (!text) return { width: 0, height: 0 };
+    const bigSize = label.font.size;
+    const smallSize = capsSmallSize(bigSize);
+    const lines = text.split('\n');
+    let width = 0;
+    for (const line of lines) {
+      let lineW = 0;
+      for (const s of capsSegments(line, bigSize, smallSize)) {
+        ctx.font = c.fontString(label.font, s.size);
+        lineW += ctx.measureText(s.ch).width;
+      }
+      width = Math.max(width, lineW);
+    }
+    return { width, height: lines.length * bigSize * 1.25 };
+  },
 };
 
-const BUILT_IN: LabelStyle[] = [PLAIN_STYLE, BORDER_STYLE, CAPS_BIG_INITIALS_STYLE];
+const BUILT_IN: LabelStyle[] = [PLAIN_STYLE, CAPS_BIG_INITIALS_STYLE];
 
 let registry: LabelStyle[] = BUILT_IN;
 

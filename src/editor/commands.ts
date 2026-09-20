@@ -1,7 +1,7 @@
-import type { MudletMap, MudletRoom } from '../mapIO';
+import type { MudletColor, MudletMap, MudletRoom } from '../mapIO';
 import { store } from './store';
 import { findNeighborsPointingAt, getExit } from './mapHelpers';
-import type { Command, NeighborEdit, Direction } from './types';
+import type { Command, NeighborEdit, Direction, LabelSnapshot } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
 import { dataUrlToBuffer } from './labelPixmap';
@@ -465,6 +465,16 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.textAlign = cmd.to; }
       return { structural: false };
     }
+    case 'setLabelPadding': {
+      if (reader) reader.setLabelPadding(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.padding = cmd.to; }
+      return { structural: false };
+    }
+    case 'setLabelBorder': {
+      if (reader) reader.setLabelBorder(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.border = cmd.to ? { width: cmd.to.width, color: { ...cmd.to.color } } : undefined; }
+      return { structural: false };
+    }
     case 'setLabelPixmap': {
       if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.to);
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.to); }
@@ -852,6 +862,16 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.textAlign = cmd.from; }
       return { structural: false };
     }
+    case 'setLabelPadding': {
+      if (reader) reader.setLabelPadding(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.padding = cmd.from; }
+      return { structural: false };
+    }
+    case 'setLabelBorder': {
+      if (reader) reader.setLabelBorder(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.border = cmd.from ? { width: cmd.from.width, color: { ...cmd.from.color } } : undefined; }
+      return { structural: false };
+    }
     case 'setLabelPixmap': {
       if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.from);
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.from); }
@@ -935,6 +955,46 @@ function remapStoreForCommand(cmd: Command, direction: 'forward' | 'backward'): 
     const ordered = direction === 'forward' ? cmd.cmds : [...cmd.cmds].reverse();
     for (const c of ordered) remapStoreForCommand(c, direction);
   }
+}
+
+const labelColorEq = (a: MudletColor, b: MudletColor) => a.r === b.r && a.g === b.g && a.b === b.b && a.alpha === b.alpha;
+const labelColorEqOpt = (a: MudletColor | undefined, b: MudletColor | undefined) =>
+  a === undefined || b === undefined ? a === b : labelColorEq(a, b);
+
+/**
+ * The commands that turn label `from` into label `to` — every property that
+ * differs, and nothing else. Applying a preset goes through here so the whole
+ * change lands as a single undo entry. The pixmap is not included: callers
+ * regenerate it once, after the final size is known.
+ */
+export function labelDiffCommands(areaId: number, id: number, from: LabelSnapshot, to: LabelSnapshot): Command[] {
+  const cmds: Command[] = [];
+  if (from.text !== to.text) cmds.push({ kind: 'setLabelText', areaId, id, from: from.text, to: to.text });
+  if (from.size[0] !== to.size[0] || from.size[1] !== to.size[1]) {
+    cmds.push({ kind: 'setLabelSize', areaId, id, from: [...from.size] as [number, number], to: [...to.size] as [number, number] });
+  }
+  if (!labelColorEq(from.fgColor, to.fgColor) || !labelColorEq(from.bgColor, to.bgColor)) {
+    cmds.push({ kind: 'setLabelColors', areaId, id, fromFg: from.fgColor, toFg: to.fgColor, fromBg: from.bgColor, toBg: to.bgColor });
+  }
+  if (!labelColorEqOpt(from.outlineColor, to.outlineColor)) {
+    cmds.push({ kind: 'setLabelOutlineColor', areaId, id, from: from.outlineColor, to: to.outlineColor });
+  }
+  if (JSON.stringify(from.font) !== JSON.stringify(to.font)) {
+    cmds.push({ kind: 'setLabelFont', areaId, id, from: from.font, to: to.font });
+  }
+  if ((from.styleId ?? undefined) !== (to.styleId ?? undefined)) {
+    cmds.push({ kind: 'setLabelStyle', areaId, id, from: from.styleId, to: to.styleId });
+  }
+  if ((from.textAlign ?? undefined) !== (to.textAlign ?? undefined)) {
+    cmds.push({ kind: 'setLabelAlign', areaId, id, from: from.textAlign, to: to.textAlign });
+  }
+  if (from.padding !== to.padding) cmds.push({ kind: 'setLabelPadding', areaId, id, from: from.padding, to: to.padding });
+  if (from.border?.width !== to.border?.width || !labelColorEqOpt(from.border?.color, to.border?.color)) {
+    cmds.push({ kind: 'setLabelBorder', areaId, id, from: from.border, to: to.border });
+  }
+  if (from.noScaling !== to.noScaling) cmds.push({ kind: 'setLabelNoScaling', areaId, id, from: from.noScaling, to: to.noScaling });
+  if (from.showOnTop !== to.showOnTop) cmds.push({ kind: 'setLabelShowOnTop', areaId, id, from: from.showOnTop, to: to.showOnTop });
+  return cmds;
 }
 
 export function pushCommand(cmd: Command, scene?: SceneHandle | null): boolean {

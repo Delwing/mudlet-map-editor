@@ -67,6 +67,7 @@ Use `clientToMap()` (`src/editor/coords.ts`) to convert pointer events to snappe
 - `src/editor/hitTest.ts` — hit detection for rooms, exits, custom line waypoints
 - `src/editor/reader/PlaneRoomIndex.ts` — mutable spatial hash backing viewport narrowing (O(1) room move/add/remove)
 - `src/editor/mapHelpers.ts` — direction inference, exit lookup utilities
+- `src/editor/labelPixmap.ts` — labels are stored as PNGs, so every property change re-renders one. Text is laid out inside the box at its own font size (padding and border inset it); resizing a label re-renders rather than stretching the bitmap, live during the drag up to `canRepaintLive`'s pixel budget. `labelStyles.ts` holds the per-style draw hooks (plugin `labelStyles()`), `labelPresets.ts` the named property bundles (plugin `labelPresets()`) that the label panel applies as one undo entry via `labelDiffCommands`
 - `src/editor/session.ts` — IndexedDB persistence: save/load/list/clear sessions
 - `src/mapIO.ts` — thin wrapper around `mudlet-map-binary-reader` for file load/save
 - `src/App.tsx` — keyboard shortcut handlers, top-level layout, auto-save to IndexedDB

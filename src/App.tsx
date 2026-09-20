@@ -27,6 +27,7 @@ import { loadFileIntoStore } from './editor/loadFile';
 import { builtInFormats, setMapFormats, matchFormatForFile, type MapFormat } from './editor/formats';
 import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
 import { registerLabelStyles } from './editor/labelStyles';
+import { registerLabelPresets } from './editor/labelPresets';
 import { collectWarnings } from './editor/warnings';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px.
@@ -90,6 +91,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
 
   const pluginSwatchSets = useMemo(() => plugins.flatMap((p) => p.swatchSets?.() ?? []), [plugins]);
   const pluginLabelStyles = useMemo(() => plugins.flatMap((p) => p.labelStyles?.() ?? []), [plugins]);
+  const pluginLabelPresets = useMemo(() => plugins.flatMap((p) => p.labelPresets?.() ?? []), [plugins]);
   const pluginSidebarTabs = useMemo(() => plugins.flatMap((p) => p.sidebarTabs?.() ?? []), [plugins]);
   const pluginRoomSections = useMemo<RoomPanelSection[]>(() => plugins.flatMap((p) => p.roomPanelSections?.() ?? []), [plugins]);
   // First plugin that *defines* renderLogo claims the slot — its return is
@@ -135,6 +137,11 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   useEffect(() => {
     registerLabelStyles(pluginLabelStyles);
   }, [pluginLabelStyles]);
+
+  // Same for label presets, read by the label panel and the add-label tool.
+  useEffect(() => {
+    registerLabelPresets(pluginLabelPresets);
+  }, [pluginLabelPresets]);
 
   // onAppReady: run all plugins once on mount (fire-and-forget).
   useEffect(() => {

@@ -3,6 +3,7 @@ import type { MudletMap, MudletRoom } from '../mapIO';
 import type { SwatchSet } from './types';
 import type { SceneHandle } from './scene';
 import type { LabelStyle } from './labelStyles';
+import type { LabelPreset } from './labelPresets';
 import type { MapFormat } from './formats';
 
 export interface PluginCheckResult {
@@ -117,6 +118,10 @@ export interface EditorPlugin {
    *  Each style hooks into the pixmap draw pipeline (transformText →
    *  drawBackground → drawText → decorate); see {@link LabelStyle}. */
   labelStyles?(): LabelStyle[];
+  /** Contribute label presets — named bundles of font/colour/border/style settings
+   *  offered in the label panel and used as the starting point for new labels.
+   *  See {@link LabelPreset}. */
+  labelPresets?(): LabelPreset[];
   /** Contribute additional sections rendered at the bottom of the room selection panel. */
   roomPanelSections?(): RoomPanelSection[];
   /** Return custom map warnings. Called whenever built-in warnings are recomputed. */

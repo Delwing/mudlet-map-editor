@@ -1,12 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { pushBatch, pushCommand } from '../../editor/commands';
-import { store, useEditorState } from '../../editor/store';
+import { labelDiffCommands, pushBatch, pushCommand } from '../../editor/commands';
+import { store, useEditorState, saveUserSettings } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor } from '../../mapIO';
-import type { Command, LabelFont, LabelSnapshot, LabelTextAlign } from '../../editor/types';
-import { generateLabelPixmap } from '../../editor/labelPixmap';
+import type { Command, LabelBorder, LabelFont, LabelSnapshot, LabelTextAlign } from '../../editor/types';
+import {
+  PX_PER_UNIT,
+  fontSizeToFit,
+  generateLabelPixmap,
+  labelSizeForText,
+  resolveLabelPadding,
+} from '../../editor/labelPixmap';
 import { getLabelStyles } from '../../editor/labelStyles';
+import { applyLabelPreset, getLabelPresets, renderLabelPresetPreview, type LabelPreset } from '../../editor/labelPresets';
 import { CheckboxField, Field, ColorSwatch, mudletColorToHex, hexToMudletColor } from '../panelShared';
 import { warningKey } from './MapPanel';
 import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
@@ -32,7 +39,9 @@ const outlineEq = (a: MudletColor | undefined, b: MudletColor | undefined) => {
   return colorEq(a, b);
 };
 
-const PX_PER_UNIT = 64;
+/** Border width a label gets when the border is first switched on. */
+const defaultBorderWidth = (label: LabelSnapshot) =>
+  Math.max(2, Math.round(Math.min(label.size[0], label.size[1]) * PX_PER_UNIT * 0.04));
 
 /** Traditional paragraph-alignment icon: four horizontal bars anchored per side. */
 function AlignIcon({ align }: { align: LabelTextAlign }) {
@@ -50,12 +59,50 @@ function AlignIcon({ align }: { align: LabelTextAlign }) {
   );
 }
 
+/** The preset strip: each button previews its preset, rendered by the preset itself. */
+function PresetRow({ presets, activeId, onApply, onClear }: {
+  presets: LabelPreset[];
+  activeId: string | null;
+  onApply: (preset: LabelPreset) => void;
+  onClear: () => void;
+}) {
+  const { t } = useTranslation('panels');
+  const previews = useMemo(() => presets.map((p) => renderLabelPresetPreview(p, p.name)), [presets]);
+  const active = presets.find((p) => p.id === activeId) ?? null;
+
+  return (
+    <div className="label-presets">
+      <div className="label-preset-strip">
+        {presets.map((preset, i) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={`label-preset${preset.id === activeId ? ' active' : ''}`}
+            title={preset.name}
+            onClick={() => onApply(preset)}
+          >
+            <img src={previews[i]} alt="" />
+            <span>{preset.name}</span>
+          </button>
+        ))}
+      </div>
+      <p className="hint label-preset-hint">
+        {active ? t('label.presetForNew', { name: active.name }) : t('label.presetHint')}
+        {active && (
+          <button type="button" className="label-preset-clear" title={t('label.presetClear')} onClick={onClear}>×</button>
+        )}
+      </p>
+    </div>
+  );
+}
+
 export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const { t } = useTranslation('panels');
   const dataVersion = useEditorState((s) => s.dataVersion);
   const map = useEditorState((s) => s.map);
   const warnings = useEditorState((s) => s.warnings);
   const aspectRatioLocked = useEditorState((s) => s.labelAspectRatioLocked);
+  const labelPresetId = useEditorState((s) => s.labelPresetId);
   const snap = sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id);
 
   const [textDraft, setTextDraft] = useState(snap?.text ?? '');
@@ -63,7 +110,9 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const [heightDraft, setHeightDraft] = useState(String(snap?.size[1] ?? 1));
   const [bgAlphaDraft, setBgAlphaDraft] = useState(snap?.bgColor.alpha ?? 255);
   const [outlineAlphaDraft, setOutlineAlphaDraft] = useState(snap?.outlineColor?.alpha ?? 0);
+  const [borderAlphaDraft, setBorderAlphaDraft] = useState(snap?.border?.color.alpha ?? 255);
   const [availableFonts, setAvailableFonts] = useState<string[]>(COMMON_FONTS);
+  const presets = getLabelPresets();
 
   useEffect(() => {
     if (!('queryLocalFonts' in window)) return;
@@ -84,8 +133,12 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const heightDraftRef = useRef(heightDraft);
   heightDraftRef.current = heightDraft;
 
-  const colorSessionRef = useRef<{ fg: MudletColor; bg: MudletColor } | null>(null);
-  const outlineSessionRef = useRef<{ color: MudletColor | undefined } | null>(null);
+  // A colour session spans one visit to a picker: the label is repainted live on
+  // every change, and the snapshot taken when the picker opened is what the
+  // single undo entry reverts to.
+  const colorSessionRef = useRef<LabelSnapshot | null>(null);
+  const outlineSessionRef = useRef<LabelSnapshot | null>(null);
+  const borderSessionRef = useRef<LabelSnapshot | null>(null);
 
   useEffect(() => {
     const s = sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id);
@@ -94,9 +147,12 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     if (!heightFocused.current) setHeightDraft(String(s?.size[1] ?? 1));
     setBgAlphaDraft(s?.bgColor.alpha ?? 255);
     setOutlineAlphaDraft(s?.outlineColor?.alpha ?? 0);
+    setBorderAlphaDraft(s?.border?.color.alpha ?? 255);
   }, [selection.id, selection.areaId, dataVersion]);
 
   if (!snap) return <div className="panel-content"><p className="hint">{t('label.notFound')}</p></div>;
+
+  const current = () => sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id) ?? null;
 
   const pixmapCmd = (label: LabelSnapshot): Command[] => {
     const to = generateLabelPixmap(label);
@@ -104,13 +160,44 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     return [{ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: label.pixMap, to }];
   };
 
+  /**
+   * Repaint the label in place, without touching the undo stack — the live
+   * feedback half of a colour session. The matching commit records the change.
+   */
+  const preview = (next: LabelSnapshot) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.reader.setLabelColors(selection.areaId, selection.id, next.fgColor, next.bgColor);
+    scene.reader.setLabelOutlineColor(selection.areaId, selection.id, next.outlineColor);
+    scene.reader.setLabelBorder(selection.areaId, selection.id, next.border);
+    scene.reader.setLabelPixmap(selection.areaId, selection.id, generateLabelPixmap(next));
+    scene.refresh();
+  };
+
+  /** Commit the end of a colour session as one undo entry against its origin snapshot. */
+  const commitSession = (ref: React.RefObject<LabelSnapshot | null>, next: LabelSnapshot) => {
+    const scene = sceneRef.current;
+    const from = ref.current ?? snap;
+    ref.current = null;
+    if (!scene) return;
+    const cmds = labelDiffCommands(selection.areaId, selection.id, from, next);
+    if (cmds.length === 0) return;
+    const pixMap = generateLabelPixmap(next);
+    if (pixMap !== from.pixMap) {
+      cmds.push({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: from.pixMap, to: pixMap });
+    }
+    pushBatch(cmds, scene);
+    scene.refresh();
+    store.bumpData();
+  };
+
   const commitText = () => {
     const scene = sceneRef.current;
     if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current || textDraftRef.current === current.text) return;
-    const next = { ...current, text: textDraftRef.current };
-    pushBatch([{ kind: 'setLabelText', areaId: selection.areaId, id: selection.id, from: current.text, to: next.text }, ...pixmapCmd(next)], scene);
+    const cur = current();
+    if (!cur || textDraftRef.current === cur.text) return;
+    const next = { ...cur, text: textDraftRef.current };
+    pushBatch([{ kind: 'setLabelText', areaId: selection.areaId, id: selection.id, from: cur.text, to: next.text }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
@@ -118,153 +205,148 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const commitSize = () => {
     const scene = sceneRef.current;
     if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
+    const cur = current();
+    if (!cur) return;
     const w = parseFloat(widthDraftRef.current);
     const h = parseFloat(heightDraftRef.current);
     if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) return;
-    if (w === current.size[0] && h === current.size[1]) return;
-    const next = { ...current, size: [w, h] as [number, number] };
-    pushBatch([{ kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: current.size, to: next.size }, ...pixmapCmd(next)], scene);
-    scene.refresh();
-    store.bumpData();
+    if (w === cur.size[0] && h === cur.size[1]) return;
+    applySize(cur, [w, h]);
   };
 
-  const startColorSession = () => {
-    if (colorSessionRef.current) return;
-    colorSessionRef.current = { fg: snap.fgColor, bg: snap.bgColor };
-  };
-
-  const commitColors = (newFg: MudletColor, newBg: MudletColor) => {
+  /** Resize the box and re-render the text at its unchanged font size. */
+  const applySize = (cur: LabelSnapshot, size: [number, number]) => {
     const scene = sceneRef.current;
-    const from = colorSessionRef.current ?? { fg: snap.fgColor, bg: snap.bgColor };
-    colorSessionRef.current = null;
     if (!scene) return;
-    if (colorEq(from.fg, newFg) && colorEq(from.bg, newBg)) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
-    const next = { ...current, fgColor: newFg, bgColor: newBg };
-    pushBatch([{ kind: 'setLabelColors', areaId: selection.areaId, id: selection.id, fromFg: from.fg, toFg: newFg, fromBg: from.bg, toBg: newBg }, ...pixmapCmd(next)], scene);
+    const next = { ...cur, size };
+    pushBatch([{ kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: cur.size, to: next.size }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
+
+  const startColorSession = () => { if (!colorSessionRef.current) colorSessionRef.current = snap; };
+  const startOutlineSession = () => { if (!outlineSessionRef.current) outlineSessionRef.current = snap; };
+  const startBorderSession = () => { if (!borderSessionRef.current) borderSessionRef.current = snap; };
 
   const commitNoScaling = (val: boolean) => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current || current.noScaling === val) return;
-    pushCommand({ kind: 'setLabelNoScaling', areaId: selection.areaId, id: selection.id, from: current.noScaling, to: val }, scene);
+    const cur = current();
+    if (!scene || !cur || cur.noScaling === val) return;
+    pushCommand({ kind: 'setLabelNoScaling', areaId: selection.areaId, id: selection.id, from: cur.noScaling, to: val }, scene);
     scene.refresh();
     store.bumpData();
   };
 
   const commitShowOnTop = (val: boolean) => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current || current.showOnTop === val) return;
-    pushCommand({ kind: 'setLabelShowOnTop', areaId: selection.areaId, id: selection.id, from: current.showOnTop, to: val }, scene);
+    const cur = current();
+    if (!scene || !cur || cur.showOnTop === val) return;
+    pushCommand({ kind: 'setLabelShowOnTop', areaId: selection.areaId, id: selection.id, from: cur.showOnTop, to: val }, scene);
     scene.refresh();
     store.bumpData();
   };
 
   const commitStyle = (styleId: string) => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
+    const cur = current();
+    if (!scene || !cur) return;
     const to = styleId === 'plain' ? undefined : styleId;
-    if ((current.styleId ?? undefined) === to) return;
-    const next = { ...current, styleId: to };
-    pushBatch([{ kind: 'setLabelStyle', areaId: selection.areaId, id: selection.id, from: current.styleId, to }, ...pixmapCmd(next)], scene);
+    if ((cur.styleId ?? undefined) === to) return;
+    const next = { ...cur, styleId: to };
+    pushBatch([{ kind: 'setLabelStyle', areaId: selection.areaId, id: selection.id, from: cur.styleId, to }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
 
   const commitAlign = (align: LabelTextAlign) => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
+    const cur = current();
+    if (!scene || !cur) return;
     const to = align === 'center' ? undefined : align;
-    if ((current.textAlign ?? undefined) === to) return;
-    const next = { ...current, textAlign: to };
-    pushBatch([{ kind: 'setLabelAlign', areaId: selection.areaId, id: selection.id, from: current.textAlign, to }, ...pixmapCmd(next)], scene);
+    if ((cur.textAlign ?? undefined) === to) return;
+    const next = { ...cur, textAlign: to };
+    pushBatch([{ kind: 'setLabelAlign', areaId: selection.areaId, id: selection.id, from: cur.textAlign, to }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
 
   const commitFont = (patch: Partial<LabelFont>) => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
-    const next: LabelFont = { ...current.font, ...patch };
-    pushBatch([{ kind: 'setLabelFont', areaId: selection.areaId, id: selection.id, from: current.font, to: next }, ...pixmapCmd({ ...current, font: next })], scene);
+    const cur = current();
+    if (!scene || !cur) return;
+    const next: LabelFont = { ...cur.font, ...patch };
+    pushBatch([{ kind: 'setLabelFont', areaId: selection.areaId, id: selection.id, from: cur.font, to: next }, ...pixmapCmd({ ...cur, font: next })], scene);
     scene.refresh();
     store.bumpData();
   };
 
-  const startOutlineSession = () => {
-    if (outlineSessionRef.current) return;
-    outlineSessionRef.current = { color: snap.outlineColor };
+  const commitPadding = (padding: number) => {
+    const scene = sceneRef.current;
+    const cur = current();
+    if (!scene || !cur || cur.padding === padding) return;
+    const next = { ...cur, padding };
+    pushBatch([{ kind: 'setLabelPadding', areaId: selection.areaId, id: selection.id, from: cur.padding, to: padding }, ...pixmapCmd(next)], scene);
+    scene.refresh();
+    store.bumpData();
+  };
+
+  const commitBorder = (border: LabelBorder | undefined) => {
+    const scene = sceneRef.current;
+    const cur = current();
+    if (!scene || !cur) return;
+    const next = { ...cur, border };
+    pushBatch([{ kind: 'setLabelBorder', areaId: selection.areaId, id: selection.id, from: cur.border, to: border }, ...pixmapCmd(next)], scene);
+    scene.refresh();
+    store.bumpData();
   };
 
   const commitOutlineColor = (newColor: MudletColor | undefined) => {
-    const scene = sceneRef.current;
-    const from = outlineSessionRef.current ?? { color: snap.outlineColor };
-    outlineSessionRef.current = null;
-    if (!scene) return;
-    if (outlineEq(from.color, newColor)) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
-    const next = { ...current, outlineColor: newColor };
-    pushBatch([{ kind: 'setLabelOutlineColor', areaId: selection.areaId, id: selection.id, from: from.color, to: newColor }, ...pixmapCmd(next)], scene);
-    scene.refresh();
-    store.bumpData();
+    const from = outlineSessionRef.current ?? snap;
+    if (outlineEq(from.outlineColor, newColor)) { outlineSessionRef.current = null; return; }
+    const cur = current();
+    if (!cur) { outlineSessionRef.current = null; return; }
+    commitSession(outlineSessionRef, { ...cur, outlineColor: newColor });
+  };
+
+  /** Size the box to the text it holds, keeping the font size and padding. */
+  const handleFitToText = () => {
+    const cur = current();
+    if (!cur || !cur.text) return;
+    const size = labelSizeForText(cur);
+    if (size[0] === cur.size[0] && size[1] === cur.size[1]) return;
+    applySize(cur, size);
   };
 
   const handleFitFontSize = () => {
+    const cur = current();
+    if (!cur || !cur.text) return;
+    const size = fontSizeToFit(cur);
+    if (size === cur.font.size) return;
+    commitFont({ size });
+  };
+
+  const handleApplyPreset = (preset: LabelPreset) => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current || !current.text) return;
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const PADDING = 8;
-    const pw = Math.max(1, Math.round(current.size[0] * PX_PER_UNIT));
-    const ph = Math.max(1, Math.round(current.size[1] * PX_PER_UNIT));
-    const availW = pw - PADDING * 2;
-    const availH = ph - PADDING * 2;
-    if (availW <= 0 || availH <= 0) return;
-
-    const lines = current.text.split('\n');
-    const { font } = current;
-    const maxFromHeight = Math.floor(availH / (lines.length * 1.25));
-    let lo = 1, hi = maxFromHeight, result = 1;
-    while (lo <= hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      ctx.font = [font.italic ? 'italic' : '', font.bold ? 'bold' : '', `${mid}px`, `"${font.family}", sans-serif`].filter(Boolean).join(' ');
-      const maxLineW = Math.max(...lines.map((l) => ctx.measureText(l).width));
-      if (maxLineW <= availW) { result = mid; lo = mid + 1; } else { hi = mid - 1; }
-    }
-
-    if (result === current.font.size) return;
-    commitFont({ size: result });
+    const cur = current();
+    if (!scene || !cur) return;
+    store.setState({ labelPresetId: preset.id });
+    saveUserSettings({ labelPresetId: preset.id });
+    const next = applyLabelPreset(cur, preset);
+    const cmds = labelDiffCommands(selection.areaId, selection.id, cur, next);
+    cmds.push(...pixmapCmd(next));
+    if (cmds.length === 0) return;
+    pushBatch(cmds, scene);
+    scene.refresh();
+    store.bumpData();
   };
 
   const handleRegeneratePixmap = () => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current) return;
-    const to = generateLabelPixmap(current);
-    if (to === current.pixMap) return;
-    pushCommand({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: current.pixMap, to }, scene);
+    const cur = current();
+    if (!scene || !cur) return;
+    const to = generateLabelPixmap(cur);
+    if (to === cur.pixMap) return;
+    pushCommand({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: cur.pixMap, to }, scene);
     scene.refresh();
     store.bumpData();
   };
@@ -282,15 +364,14 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         const img = new Image();
         img.onload = () => {
           const scene = sceneRef.current;
-          if (!scene) return;
-          const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-          if (!current) return;
+          const cur = current();
+          if (!scene || !cur) return;
           const w = Math.max(0.1, Math.round((img.naturalWidth / PX_PER_UNIT) * 100) / 100);
           const h = Math.max(0.1, Math.round((img.naturalHeight / PX_PER_UNIT) * 100) / 100);
           const cmds: Command[] = [
-            { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: current.imageSrc, to: dataUrl },
-            { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: current.pixMap, to: dataUrl },
-            { kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: current.size, to: [w, h] },
+            { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: cur.imageSrc, to: dataUrl },
+            { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: cur.pixMap, to: dataUrl },
+            { kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: cur.size, to: [w, h] },
           ];
           pushBatch(cmds, scene);
           scene.refresh();
@@ -306,13 +387,12 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
 
   const handleClearImage = () => {
     const scene = sceneRef.current;
-    if (!scene) return;
-    const current = scene.reader.getLabelSnapshot(selection.areaId, selection.id);
-    if (!current || !current.imageSrc) return;
-    const regenerated = generateLabelPixmap(current);
+    const cur = current();
+    if (!scene || !cur || !cur.imageSrc) return;
+    const regenerated = generateLabelPixmap(cur);
     const cmds: Command[] = [
-      { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: current.imageSrc, to: undefined },
-      { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: current.pixMap, to: regenerated },
+      { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: cur.imageSrc, to: undefined },
+      { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: cur.pixMap, to: regenerated },
     ];
     pushBatch(cmds, scene);
     scene.refresh();
@@ -325,6 +405,8 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const bgHex = mudletColorToHex(snap.bgColor);
   const outlineBase = snap.outlineColor ?? { spec: 1, r: 0, g: 0, b: 0, alpha: 0, pad: 0 };
   const outlineHex = mudletColorToHex(outlineBase);
+  const borderColor = snap.border?.color ?? snap.fgColor;
+  const borderHex = mudletColorToHex(borderColor);
 
   const modeBtnStyle = (active: boolean): React.CSSProperties => ({
     flex: 1, padding: '4px 0', fontSize: 12, cursor: 'pointer', border: 'none',
@@ -377,6 +459,15 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         </button>
       </div>
 
+      {!isImageMode && presets.length > 0 && (
+        <PresetRow
+          presets={presets}
+          activeId={labelPresetId}
+          onApply={handleApplyPreset}
+          onClear={() => { store.setState({ labelPresetId: null }); saveUserSettings({ labelPresetId: null }); }}
+        />
+      )}
+
       <div className="field-row">
         <Field label={t('label.width')}>
           <input
@@ -415,6 +506,26 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           {aspectRatioLocked ? t('label.arLocked') : t('label.arFree')}
         </button>
       </div>
+
+      {!isImageMode && (
+        <div className="field-row">
+          <Field label={t('label.padding')}>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              defaultValue={resolveLabelPadding(snap)}
+              key={`padding-${selection.id}-${snap.padding ?? 'auto'}-${snap.font.size}`}
+              onBlur={(e) => { const v = parseInt(e.target.value, 10); if (v >= 0) commitPadding(v); }}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              style={{ width: 70 }}
+            />
+          </Field>
+          <button title={t('label.fitToTextTitle')} onClick={handleFitToText} disabled={!snap.text}>
+            {t('label.fitToText')}
+          </button>
+        </div>
+      )}
 
       <CheckboxField
         checked={snap.showOnTop}
@@ -474,7 +585,12 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               inputKey={`fg-${selection.id}-${fgHex}`}
               inputProps={{
                 defaultValue: fgHex,
-                onBlur: (e) => commitColors(hexToMudletColor((e.target as HTMLInputElement).value), snap.bgColor),
+                // Live while the picker is open; the undo entry lands on close.
+                onChange: (e) => { startColorSession(); preview({ ...snap, fgColor: hexToMudletColor((e.target as HTMLInputElement).value) }); },
+                onBlur: (e) => {
+                  const cur = current();
+                  if (cur) commitSession(colorSessionRef, { ...cur, fgColor: hexToMudletColor((e.target as HTMLInputElement).value) });
+                },
               }}
             />
           </Field>
@@ -485,7 +601,14 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               inputKey={`bg-${selection.id}-${bgHex}`}
               inputProps={{
                 defaultValue: bgHex,
-                onBlur: (e) => commitColors(snap.fgColor, { ...hexToMudletColor((e.target as HTMLInputElement).value), alpha: snap.bgColor.alpha }),
+                onChange: (e) => {
+                  startColorSession();
+                  preview({ ...snap, bgColor: { ...hexToMudletColor((e.target as HTMLInputElement).value), alpha: snap.bgColor.alpha } });
+                },
+                onBlur: (e) => {
+                  const cur = current();
+                  if (cur) commitSession(colorSessionRef, { ...cur, bgColor: { ...hexToMudletColor((e.target as HTMLInputElement).value), alpha: cur.bgColor.alpha } });
+                },
               }}
             />
           </Field>
@@ -501,9 +624,20 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               value={bgAlphaDraft}
               style={{ flex: 1 }}
               onPointerDown={startColorSession}
-              onChange={(e) => setBgAlphaDraft(parseInt(e.target.value, 10))}
-              onPointerUp={(e) => commitColors(snap.fgColor, { ...snap.bgColor, alpha: parseInt((e.target as HTMLInputElement).value, 10) })}
-              onBlur={(e) => commitColors(snap.fgColor, { ...snap.bgColor, alpha: parseInt(e.target.value, 10) })}
+              onChange={(e) => {
+                const alpha = parseInt(e.target.value, 10);
+                startColorSession();
+                setBgAlphaDraft(alpha);
+                preview({ ...snap, bgColor: { ...snap.bgColor, alpha } });
+              }}
+              onPointerUp={(e) => {
+                const cur = current();
+                if (cur) commitSession(colorSessionRef, { ...cur, bgColor: { ...cur.bgColor, alpha: parseInt((e.target as HTMLInputElement).value, 10) } });
+              }}
+              onBlur={(e) => {
+                const cur = current();
+                if (cur) commitSession(colorSessionRef, { ...cur, bgColor: { ...cur.bgColor, alpha: parseInt(e.target.value, 10) } });
+              }}
             />
             <span style={{ minWidth: 28, textAlign: 'right', fontSize: 12, opacity: 0.7 }}>
               {bgAlphaDraft}
@@ -597,7 +731,15 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
             inputKey={`outline-${selection.id}-${outlineHex}`}
             inputProps={{
               defaultValue: outlineHex,
-              onBlur: (e) => commitOutlineColor({ ...outlineBase, ...hexToMudletColor((e.target as HTMLInputElement).value) }),
+              onChange: (e) => {
+                startOutlineSession();
+                const alpha = snap.outlineColor?.alpha || 255;
+                preview({ ...snap, outlineColor: { ...outlineBase, ...hexToMudletColor((e.target as HTMLInputElement).value), alpha } });
+              },
+              onBlur: (e) => {
+                const alpha = snap.outlineColor?.alpha || 255;
+                commitOutlineColor({ ...outlineBase, ...hexToMudletColor((e.target as HTMLInputElement).value), alpha });
+              },
             }}
           />
         </Field>
@@ -612,7 +754,12 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               value={outlineAlphaDraft}
               style={{ flex: 1 }}
               onPointerDown={startOutlineSession}
-              onChange={(e) => setOutlineAlphaDraft(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const alpha = parseInt(e.target.value, 10);
+                startOutlineSession();
+                setOutlineAlphaDraft(alpha);
+                preview({ ...snap, outlineColor: alpha === 0 ? undefined : { ...outlineBase, alpha } });
+              }}
               onPointerUp={(e) => {
                 const alpha = parseInt((e.target as HTMLInputElement).value, 10);
                 commitOutlineColor(alpha === 0 ? undefined : { ...outlineBase, alpha });
@@ -627,6 +774,82 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
             </span>
           </div>
         </Field>
+
+        <CheckboxField
+          checked={!!snap.border}
+          onChange={(on) => commitBorder(on ? { width: defaultBorderWidth(snap), color: { ...snap.fgColor } } : undefined)}
+          description={t('label.border')}
+        />
+
+        {snap.border && <>
+          <div className="field-row">
+            <Field label={t('label.borderWidth')}>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={snap.border.width}
+                key={`border-width-${selection.id}-${snap.border.width}`}
+                onBlur={(e) => { const v = parseInt(e.target.value, 10); if (v > 0) commitBorder({ ...snap.border!, width: v }); }}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                style={{ width: 70 }}
+              />
+            </Field>
+            <Field label={t('label.borderColor')} as="div">
+              <ColorSwatch
+                color={borderHex}
+                onActivate={startBorderSession}
+                inputKey={`border-${selection.id}-${borderHex}`}
+                inputProps={{
+                  defaultValue: borderHex,
+                  onChange: (e) => {
+                    startBorderSession();
+                    preview({ ...snap, border: { ...snap.border!, color: { ...borderColor, ...hexToMudletColor((e.target as HTMLInputElement).value) } } });
+                  },
+                  onBlur: (e) => {
+                    const cur = current();
+                    if (cur?.border) {
+                      commitSession(borderSessionRef, { ...cur, border: { ...cur.border, color: { ...cur.border.color, ...hexToMudletColor((e.target as HTMLInputElement).value) } } });
+                    }
+                  },
+                }}
+              />
+            </Field>
+          </div>
+
+          <Field label={t('label.borderAlpha')}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+              <input
+                type="range"
+                min={0}
+                max={255}
+                step={1}
+                value={borderAlphaDraft}
+                style={{ flex: 1 }}
+                onPointerDown={startBorderSession}
+                onChange={(e) => {
+                  const alpha = parseInt(e.target.value, 10);
+                  startBorderSession();
+                  setBorderAlphaDraft(alpha);
+                  preview({ ...snap, border: { ...snap.border!, color: { ...borderColor, alpha } } });
+                }}
+                onPointerUp={(e) => {
+                  const cur = current();
+                  const alpha = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (cur?.border) commitSession(borderSessionRef, { ...cur, border: { ...cur.border, color: { ...cur.border.color, alpha } } });
+                }}
+                onBlur={(e) => {
+                  const cur = current();
+                  const alpha = parseInt(e.target.value, 10);
+                  if (cur?.border) commitSession(borderSessionRef, { ...cur, border: { ...cur.border, color: { ...cur.border.color, alpha } } });
+                }}
+              />
+              <span style={{ minWidth: 28, textAlign: 'right', fontSize: 12, opacity: 0.7 }}>
+                {borderAlphaDraft}
+              </span>
+            </div>
+          </Field>
+        </>}
 
         <Field label={t('label.pixmap')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>

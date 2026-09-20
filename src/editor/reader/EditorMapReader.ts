@@ -1,8 +1,8 @@
 import type { MudletMap, MudletRoom, MudletColor } from '../../mapIO';
 import type { LabelSnapshot } from '../types';
 import { buildRendererInput } from '../../mapIO';
-import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelFont } from '../types';
-import { generateLabelPixmap, dataUrlToBuffer } from '../labelPixmap';
+import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelBorder, type LabelFont } from '../types';
+import { generateLabelPixmap, dataUrlToBuffer, PX_PER_UNIT } from '../labelPixmap';
 import { PlaneRoomIndex, INFINITE_BOUNDS, type Bounds } from './PlaneRoomIndex';
 
 /** Editor-side Exit — mirrors the renderer's Exit type. */
@@ -287,9 +287,22 @@ function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string
     }
   }
   const styleValue = areaUserData[`editor.labelStyle_${id}`];
-  if (styleValue) rawLabel.styleId = styleValue;
+  if (styleValue === 'border') {
+    // The old 'border' style became a label property; carry those labels over.
+    const shortSide = Math.min(rawLabel.size?.[0] ?? 0, rawLabel.size?.[1] ?? 0) * PX_PER_UNIT;
+    rawLabel.border = { width: Math.max(2, Math.round(shortSide * 0.04)), color: { ...rawLabel.fgColor } };
+  } else if (styleValue) {
+    rawLabel.styleId = styleValue;
+  }
   const alignValue = areaUserData[`editor.labelAlign_${id}`];
   if (alignValue === 'left' || alignValue === 'right' || alignValue === 'center') rawLabel.textAlign = alignValue;
+  const paddingValue = parseInt(areaUserData[`editor.labelPadding_${id}`], 10);
+  if (!isNaN(paddingValue) && paddingValue >= 0) rawLabel.padding = paddingValue;
+  const borderValue = areaUserData[`editor.labelBorder_${id}`];
+  if (borderValue) {
+    const [w, r, g, b, a] = borderValue.split('|').map((v) => parseInt(v, 10));
+    if (!isNaN(w) && w > 0) rawLabel.border = { width: w, color: { spec: 1, r: r || 0, g: g || 0, b: b || 0, alpha: isNaN(a) ? 255 : a, pad: 0 } };
+  }
 }
 
 /** Write label font/outlineColor back into area userData so the binary map round-trips correctly. */
@@ -318,6 +331,18 @@ function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, str
   } else {
     delete areaUserData[`editor.labelAlign_${id}`];
   }
+  if (rawLabel.padding !== undefined) {
+    areaUserData[`editor.labelPadding_${id}`] = String(rawLabel.padding);
+  } else {
+    delete areaUserData[`editor.labelPadding_${id}`];
+  }
+  const border = rawLabel.border as LabelBorder | undefined;
+  if (border) {
+    const { r, g, b, alpha } = border.color;
+    areaUserData[`editor.labelBorder_${id}`] = `${border.width}|${r}|${g}|${b}|${alpha}`;
+  } else {
+    delete areaUserData[`editor.labelBorder_${id}`];
+  }
 }
 
 function snapshotFromRawLabel(raw: any): LabelSnapshot {
@@ -334,6 +359,8 @@ function snapshotFromRawLabel(raw: any): LabelSnapshot {
     outlineColor: raw.outlineColor ? { ...raw.outlineColor } : undefined,
     styleId: raw.styleId,
     textAlign: raw.textAlign,
+    padding: raw.padding,
+    border: raw.border ? { width: raw.border.width, color: { ...raw.border.color } } : undefined,
     pixMap: raw.pixMapBase64 ? `data:image/png;base64,${raw.pixMapBase64}` : '',
     imageSrc: raw.imageSrc,
   };
@@ -1047,6 +1074,8 @@ export class EditorMapReader {
       outlineColor: snapshot.outlineColor ? { ...snapshot.outlineColor } : undefined,
       styleId: snapshot.styleId,
       textAlign: snapshot.textAlign,
+      padding: snapshot.padding,
+      border: snapshot.border ? { width: snapshot.border.width, color: { ...snapshot.border.color } } : undefined,
     };
     this.raw.labels[areaId].push(raw);
     const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
@@ -1063,6 +1092,8 @@ export class EditorMapReader {
       delete areaUserData[`system.labelOutlineColor_${labelId}`];
       delete areaUserData[`editor.labelStyle_${labelId}`];
       delete areaUserData[`editor.labelAlign_${labelId}`];
+      delete areaUserData[`editor.labelPadding_${labelId}`];
+      delete areaUserData[`editor.labelBorder_${labelId}`];
     }
     this.syncRendererLabels(areaId);
   }
@@ -1138,6 +1169,24 @@ export class EditorMapReader {
     const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
     if (!raw) return;
     raw.textAlign = align;
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelPadding(areaId: number, labelId: number, padding: number | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.padding = padding;
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelBorder(areaId: number, labelId: number, border: LabelBorder | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.border = border ? { width: border.width, color: { ...border.color } } : undefined;
     const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
     if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
     this.syncRendererLabels(areaId);

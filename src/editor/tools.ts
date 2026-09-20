@@ -13,6 +13,8 @@ import {
   is2DCardinal,
 } from './mapHelpers';
 import { store } from './store';
+import { canRepaintLive, generateLabelPixmap } from './labelPixmap';
+import { applyLabelPreset, getLabelPreset } from './labelPresets';
 import {
   ROOM_SYMBOL_COLOR,
   ROOM_UI_BORDER_COLOR,
@@ -317,6 +319,7 @@ export const selectTool: Tool = {
                 handle,
                 originPos: [...rawLabel.pos] as [number, number, number],
                 originSize: [...rawLabel.size] as [number, number],
+                originPixMap: rawLabel.pixMap,
               },
             });
             ctx.container.setPointerCapture(ev.pointerId);
@@ -505,6 +508,14 @@ export const selectTool: Tool = {
       if (changed) {
         ctx.scene.reader.moveLabel(p.areaId, p.labelId, nb.x, nb.y);
         ctx.scene.reader.setLabelSize(p.areaId, p.labelId, nb.w, nb.h);
+        // Re-render the text at the new box size instead of letting the
+        // renderer stretch the old pixmap: the font keeps its point size and
+        // only the space around it changes. Image labels keep scaling their
+        // bitmap, and oversized labels wait for pointer-up (see canRepaintLive).
+        const resized = ctx.scene.reader.getLabelSnapshot(p.areaId, p.labelId);
+        if (resized && !resized.imageSrc && canRepaintLive(resized.size)) {
+          ctx.scene.reader.setLabelPixmap(p.areaId, p.labelId, generateLabelPixmap(resized));
+        }
         ctx.scene.refresh();
       }
       return true;
@@ -631,16 +642,28 @@ export const selectTool: Tool = {
         snap.size[1] !== pending.originSize[1]
       );
       if (changed && snap) {
+        const cmds: import('./types').Command[] = [{
+          kind: 'resizeLabel' as const,
+          areaId: pending.areaId,
+          id: pending.labelId,
+          fromPos: pending.originPos,
+          toPos: [...snap.pos] as [number, number, number],
+          fromSize: pending.originSize,
+          toSize: [...snap.size] as [number, number],
+        }];
+        // The drag repainted the pixmap in place (or skipped it, for a label too
+        // big to repaint per move) — settle it here and record the change so undo
+        // restores the pixmap the label started with.
+        if (!snap.imageSrc) {
+          const to = generateLabelPixmap(snap);
+          if (to !== pending.originPixMap) {
+            ctx.scene.reader.setLabelPixmap(pending.areaId, pending.labelId, to);
+            ctx.scene.refresh();
+            cmds.push({ kind: 'setLabelPixmap', areaId: pending.areaId, id: pending.labelId, from: pending.originPixMap, to });
+          }
+        }
         store.setState((st) => ({
-          undo: [...st.undo, {
-            kind: 'resizeLabel' as const,
-            areaId: pending.areaId,
-            id: pending.labelId,
-            fromPos: pending.originPos,
-            toPos: [...snap.pos] as [number, number, number],
-            fromSize: pending.originSize,
-            toSize: [...snap.size] as [number, number],
-          }],
+          undo: [...st.undo, cmds.length === 1 ? cmds[0] : { kind: 'batch' as const, cmds }],
           redo: [],
           status: `Resized label ${pending.labelId}`,
         }));
@@ -1565,7 +1588,7 @@ export const addLabelTool: Tool = {
     const y = dragH < 0.5 ? p.startY : Math.min(p.startY, p.currentY);
 
     const id = nextLabelId(ac.map);
-    const label: import('./types').LabelSnapshot = {
+    let label: import('./types').LabelSnapshot = {
       id,
       pos: [x, -y, p.z],
       size: [w, h],
@@ -1577,6 +1600,14 @@ export const addLabelTool: Tool = {
       font: { ...DEFAULT_LABEL_FONT },
       pixMap: '',  // reader.addLabel generates the pixmap from text+font+colors
     };
+    // New labels start from the preset last applied in the label panel. A
+    // dragged-out box keeps the size the user drew; a plain click lets the
+    // preset size it.
+    const preset = getLabelPreset(s.labelPresetId);
+    if (preset) {
+      const dragged = dragW >= 0.5 || dragH >= 0.5;
+      label = applyLabelPreset(label, dragged ? { ...preset, size: undefined, fitToText: false } : preset);
+    }
     pushCommand({ kind: 'addLabel', areaId: p.areaId, label }, ctx.scene);
     ctx.refresh();
     store.bumpData();

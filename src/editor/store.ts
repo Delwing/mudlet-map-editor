@@ -26,10 +26,12 @@ interface UserSettings {
   panelWidth: number;
   /** Per-tab overrides of the selection-awareness defaults, keyed by tab id. */
   tabAwareness: Record<string, TabSelectionAwareness>;
+  /** Label preset new labels start from, across sessions. */
+  labelPresetId: string | null;
 }
 
 const DEFAULT_PANEL_WIDTH = 440;
-const DEFAULT_USER_SETTINGS: UserSettings = { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH, tabAwareness: {} };
+const DEFAULT_USER_SETTINGS: UserSettings = { snapToGrid: true, panelWidth: DEFAULT_PANEL_WIDTH, tabAwareness: {}, labelPresetId: null };
 
 function loadUserSettings(): UserSettings {
   try {
@@ -157,6 +159,8 @@ export interface EditorState {
   hitCycle: { x: number; y: number; index: number } | null;
   /** When true, label resize preserves the aspect ratio at the start of the drag. */
   labelAspectRatioLocked: boolean;
+  /** Label preset last applied from the label panel; new labels start from it. */
+  labelPresetId: string | null;
   swatchSets: SwatchSet[];
   pluginSwatchSets: SwatchSet[];
   activeSwatchSetId: string | null;
@@ -242,6 +246,7 @@ const initial: EditorState = {
   panRequest: null,
   hitCycle: null,
   labelAspectRatioLocked: false,
+  labelPresetId: userSettings.labelPresetId,
   swatchSets: swatchInit.swatchSets,
   pluginSwatchSets: [],
   activeSwatchSetId: swatchInit.activeSwatchSetId,
