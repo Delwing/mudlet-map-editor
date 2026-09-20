@@ -4,11 +4,13 @@ import { labelDiffCommands, pushBatch, pushCommand } from '../../editor/commands
 import { store, useEditorState, saveUserSettings } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor } from '../../mapIO';
-import type { Command, LabelBorder, LabelFont, LabelSnapshot, LabelTextAlign } from '../../editor/types';
+import type { Command, LabelPadding, LabelBorder, LabelFont, LabelSnapshot, LabelTextAlign } from '../../editor/types';
 import {
   PX_PER_UNIT,
   fontSizeToFit,
   generateLabelPixmap,
+  labelPaddingEq,
+  normaliseLabelPadding,
   labelSizeForText,
   resolveLabelPadding,
 } from '../../editor/labelPixmap';
@@ -303,14 +305,27 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     store.bumpData();
   };
 
-  const commitPadding = (padding: number) => {
+  const commitPadding = (padding: LabelPadding) => {
     const scene = sceneRef.current;
     const cur = current();
-    if (!scene || !cur || cur.padding === padding) return;
-    const next = { ...cur, padding };
-    pushBatch([{ kind: 'setLabelPadding', areaId: selection.areaId, id: selection.id, from: cur.padding, to: padding }, ...pixmapCmd(next)], scene);
+    if (!scene || !cur) return;
+    // Stored collapsed when the axes agree; the two inputs stay on screen
+    // regardless, because paddingSplit is what decides that.
+    const to = normaliseLabelPadding(padding);
+    if (labelPaddingEq(cur.padding, to)) return;
+    const next = { ...cur, padding: to };
+    pushBatch([{ kind: 'setLabelPadding', areaId: selection.areaId, id: selection.id, from: cur.padding, to }, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
+  };
+
+  /** Write one axis, leaving the other where it is. */
+  const commitPaddingAxis = (axis: 'x' | 'y', value: number) => {
+    if (!Number.isFinite(value) || value < 0) return;
+    const cur = current();
+    if (!cur) return;
+    const { x, y } = resolveLabelPadding(cur);
+    commitPadding(axis === 'x' ? [value, y] : [x, value]);
   };
 
   const commitBorder = (border: LabelBorder | undefined) => {
@@ -424,6 +439,8 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   };
 
   const isImageMode = !!snap.imageSrc;
+  const resolvedPadding = resolveLabelPadding(snap);
+  const paddingKey = `${resolvedPadding.x}-${resolvedPadding.y}`;
   const fgHex = mudletColorToHex(snap.fgColor);
   const bgHex = mudletColorToHex(snap.bgColor);
   const outlineBase = snap.outlineColor ?? { spec: 1, r: 0, g: 0, b: 0, alpha: 0, pad: 0 };
@@ -532,14 +549,28 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
 
       {!isImageMode && (
         <div className="field-row">
-          <Field label={t('label.padding')}>
+          <Field label={t('label.paddingX')}>
             <input
               type="number"
               min={0}
               step={1}
-              defaultValue={resolveLabelPadding(snap)}
-              key={`padding-${selection.id}-${snap.padding ?? 'auto'}-${snap.font.size}`}
-              onBlur={(e) => { const v = parseInt(e.target.value, 10); if (v >= 0) commitPadding(v); }}
+              title={t('label.paddingXTitle')}
+              defaultValue={resolveLabelPadding(snap).x}
+              key={`padding-x-${selection.id}-${paddingKey}-${snap.font.size}`}
+              onBlur={(e) => commitPaddingAxis('x', parseInt(e.target.value, 10))}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              style={{ width: 70 }}
+            />
+          </Field>
+          <Field label={t('label.paddingY')}>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              title={t('label.paddingYTitle')}
+              defaultValue={resolveLabelPadding(snap).y}
+              key={`padding-y-${selection.id}-${paddingKey}-${snap.font.size}`}
+              onBlur={(e) => commitPaddingAxis('y', parseInt(e.target.value, 10))}
               onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               style={{ width: 70 }}
             />

@@ -1,5 +1,5 @@
 import type { MudletColor } from '../mapIO';
-import { DEFAULT_LABEL_FONT, type LabelFont, type LabelSnapshot, type LabelTextAlign } from './types';
+import { DEFAULT_LABEL_FONT, type LabelFont, type LabelPadding, type LabelSnapshot, type LabelTextAlign } from './types';
 import { generateLabelPixmap, labelSizeForText } from './labelPixmap';
 
 /** A colour in a preset: `#rrggbb`, `#rrggbbaa`, or a raw Mudlet colour. */
@@ -30,8 +30,8 @@ export interface LabelPreset {
   /** Registered {@link import('./labelStyles').LabelStyle} id, or 'plain'. */
   styleId?: string;
   textAlign?: LabelTextAlign;
-  /** Inner padding in pixmap px. */
-  padding?: number;
+  /** Inner padding in pixmap px — one value for all sides, or `[horizontal, vertical]`. */
+  padding?: LabelPadding;
   /** Fixed box size in map units. Any axis `fitToText` covers wins over it. */
   size?: [number, number];
   /** Size the box to the label's own text: both axes, or just one — 'width'

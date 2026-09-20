@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer';
-import type { LabelSnapshot } from './types';
+import type { LabelPadding, LabelSnapshot } from './types';
 import { getLabelStyle, type LabelDrawContext, type LabelMeasureContext } from './labelStyles';
 import { resolveSupersample } from './labelPolicy';
 
@@ -76,13 +76,33 @@ export function middleBaselineInkOffset(ctx: CanvasRenderingContext2D, firstLine
 }
 
 /**
- * Inner padding in pixmap px. An explicit `label.padding` applies to every
- * alignment; without one the historical behaviour stands — centered text runs
- * edge to edge, left/right text keeps a small gap off the border.
+ * A label's padding in pixmap px, per axis. An explicit `label.padding` applies
+ * to every alignment — a single value to both axes, a pair as
+ * `[horizontal, vertical]`. Without one the historical behaviour stands:
+ * centered text runs edge to edge, left/right text keeps a small gap off the
+ * border.
  */
-export function resolveLabelPadding(label: LabelSnapshot): number {
-  if (label.padding !== undefined) return Math.max(0, label.padding);
-  return (label.textAlign ?? 'center') === 'center' ? 0 : Math.max(2, Math.round(label.font.size * 0.2));
+export function resolveLabelPadding(label: LabelSnapshot): { x: number; y: number } {
+  const p = label.padding;
+  if (p !== undefined) {
+    const [x, y] = Array.isArray(p) ? p : [p, p];
+    return { x: Math.max(0, x), y: Math.max(0, y) };
+  }
+  const auto = (label.textAlign ?? 'center') === 'center' ? 0 : Math.max(2, Math.round(label.font.size * 0.2));
+  return { x: auto, y: auto };
+}
+
+/** Collapse a padding pair whose axes agree back to the single value. */
+export function normaliseLabelPadding(padding: LabelPadding): LabelPadding {
+  return Array.isArray(padding) && padding[0] === padding[1] ? padding[0] : padding;
+}
+
+/** Whether two paddings mean the same thing, a pair and its collapsed form included. */
+export function labelPaddingEq(a: LabelPadding | undefined, b: LabelPadding | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  const [ax, ay] = Array.isArray(a) ? a : [a, a];
+  const [bx, by] = Array.isArray(b) ? b : [b, b];
+  return ax === bx && ay === by;
 }
 
 /** Border thickness that actually paints, 0 when the label has no visible border. */
@@ -104,7 +124,7 @@ function drawDefaultText(ctx: CanvasRenderingContext2D, label: LabelSnapshot, te
   ctx.textBaseline = 'middle';
 
   const align = label.textAlign ?? 'center';
-  const pad = resolveLabelPadding(label) + visibleBorderWidth(label);
+  const pad = resolveLabelPadding(label).x + visibleBorderWidth(label);
   const maxW = Math.max(1, pw - pad * 2);
   const anchorX = align === 'left' ? pad : align === 'right' ? pw - pad : pw / 2;
   ctx.textAlign = align;
@@ -187,7 +207,7 @@ export function generateLabelPixmap(label: LabelSnapshot): string {
     height: ph,
     label,
     text,
-    padding: resolveLabelPadding(label) + visibleBorderWidth(label),
+    padding: (() => { const p = resolveLabelPadding(label), b = visibleBorderWidth(label); return { x: p.x + b, y: p.y + b }; })(),
     defaultDrawText: () => drawDefaultText(ctx, label, text, pw, ph),
     colorToCss: mudletColorToCss,
   };
@@ -261,10 +281,11 @@ export function measureLabelText(label: LabelSnapshot): { width: number; height:
  * padding and border — what the panel's "fit to text" writes.
  */
 export function labelSizeForText(label: LabelSnapshot): [number, number] {
-  const inset = resolveLabelPadding(label) + visibleBorderWidth(label);
+  const pad = resolveLabelPadding(label);
+  const border = visibleBorderWidth(label);
   const { width, height } = measureLabelText(label);
   const toUnits = (px: number) => Math.max(0.1, Math.round((px / PX_PER_UNIT) * 100) / 100);
-  return [toUnits(width + inset * 2), toUnits(height + inset * 2)];
+  return [toUnits(width + (pad.x + border) * 2), toUnits(height + (pad.y + border) * 2)];
 }
 
 /**
@@ -274,9 +295,10 @@ export function labelSizeForText(label: LabelSnapshot): [number, number] {
 export function fontSizeToFit(label: LabelSnapshot): number {
   const ctx = getMeasureContext();
   if (!ctx || !label.text) return label.font.size;
-  const inset = resolveLabelPadding(label) + visibleBorderWidth(label);
-  const availW = Math.round(label.size[0] * PX_PER_UNIT) - inset * 2;
-  const availH = Math.round(label.size[1] * PX_PER_UNIT) - inset * 2;
+  const pad = resolveLabelPadding(label);
+  const border = visibleBorderWidth(label);
+  const availW = Math.round(label.size[0] * PX_PER_UNIT) - (pad.x + border) * 2;
+  const availH = Math.round(label.size[1] * PX_PER_UNIT) - (pad.y + border) * 2;
   if (availW <= 0 || availH <= 0) return label.font.size;
 
   const lineCount = label.text.split('\n').length;

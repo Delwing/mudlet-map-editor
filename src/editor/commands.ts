@@ -4,7 +4,7 @@ import { findNeighborsPointingAt, getExit } from './mapHelpers';
 import type { Command, NeighborEdit, Direction, LabelSnapshot } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
-import { dataUrlToBuffer } from './labelPixmap';
+import { dataUrlToBuffer, labelPaddingEq } from './labelPixmap';
 
 /**
  * Apply a pixmap data URL to a raw label, keeping `pixMap` (Buffer) and
@@ -988,7 +988,7 @@ export function labelDiffCommands(areaId: number, id: number, from: LabelSnapsho
   if ((from.textAlign ?? undefined) !== (to.textAlign ?? undefined)) {
     cmds.push({ kind: 'setLabelAlign', areaId, id, from: from.textAlign, to: to.textAlign });
   }
-  if (from.padding !== to.padding) cmds.push({ kind: 'setLabelPadding', areaId, id, from: from.padding, to: to.padding });
+  if (!labelPaddingEq(from.padding, to.padding)) cmds.push({ kind: 'setLabelPadding', areaId, id, from: from.padding, to: to.padding });
   if (from.border?.width !== to.border?.width || !labelColorEqOpt(from.border?.color, to.border?.color)) {
     cmds.push({ kind: 'setLabelBorder', areaId, id, from: from.border, to: to.border });
   }

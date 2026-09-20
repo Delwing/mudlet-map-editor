@@ -1,9 +1,9 @@
 import type { MudletMap, MudletRoom, MudletColor } from '../../mapIO';
 import type { LabelSnapshot } from '../types';
 import { buildRendererInput } from '../../mapIO';
-import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelBorder, type LabelFont } from '../types';
+import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelBorder, type LabelFont, type LabelPadding } from '../types';
 import { getLabelPolicy } from '../labelPolicy';
-import { generateLabelPixmap, dataUrlToBuffer, PX_PER_UNIT } from '../labelPixmap';
+import { generateLabelPixmap, dataUrlToBuffer, normaliseLabelPadding, PX_PER_UNIT } from '../labelPixmap';
 import { PlaneRoomIndex, INFINITE_BOUNDS, type Bounds } from './PlaneRoomIndex';
 
 /** Editor-side Exit — mirrors the renderer's Exit type. */
@@ -302,8 +302,13 @@ function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string
   }
   const alignValue = areaUserData[`editor.labelAlign_${id}`];
   if (alignValue === 'left' || alignValue === 'right' || alignValue === 'center') rawLabel.textAlign = alignValue;
-  const paddingValue = parseInt(areaUserData[`editor.labelPadding_${id}`], 10);
-  if (!isNaN(paddingValue) && paddingValue >= 0) rawLabel.padding = paddingValue;
+  // "8" pads every side; "8|4" splits the axes as horizontal|vertical.
+  const paddingRaw = areaUserData[`editor.labelPadding_${id}`];
+  if (paddingRaw) {
+    const parts = paddingRaw.split('|').map((v) => parseInt(v, 10));
+    if (parts.length === 1 && parts[0] >= 0) rawLabel.padding = parts[0];
+    else if (parts.length >= 2 && parts[0] >= 0 && parts[1] >= 0) rawLabel.padding = normaliseLabelPadding([parts[0], parts[1]]);
+  }
   const borderValue = areaUserData[`editor.labelBorder_${id}`];
   if (borderValue) {
     const [w, r, g, b, a] = borderValue.split('|').map((v) => parseInt(v, 10));
@@ -376,7 +381,8 @@ function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, str
     delete areaUserData[`editor.labelAlign_${id}`];
   }
   if (rawLabel.padding !== undefined) {
-    areaUserData[`editor.labelPadding_${id}`] = String(rawLabel.padding);
+    const pad = normaliseLabelPadding(rawLabel.padding);
+    areaUserData[`editor.labelPadding_${id}`] = Array.isArray(pad) ? `${pad[0]}|${pad[1]}` : String(pad);
   } else {
     delete areaUserData[`editor.labelPadding_${id}`];
   }
@@ -1234,7 +1240,7 @@ export class EditorMapReader {
     this.syncRendererLabels(areaId);
   }
 
-  setLabelPadding(areaId: number, labelId: number, padding: number | undefined): void {
+  setLabelPadding(areaId: number, labelId: number, padding: LabelPadding | undefined): void {
     const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
     if (!raw) return;
     raw.padding = padding;

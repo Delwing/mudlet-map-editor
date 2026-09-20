@@ -31,6 +31,13 @@ export type LabelBorder = {
 /** Inner padding (pixmap px) used when a label carries none of its own. */
 export const DEFAULT_LABEL_PADDING = 8;
 
+/**
+ * A label's inner padding in pixmap px: one value for every side, or
+ * `[horizontal, vertical]` when the two axes are set apart. Resolve it through
+ * `resolveLabelPadding` rather than reading it directly.
+ */
+export type LabelPadding = number | [number, number];
+
 export type LabelSnapshot = {
   id: number;
   pos: [number, number, number];
@@ -47,8 +54,8 @@ export type LabelSnapshot = {
   styleId?: string;
   /** Horizontal text alignment; undefined = 'center' (default). Persisted to area userData as editor.labelAlign_N. */
   textAlign?: LabelTextAlign;
-  /** Inner padding in pixmap px kept free of text on every side; undefined = {@link DEFAULT_LABEL_PADDING}. Persisted as editor.labelPadding_N. */
-  padding?: number;
+  /** Inner padding kept free of text; undefined = {@link DEFAULT_LABEL_PADDING}. Persisted as editor.labelPadding_N ("8", or "8|4" for split axes). */
+  padding?: LabelPadding;
   /** Border around the label rect; undefined = none. Persisted as editor.labelBorder_N. */
   border?: LabelBorder;
   /** Base64 PNG data URL, or empty string if no pixmap. */
@@ -378,7 +385,7 @@ export type Command =
   | { kind: 'setLabelOutlineColor'; areaId: number; id: number; from: MudletColor | undefined; to: MudletColor | undefined }
   | { kind: 'setLabelStyle'; areaId: number; id: number; from: string | undefined; to: string | undefined }
   | { kind: 'setLabelAlign'; areaId: number; id: number; from: LabelTextAlign | undefined; to: LabelTextAlign | undefined }
-  | { kind: 'setLabelPadding'; areaId: number; id: number; from: number | undefined; to: number | undefined }
+  | { kind: 'setLabelPadding'; areaId: number; id: number; from: LabelPadding | undefined; to: LabelPadding | undefined }
   | { kind: 'setLabelBorder'; areaId: number; id: number; from: LabelBorder | undefined; to: LabelBorder | undefined }
   | { kind: 'setLabelPixmap'; areaId: number; id: number; from: string; to: string }
   | { kind: 'setLabelImageSrc'; areaId: number; id: number; from: string | undefined; to: string | undefined }

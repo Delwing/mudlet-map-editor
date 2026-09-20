@@ -19,8 +19,8 @@ export interface LabelDrawContext {
   label: LabelSnapshot;
   /** Text after `transformText` has run (defaults to `label.text`). */
   text: string;
-  /** Inset to keep text clear of on every side — the label's padding plus any border. */
-  padding: number;
+  /** Inset to keep text clear of, per axis — the label's padding plus any border. */
+  padding: { x: number; y: number };
   /** Run the built-in centered multi-line text layout (font, outline, underline/strikeout). */
   defaultDrawText(): void;
   /** Convert a Mudlet color to a CSS `rgba()` string. */
@@ -120,7 +120,7 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
     ctx.textAlign = 'left';
 
     const align = label.textAlign ?? 'center';
-    const pad = c.padding;
+    const pad = c.padding.x;
 
     const lines = text.split('\n');
     const lineHeight = bigSize * 1.25;
