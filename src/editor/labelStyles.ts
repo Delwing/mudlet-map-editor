@@ -1,5 +1,6 @@
 import type { MudletColor } from '../mapIO';
 import type { LabelFont, LabelSnapshot } from './types';
+import { inkBlockHeight, middleBaselineInkOffset } from './labelPixmap';
 
 /**
  * Drawing context handed to a {@link LabelStyle} hook. It exposes the live
@@ -123,7 +124,10 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
 
     const lines = text.split('\n');
     const lineHeight = bigSize * 1.25;
-    const startY = (height - lines.length * lineHeight) / 2 + lineHeight / 2;
+    // Measured against the big initial, which is what sets each line's ascent.
+    ctx.font = fontStr(bigSize);
+    const startY = (height - lines.length * lineHeight) / 2 + lineHeight / 2
+      + middleBaselineInkOffset(ctx, lines[0], lines[lines.length - 1]);
 
     for (let i = 0; i < lines.length; i++) {
       const segs = capsSegments(lines[i], bigSize, smallSize);
@@ -168,7 +172,10 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
       }
       width = Math.max(width, lineW);
     }
-    return { width, height: lines.length * bigSize * 1.25 };
+    // Height off the big initial's ink, matching how the width follows the
+    // glyphs — see inkBlockHeight.
+    ctx.font = c.fontString(label.font, bigSize);
+    return { width, height: inkBlockHeight(ctx, lines, bigSize * 1.25) };
   },
 };
 

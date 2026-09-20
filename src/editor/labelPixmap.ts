@@ -36,6 +36,46 @@ export function labelFontString(font: LabelSnapshot['font'], size = font.size): 
 }
 
 /**
+ * Height of a block of text measured from its ink, not its em boxes.
+ *
+ * Widths already come from the glyphs, so measuring height off the em box —
+ * which reserves ascender and descender room that caps, most label text, never
+ * fills — is what makes a "fit to text" box read as having a bigger gap above
+ * and below than at its sides. Interior line spacing stays on `lineHeight`;
+ * only the first line's ascent and the last line's descent bound the block.
+ *
+ * Falls back to the em-box height where the browser reports no metrics.
+ * `ctx.font` must already be set.
+ */
+export function inkBlockHeight(ctx: CanvasRenderingContext2D, lines: string[], lineHeight: number): number {
+  const ascent = ctx.measureText(lines[0]).actualBoundingBoxAscent;
+  const descent = ctx.measureText(lines[lines.length - 1]).actualBoundingBoxDescent;
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent)) return lines.length * lineHeight;
+  return ascent + descent + (lines.length - 1) * lineHeight;
+}
+
+/**
+ * How far down to nudge text drawn with `textBaseline: 'middle'` so that the
+ * glyphs' ink ends up centred rather than the em square.
+ *
+ * 'middle' centres the em box, and that box reserves descender room which
+ * caps-only text — most map labels — never fills, so the text reads as sitting
+ * high with a visibly larger gap beneath it. `measureText` reports its bounding
+ * box relative to the current baseline, so the correction is half the
+ * difference between the ink above the anchor and the ink below it.
+ *
+ * `ctx.font` must already be the font the lines are drawn in; a caller mixing
+ * sizes within a line should set the largest, which is what sets the ascent.
+ * Returns 0 where the browser doesn't report the metrics.
+ */
+export function middleBaselineInkOffset(ctx: CanvasRenderingContext2D, firstLine: string, lastLine: string): number {
+  const ascent = ctx.measureText(firstLine).actualBoundingBoxAscent;
+  const descent = ctx.measureText(lastLine).actualBoundingBoxDescent;
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent)) return 0;
+  return (ascent - descent) / 2;
+}
+
+/**
  * Inner padding in pixmap px. An explicit `label.padding` applies to every
  * alignment; without one the historical behaviour stands — centered text runs
  * edge to edge, left/right text keeps a small gap off the border.
@@ -72,7 +112,8 @@ function drawDefaultText(ctx: CanvasRenderingContext2D, label: LabelSnapshot, te
   const lines = text.split('\n');
   const lineHeight = font.size * LINE_HEIGHT_FACTOR;
   const totalTextH = lines.length * lineHeight;
-  const startY = (ph - totalTextH) / 2 + lineHeight / 2;
+  const startY = (ph - totalTextH) / 2 + lineHeight / 2
+    + middleBaselineInkOffset(ctx, lines[0], lines[lines.length - 1]);
 
   for (let i = 0; i < lines.length; i++) {
     const y = startY + i * lineHeight;
@@ -206,7 +247,7 @@ export function measureLabelText(label: LabelSnapshot): { width: number; height:
     const lines = text.split('\n');
     return {
       width: Math.max(...lines.map((l) => ctx.measureText(l).width)),
-      height: lines.length * label.font.size * LINE_HEIGHT_FACTOR,
+      height: inkBlockHeight(ctx, lines, label.font.size * LINE_HEIGHT_FACTOR),
     };
   };
 

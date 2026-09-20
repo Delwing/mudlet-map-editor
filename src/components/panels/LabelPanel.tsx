@@ -140,6 +140,21 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const outlineSessionRef = useRef<LabelSnapshot | null>(null);
   const borderSessionRef = useRef<LabelSnapshot | null>(null);
 
+  // A session normally commits on the picker's blur — but the click that ends
+  // one is usually a click on the map, which changes the selection and unmounts
+  // this panel in the same gesture. React's focusout is delegated from the root,
+  // so it never reaches a handler whose element has already gone, and the change
+  // stayed on the label with nothing on the undo stack. Flushing on the way out
+  // catches exactly that: the panel is gone, but the reader still holds the
+  // previewed colours and the session still holds what to undo back to.
+  const flushSessionsRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    // Captured now, so the cleanup commits against the selection it belongs to
+    // rather than whichever one replaced it.
+    const flush = flushSessionsRef.current;
+    return () => flush?.();
+  }, [selection.areaId, selection.id]);
+
   useEffect(() => {
     const s = sceneRef.current?.reader.getLabelSnapshot(selection.areaId, selection.id);
     if (!textFocused.current) setTextDraft(s?.text ?? '');
@@ -189,6 +204,14 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     pushBatch(cmds, scene);
     scene.refresh();
     store.bumpData();
+  };
+
+  flushSessionsRef.current = () => {
+    const cur = current();
+    if (!cur) return;
+    for (const ref of [colorSessionRef, outlineSessionRef, borderSessionRef]) {
+      if (ref.current) commitSession(ref, cur);
+    }
   };
 
   const commitText = () => {
