@@ -4,6 +4,7 @@ import type { SwatchSet } from './types';
 import type { SceneHandle } from './scene';
 import type { LabelStyle } from './labelStyles';
 import type { LabelPreset } from './labelPresets';
+import type { LabelPolicy } from './labelPolicy';
 import type { MapFormat } from './formats';
 
 export interface PluginCheckResult {
@@ -122,6 +123,13 @@ export interface EditorPlugin {
    *  offered in the label panel and used as the starting point for new labels.
    *  See {@link LabelPreset}. */
   labelPresets?(): LabelPreset[];
+  /** Override how label pixmaps relate to Mudlet's own label rendering — whether
+   *  the pixmap this editor draws is what Mudlet shows, and how far it is
+   *  supersampled. Only the fields a plugin returns are overridden; anything
+   *  omitted keeps its default, which is Mudlet's long-standing behaviour.
+   *  Applied in plugin order, last one to state a field wins.
+   *  See {@link LabelPolicy}. */
+  labelPolicy?(): Partial<LabelPolicy>;
   /** Contribute additional sections rendered at the bottom of the room selection panel. */
   roomPanelSections?(): RoomPanelSection[];
   /** Return custom map warnings. Called whenever built-in warnings are recomputed. */

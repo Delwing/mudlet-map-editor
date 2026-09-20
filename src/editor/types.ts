@@ -41,7 +41,7 @@ export type LabelSnapshot = {
   noScaling: boolean;
   showOnTop: boolean;
   font: LabelFont;
-  /** Text outline color loaded from area userData (system.labelOutlineColor_N). */
+  /** Text outline color, persisted to area userData as editor.labelOutlineColor_N. */
   outlineColor?: MudletColor;
   /** Registered label style id (see labelStyles.ts); undefined / 'plain' = default rendering. Persisted to area userData as editor.labelStyle_N. */
   styleId?: string;

@@ -2,6 +2,7 @@ import type { MudletMap, MudletRoom, MudletColor } from '../../mapIO';
 import type { LabelSnapshot } from '../types';
 import { buildRendererInput } from '../../mapIO';
 import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelBorder, type LabelFont } from '../types';
+import { getLabelPolicy } from '../labelPolicy';
 import { generateLabelPixmap, dataUrlToBuffer, PX_PER_UNIT } from '../labelPixmap';
 import { PlaneRoomIndex, INFINITE_BOUNDS, type Bounds } from './PlaneRoomIndex';
 
@@ -246,16 +247,21 @@ function ensurePixMapBase64(l: any): void {
 }
 
 /**
- * Mudlet can't store label font/outlineColor in the binary format yet, so it
- * serializes them into area userData as:
- *   system.labelFont_N      → "family|pointSize|weight|italic"
- *   system.labelOutlineColor_N → "r|g|b|alpha"
- * Read those entries and populate the raw label's font/outlineColor fields.
+ * Label font and text-outline colour have no slot in the binary format, so
+ * they live in area userData:
+ *   labelFont_N         → "family|pointSize|weight|italic"
+ *   labelOutlineColor_N → "r|g|b|alpha"
+ *
+ * Mudlet writes those under a `system.` prefix. Under
+ * {@link LabelPolicy.preservePixmaps} the real values move to an `editor.`
+ * prefix Mudlet ignores (see {@link syncLabelToAreaUserData}), so reads accept
+ * either — a map written under one policy has to open correctly under the
+ * other. `editor.` wins where both exist, being the one this editor wrote.
  */
 function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string, string>): void {
   const id = rawLabel.id;
   if (!rawLabel.font) {
-    const fontValue = areaUserData[`system.labelFont_${id}`];
+    const fontValue = areaUserData[`editor.labelFont_${id}`] ?? areaUserData[`system.labelFont_${id}`];
     if (fontValue) {
       const parts = fontValue.split('|');
       if (parts.length >= 4) {
@@ -274,7 +280,7 @@ function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string
       }
     }
   }
-  const outlineValue = areaUserData[`system.labelOutlineColor_${id}`];
+  const outlineValue = areaUserData[`editor.labelOutlineColor_${id}`] ?? areaUserData[`system.labelOutlineColor_${id}`];
   if (outlineValue) {
     const parts = outlineValue.split('|');
     if (parts.length >= 4) {
@@ -305,20 +311,58 @@ function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string
   }
 }
 
-/** Write label font/outlineColor back into area userData so the binary map round-trips correctly. */
+/**
+ * Write label font/outlineColor back into area userData so the binary map
+ * round-trips correctly. Exactly one prefix holds the values and the other is
+ * cleared, so there is never a stale copy left for the reader to prefer.
+ *
+ * Default: Mudlet's `system.` keys, as it has always been.
+ *
+ * Under {@link LabelPolicy.preservePixmaps}: the real values go to `editor.`,
+ * and `system.labelFont_N` is written deliberately incomplete — the same
+ * numbers, no family. `T2DMap::drawScaledLabel` re-renders a label from its
+ * text whenever `!text.isEmpty() && !font.family().isEmpty()`, so a blank
+ * family sends it down the `drawPixmap(pos, pix.scaled(...))` branch instead,
+ * and the pixmap is what shows. Dropping the key rather than blanking it does
+ * *not* work: `TMapLabel::font` is a default-constructed `QFont`, which
+ * reports the application font's family. `TMap::serialize` only rewrites the
+ * key when the family is non-empty, so a save from Mudlet leaves it blank.
+ */
 function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, string>): void {
   const id = rawLabel.id;
   const font = rawLabel.font as LabelFont | undefined;
+  const { preservePixmaps } = getLabelPolicy();
+  const ours = preservePixmaps ? 'editor' : 'system';
+
   if (font?.family) {
     const weight = font.bold ? 75 : 50;
-    areaUserData[`system.labelFont_${id}`] = `${font.family}|${font.size}|${weight}|${font.italic ? 1 : 0}`;
+    areaUserData[`${ours}.labelFont_${id}`] = `${font.family}|${font.size}|${weight}|${font.italic ? 1 : 0}`;
+  } else {
+    delete areaUserData[`${ours}.labelFont_${id}`];
   }
+  if (preservePixmaps) {
+    // Four fields either way, so Mudlet parses it: a malformed value would only
+    // log a warning and leave the default font in place — a non-empty family,
+    // i.e. the re-render this exists to avoid.
+    const mudletFont = font ?? DEFAULT_LABEL_FONT;
+    areaUserData[`system.labelFont_${id}`] = `|${mudletFont.size}|${mudletFont.bold ? 75 : 50}|${mudletFont.italic ? 1 : 0}`;
+  } else {
+    delete areaUserData[`editor.labelFont_${id}`];
+  }
+
   if (rawLabel.outlineColor) {
     const { r, g, b, alpha } = rawLabel.outlineColor;
-    areaUserData[`system.labelOutlineColor_${id}`] = `${r}|${g}|${b}|${alpha}`;
+    areaUserData[`${ours}.labelOutlineColor_${id}`] = `${r}|${g}|${b}|${alpha}`;
+  } else if (preservePixmaps) {
+    delete areaUserData[`editor.labelOutlineColor_${id}`];
   } else {
     // Write default transparent outline so Mudlet always has the entry.
     areaUserData[`system.labelOutlineColor_${id}`] = '0|0|0|0';
+  }
+  if (preservePixmaps) {
+    delete areaUserData[`system.labelOutlineColor_${id}`];
+  } else {
+    delete areaUserData[`editor.labelOutlineColor_${id}`];
   }
   // Editor-only metadata Mudlet ignores; 'plain'/unset stays out of userData.
   if (rawLabel.styleId && rawLabel.styleId !== 'plain') {
@@ -653,6 +697,20 @@ export class EditorMapReader {
       for (const l of rawLabels) {
         ensurePixMapBase64(l);
         hydrateLabelFromAreaUserData(l, areaUserData);
+      }
+      // Under `preservePixmaps` the whole map migrates on load, rather than one
+      // label at a time as they happen to be edited — otherwise a map saved
+      // today would still hand most of its labels to Mudlet's renderer. Wiping
+      // first also clears keys orphaned by labels deleted before the editor
+      // cleaned up after itself, which Mudlet would otherwise match to a label
+      // that later reuses the id. It runs after hydrate, which reads them.
+      if (getLabelPolicy().preservePixmaps) {
+        for (const key of Object.keys(areaUserData)) {
+          if (key.startsWith('system.labelFont_') || key.startsWith('system.labelOutlineColor_')) {
+            delete areaUserData[key];
+          }
+        }
+        for (const l of rawLabels) syncLabelToAreaUserData(l, areaUserData);
       }
       this.areas[areaId] = new EditorArea(
         areaId,
@@ -1088,6 +1146,8 @@ export class EditorMapReader {
     this.raw.labels[areaId] = this.raw.labels[areaId].filter(l => l.id !== labelId);
     const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
     if (areaUserData) {
+      delete areaUserData[`editor.labelFont_${labelId}`];
+      delete areaUserData[`editor.labelOutlineColor_${labelId}`];
       delete areaUserData[`system.labelFont_${labelId}`];
       delete areaUserData[`system.labelOutlineColor_${labelId}`];
       delete areaUserData[`editor.labelStyle_${labelId}`];

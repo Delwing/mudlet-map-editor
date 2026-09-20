@@ -5,6 +5,7 @@ export type { MapFormat, MapFormatParseContext } from './editor/formats';
 export { mudletDatFormat, MUDLET_DAT_FORMAT_ID } from './editor/formats';
 export type { LabelStyle, LabelDrawContext, LabelMeasureContext } from './editor/labelStyles';
 export type { LabelPreset, LabelColorInput } from './editor/labelPresets';
+export type { LabelPolicy } from './editor/labelPolicy';
 export type { LabelBorder, LabelFont, LabelSnapshot, LabelTextAlign } from './editor/types';
 export type { MudletMap, MudletRoom, MudletColor } from './mapIO';
 export type { SwatchSet, Swatch } from './editor/types';

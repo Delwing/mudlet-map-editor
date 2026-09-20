@@ -28,6 +28,7 @@ import { builtInFormats, setMapFormats, matchFormatForFile, type MapFormat } fro
 import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
 import { registerLabelStyles } from './editor/labelStyles';
 import { registerLabelPresets } from './editor/labelPresets';
+import { registerLabelPolicy } from './editor/labelPolicy';
 import { collectWarnings } from './editor/warnings';
 
 // Toolbar: 12px from top + ~44px header row + ~32px tools row + 16px gap = 104px.
@@ -92,6 +93,7 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   const pluginSwatchSets = useMemo(() => plugins.flatMap((p) => p.swatchSets?.() ?? []), [plugins]);
   const pluginLabelStyles = useMemo(() => plugins.flatMap((p) => p.labelStyles?.() ?? []), [plugins]);
   const pluginLabelPresets = useMemo(() => plugins.flatMap((p) => p.labelPresets?.() ?? []), [plugins]);
+  const pluginLabelPolicies = useMemo(() => plugins.flatMap((p) => (p.labelPolicy ? [p.labelPolicy()] : [])), [plugins]);
   const pluginSidebarTabs = useMemo(() => plugins.flatMap((p) => p.sidebarTabs?.() ?? []), [plugins]);
   const pluginRoomSections = useMemo<RoomPanelSection[]>(() => plugins.flatMap((p) => p.roomPanelSections?.() ?? []), [plugins]);
   // First plugin that *defines* renderLogo claims the slot — its return is
@@ -142,6 +144,13 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
   useEffect(() => {
     registerLabelPresets(pluginLabelPresets);
   }, [pluginLabelPresets]);
+
+  // Label policy, read by the pixmap generator and by the reader's userData
+  // sync. Registered on mount, before any map can be loaded, so the load-time
+  // migration it governs sees the final value.
+  useEffect(() => {
+    registerLabelPolicy(pluginLabelPolicies);
+  }, [pluginLabelPolicies]);
 
   // onAppReady: run all plugins once on mount (fire-and-forget).
   useEffect(() => {

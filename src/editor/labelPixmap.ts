@@ -1,8 +1,22 @@
 import { Buffer } from 'buffer';
 import type { LabelSnapshot } from './types';
 import { getLabelStyle, type LabelDrawContext, type LabelMeasureContext } from './labelStyles';
+import { resolveSupersample } from './labelPolicy';
 
 export const PX_PER_UNIT = 64;
+
+/**
+ * Supersampling factor to actually use for a label — {@link LabelPolicy.supersample},
+ * except for a `noScaling` label. Mudlet pins those to the pixmap's own pixel
+ * size instead of scaling it into the label rect, so a larger pixmap there
+ * means a larger label on screen rather than a sharper one; they stay at 1x
+ * whatever the policy says. (That also fixes them under the default
+ * `devicePixelRatio`, which used to make them come out oversized in Mudlet when
+ * the map was edited on a hi-dpi screen.)
+ */
+function pixmapScale(label: LabelSnapshot): number {
+  return label.noScaling ? 1 : resolveSupersample();
+}
 
 /** Line height used by the built-in text layout, as a multiple of the font size. */
 export const LINE_HEIGHT_FACTOR = 1.25;
@@ -116,11 +130,12 @@ export function generateLabelPixmap(label: LabelSnapshot): string {
 
   const pw = Math.max(1, Math.round(label.size[0] * PX_PER_UNIT));
   const ph = Math.max(1, Math.round(label.size[1] * PX_PER_UNIT));
-  const dpr = window.devicePixelRatio || 1;
-
-  canvas.width = pw * dpr;
-  canvas.height = ph * dpr;
-  ctx.scale(dpr, dpr);
+  // Everything below draws in nominal px; the scale transform is what turns
+  // the whole render — font size, padding, border, outline — into a 2x one.
+  const ss = pixmapScale(label);
+  canvas.width = pw * ss;
+  canvas.height = ph * ss;
+  ctx.scale(ss, ss);
 
   const style = getLabelStyle(label.styleId);
   const text = style.transformText ? style.transformText(label.text, label) : label.text;
@@ -160,10 +175,12 @@ export function generateLabelPixmap(label: LabelSnapshot): string {
 /**
  * Whether a label of this size can be re-rendered on every pointer-move of a
  * resize. Encoding the PNG dominates the cost, so past this many pixels the
- * live repaint is skipped and the pixmap is rebuilt once, on pointer-up.
+ * live repaint is skipped and the pixmap is rebuilt once, on pointer-up. The
+ * budget counts the pixels actually encoded, supersampling included.
  */
 export function canRepaintLive(size: [number, number]): boolean {
-  return size[0] * size[1] * PX_PER_UNIT * PX_PER_UNIT <= 1_200_000;
+  const ss = resolveSupersample();
+  return size[0] * size[1] * PX_PER_UNIT * PX_PER_UNIT * ss * ss <= 1_200_000;
 }
 
 /** Scratch 2D context kept for text metrics; nothing is ever painted on it. */
