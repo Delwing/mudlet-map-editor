@@ -75,24 +75,35 @@ export interface LabelStyle {
 /** The built-in default: plain text, no extra styling. Equivalent to no style. */
 export const PLAIN_STYLE: LabelStyle = { id: 'plain', name: 'Plain' };
 
-/** Per-glyph sizing used by {@link CAPS_BIG_INITIALS_STYLE}: the first glyph of
- *  every word keeps the label's font size, the rest shrink. */
+/** Per-glyph sizing used by {@link CAPS_BIG_INITIALS_STYLE}: the first *letter*
+ *  of every word keeps the label's font size, the rest shrink. Anything a word
+ *  opens with that isn't a letter — a bracket, a quote, a dash — stays small and
+ *  passes the initial on to the letter behind it, so "(WYSPA)" enlarges the W
+ *  rather than the bracket. */
 function capsSegments(line: string, bigSize: number, smallSize: number): { ch: string; size: number }[] {
   const segs: { ch: string; size: number }[] = [];
-  let atWordStart = true;
+  let wantInitial = true;
   for (const ch of line) {
-    if (ch === ' ') { atWordStart = true; segs.push({ ch, size: smallSize }); continue; }
-    segs.push({ ch, size: atWordStart ? bigSize : smallSize });
-    atWordStart = false;
+    if (/\s/.test(ch)) { wantInitial = true; segs.push({ ch, size: smallSize }); continue; }
+    const isLetter = /\p{L}/u.test(ch);
+    segs.push({ ch, size: wantInitial && isLetter ? bigSize : smallSize });
+    if (isLetter) wantInitial = false;
   }
   return segs;
+}
+
+/** Tallest size a line actually draws at — the big initial, unless the line
+ *  holds no letters at all and so is drawn entirely small. */
+function capsLineMaxSize(line: string, bigSize: number, smallSize: number): number {
+  return Math.max(smallSize, ...capsSegments(line, bigSize, smallSize).map((s) => s.size));
 }
 
 const capsSmallSize = (size: number) => Math.max(1, Math.round(size / 1.7));
 
 /**
  * Reference style: forces UPPERCASE and renders the first letter of every word
- * larger than the rest. Demonstrates a full `drawText` takeover (per-glyph
+ * larger than the rest — the first letter, not the first character, so brackets
+ * and quotes don't take the enlargement. Demonstrates a full `drawText` takeover (per-glyph
  * sizing, which the default all-or-nothing layout can't express) alongside
  * `transformText` and the matching `measureText`.
  */
@@ -124,8 +135,8 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
 
     const lines = text.split('\n');
     const lineHeight = bigSize * 1.25;
-    // Measured against the big initial, which is what sets each line's ascent.
-    ctx.font = fontStr(bigSize);
+    // Measured against the largest glyph on the line, which is what sets its ascent.
+    ctx.font = fontStr(capsLineMaxSize(lines[0], bigSize, smallSize));
     const startY = (height - lines.length * lineHeight) / 2 + lineHeight / 2
       + middleBaselineInkOffset(ctx, lines[0], lines[lines.length - 1]);
 
@@ -172,9 +183,9 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
       }
       width = Math.max(width, lineW);
     }
-    // Height off the big initial's ink, matching how the width follows the
+    // Height off the largest glyph's ink, matching how the width follows the
     // glyphs — see inkBlockHeight.
-    ctx.font = c.fontString(label.font, bigSize);
+    ctx.font = c.fontString(label.font, capsLineMaxSize(lines[0], bigSize, smallSize));
     return { width, height: inkBlockHeight(ctx, lines, bigSize * 1.25) };
   },
 };
