@@ -81,7 +81,7 @@ export const pl: EditorLocaleComplete = {
     marquee: 'Przytrzymaj Ctrl, aby przełączyć zaznaczenie',
     connect: 'Wybierz cel · Shift = jednokierunkowy · Esc anuluje',
     customLine: 'Kliknij, aby dodać punkty · prawy przycisk lub Enter kończy · Esc anuluje',
-    select: 'Kliknij, aby zaznaczyć · Shift+klik/przeciągnij, aby dodać · Ctrl+klik/przeciągnij, aby przełączyć · przeciągnij wybrane lokacje, aby przenieść · MMB lub Space do panoramowania',
+    select: 'Kliknij, aby zaznaczyć · Shift+klik/przeciągnij, aby dodać · Ctrl+klik/przeciągnij, aby przełączyć · przeciągnij wybrane lokacje, aby przenieść · MMB lub Space przesuwa widok',
     unlink: 'Kliknij lokację, aby usunąć wszystkie wyjścia · kliknij wyjście lub linię, aby usunąć tylko ją',
     addRoom: 'Kliknij pustą komórkę, aby umieścić lokację · {{modKey}}+klik, aby umieścić bez zaznaczania',
     addLabel: 'Kliknij, aby umieścić etykietę · zaznacz, aby przesunąć/edytować · Delete, aby usunąć',
@@ -91,13 +91,13 @@ export const pl: EditorLocaleComplete = {
     pickSwatch: 'Kliknij lokację, aby skopiować symbol i kolor lokacji · Esc, aby anulować',
   },
   tools: {
-    select:   { label: 'Zaznacz',        hint: 'Kliknij, aby zaznaczyć · Shift+klik/przeciągnij, aby dodać · Ctrl+klik/przeciągnij, aby przełączyć · przeciągnij, aby przenieść (przyciąga do siatki) · strzałki przesuwają · MMB lub Space do panoramowania.' },
+    select:   { label: 'Zaznacz',        hint: 'Kliknij, aby zaznaczyć · Shift+klik/przeciągnij, aby dodać · Ctrl+klik/przeciągnij, aby przełączyć · przeciągnij, aby przenieść (przyciąga do siatki) · strzałki przesuwają · MMB lub Space przesuwa widok.' },
     connect:  { label: 'Połącz',         hint: 'Kliknij źródło, potem cel. Shift = jednokierunkowy.' },
     unlink:   { label: 'Odłącz',         hint: 'Kliknij lokację, aby usunąć wszystkie wyjścia. Kliknij wyjście/linię, aby usunąć tylko ją.' },
     addRoom:  { label: 'Dodaj lokację',  hint: 'Kliknij pustą komórkę, aby stworzyć lokację. {{modKey}}+klik, aby umieścić bez zaznaczania.' },
     addLabel: { label: 'Dodaj etykietę', hint: 'Kliknij, aby umieścić etykietę. Zaznacz, aby przesunąć/edytować, Delete, aby usunąć.' },
     delete:   { label: 'Usuń',           hint: 'Kliknij lokację, aby ją usunąć, lub wyjście/linię/etykietę, aby ją usunąć.' },
-    pan:      { label: 'Panoramuj',      hint: 'Przeciągnij tło, aby panoramować. Przytrzymaj Space z dowolnym narzędziem do tymczasowego panoramowania.' },
+    pan:      { label: 'Przesuń widok',  hint: 'Przeciągnij tło, aby przesunąć widok. Przytrzymaj Space z dowolnym narzędziem, aby tymczasowo przesuwać widok.' },
     paint:    { label: 'Maluj',          hint: 'Kliknij lub przeciągnij lokacje, aby zastosować aktywną próbkę (symbol + kolor lokacji). Najpierw wybierz próbkę w palecie.' },
   },
   help: {
@@ -108,7 +108,7 @@ export const pl: EditorLocaleComplete = {
     close: 'Zamknij',
     shortcuts: {
       switchTool: 'Przełącz narzędzie',
-      tempPan: 'Przytrzymaj, aby tymczasowo panoramować (dowolne narzędzie)',
+      tempPan: 'Przytrzymaj, aby tymczasowo przesuwać widok (dowolne narzędzie)',
       snapGrid: 'Przełącz przyciąganie do siatki',
       fitView: 'Dopasuj obszar do widoku',
       search: 'Otwórz / zamknij wyszukiwanie (lokacje, etykiety)',

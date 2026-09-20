@@ -114,7 +114,11 @@ export function SwatchPalette({ sceneRef }: { sceneRef: { current: SceneHandle |
   };
 
   const activateSwatch = (swatchId: string) => {
-    store.setState({ activeSwatchId: swatchId });
+    // Picking a swatch is only ever a prelude to painting with it, so arm the
+    // tool here rather than making it a second, forgettable click. `pending` is
+    // cleared for the same reason the toolbar clears it: a half-finished
+    // action from the previous tool must not survive the switch.
+    store.setState({ activeSwatchId: swatchId, activeTool: 'paint', pending: null });
     saveSwatchState(swatchSets, activeSwatchSetId, swatchId);
   };
 

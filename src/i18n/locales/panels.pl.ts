@@ -372,7 +372,7 @@ export const panelsPl: PanelsLocale = {
       unlink: 'Kliknij linię wyjścia, aby ją usunąć.',
       addRoom: 'Kliknij pustą komórkę siatki, aby stworzyć lokację.',
       delete: 'Kliknij lokację, aby ją usunąć.',
-      pan: 'Przeciągnij tło, aby panoramować. Przytrzymaj Space z dowolnym narzędziem.',
+      pan: 'Przeciągnij tło, aby przesunąć widok. Przytrzymaj Space z dowolnym narzędziem.',
       customLine: 'Kliknij, aby dodać punkty. Prawy przycisk lub Enter kończy.',
       label: 'Kliknij etykietę, aby ją zaznaczyć i edytować.',
     },
