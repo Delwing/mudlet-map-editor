@@ -76,15 +76,25 @@ export interface LabelStyle {
 export const PLAIN_STYLE: LabelStyle = { id: 'plain', name: 'Plain' };
 
 /** Per-glyph sizing used by {@link CAPS_BIG_INITIALS_STYLE}: the first *letter*
- *  of every word keeps the label's font size, the rest shrink. Anything a word
- *  opens with that isn't a letter — a bracket, a quote, a dash — stays small and
- *  passes the initial on to the letter behind it, so "(WYSPA)" enlarges the W
- *  rather than the bracket. */
+ *  of every word keeps the label's font size, the rest shrink.
+ *
+ *  Two things never take the enlargement. Anything a word opens with that is
+ *  not a letter — a bracket, a quote, a dash, a digit — stays small and passes
+ *  the initial along to the letter behind it. And a bracketed aside is left
+ *  alone entirely: "(WYSPA)" is an annotation on the name rather than a name,
+ *  so nothing inside the brackets is enlarged. The word after the closing
+ *  bracket starts fresh. */
 function capsSegments(line: string, bigSize: number, smallSize: number): { ch: string; size: number }[] {
   const segs: { ch: string; size: number }[] = [];
   let wantInitial = true;
+  let depth = 0;
   for (const ch of line) {
+    if (ch === '(') { depth++; segs.push({ ch, size: smallSize }); continue; }
+    if (ch === ')') { depth = Math.max(0, depth - 1); wantInitial = true; segs.push({ ch, size: smallSize }); continue; }
     if (/\s/.test(ch)) { wantInitial = true; segs.push({ ch, size: smallSize }); continue; }
+    // Inside brackets nothing grows, and the pending initial is left intact so
+    // the word carrying the aside can still claim it afterwards.
+    if (depth > 0) { segs.push({ ch, size: smallSize }); continue; }
     const isLetter = /\p{L}/u.test(ch);
     segs.push({ ch, size: wantInitial && isLetter ? bigSize : smallSize });
     if (isLetter) wantInitial = false;
@@ -92,8 +102,9 @@ function capsSegments(line: string, bigSize: number, smallSize: number): { ch: s
   return segs;
 }
 
-/** Tallest size a line actually draws at — the big initial, unless the line
- *  holds no letters at all and so is drawn entirely small. */
+/** Tallest size a line actually draws at — the big initial, unless nothing on
+ *  the line claims one (no letters, or all of them bracketed) and it is drawn
+ *  entirely small. */
 function capsLineMaxSize(line: string, bigSize: number, smallSize: number): number {
   return Math.max(smallSize, ...capsSegments(line, bigSize, smallSize).map((s) => s.size));
 }
@@ -102,8 +113,8 @@ const capsSmallSize = (size: number) => Math.max(1, Math.round(size / 1.7));
 
 /**
  * Reference style: forces UPPERCASE and renders the first letter of every word
- * larger than the rest — the first letter, not the first character, so brackets
- * and quotes don't take the enlargement. Demonstrates a full `drawText` takeover (per-glyph
+ * larger than the rest — the first letter, not the first character, and nothing
+ * inside brackets, which are asides rather than names. Demonstrates a full `drawText` takeover (per-glyph
  * sizing, which the default all-or-nothing layout can't express) alongside
  * `transformText` and the matching `measureText`.
  */
