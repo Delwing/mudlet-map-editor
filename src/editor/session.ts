@@ -11,6 +11,8 @@ export interface SessionData {
   mapBytes: ArrayBuffer;
   imageSrcs: Record<string, string>;
   undoStack: Command[];
+  /** Label pixmaps the undo stack refers to by key (see pixmapRefs.ts). Absent in older sessions. */
+  pixmapPool?: Record<string, Uint8Array>;
   currentAreaId: number | null;
   currentZ: number;
   savedAt: number;
@@ -49,6 +51,7 @@ export async function saveSession(
   currentAreaId: number | null,
   currentZ: number,
   existingId?: string,
+  pixmapPool?: Record<string, Uint8Array>,
 ): Promise<string> {
   const bytes = writeMapToBytes(map);
   const mapBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -59,6 +62,7 @@ export async function saveSession(
     mapBytes,
     imageSrcs: collectImageSrcs(map),
     undoStack,
+    pixmapPool,
     currentAreaId,
     currentZ,
     savedAt: Date.now(),

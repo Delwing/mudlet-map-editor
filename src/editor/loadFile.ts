@@ -1,4 +1,5 @@
 import { store } from './store';
+import { resetPixmapPool } from './pixmapRefs';
 import { pickFormatForFile } from './formats';
 
 /** Upper bound on a paint yield — see {@link yieldToPaint}. */
@@ -80,6 +81,8 @@ export async function loadUrlIntoStore(url: string, onProgress?: (pct: number | 
     await enterPhase('preparing', fileName);
     const firstAreaId = Number(Object.keys(map.areaNames)[0] ?? -1);
     const resolvedArea = Number.isNaN(firstAreaId) ? null : firstAreaId;
+    // A new map starts a new history; pixmaps the old one referred to go with it.
+    resetPixmapPool();
     store.setState({
       map,
       loaded: { fileName },
@@ -111,6 +114,8 @@ export async function loadFileIntoStore(file: File): Promise<void> {
     await enterPhase('preparing', file.name);
     const firstAreaId = Number(Object.keys(map.areaNames)[0] ?? -1);
     const resolvedArea = Number.isNaN(firstAreaId) ? null : firstAreaId;
+    // A new map starts a new history; pixmaps the old one referred to go with it.
+    resetPixmapPool();
     store.setState({
       map,
       loaded: { fileName: file.name },

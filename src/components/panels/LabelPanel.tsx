@@ -20,6 +20,7 @@ import { CheckboxField, Field, ColorSwatch, mudletColorToHex, hexToMudletColor }
 import { warningKey } from './MapPanel';
 import { loadAcks, saveAcks, mapAckKey } from '../../editor/warningAcks';
 import { FontPicker } from '../FontPicker';
+import { PIXMAP_REGEN, pixmapRefFor, poolPixmap } from '../../editor/pixmapRefs';
 
 const COMMON_FONTS = [
   'Arial', 'Arial Black', 'Comic Sans MS', 'Courier New', 'Georgia',
@@ -174,7 +175,8 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const pixmapCmd = (label: LabelSnapshot): Command[] => {
     const to = generateLabelPixmap(label);
     if (to === label.pixMap) return [];
-    return [{ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: label.pixMap, to }];
+    // Called before the edit is applied, so the reader still holds the label the old pixmap belongs to.
+    return [{ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: pixmapRefFor(label.pixMap, current()), to: PIXMAP_REGEN }];
   };
 
   /**
@@ -201,7 +203,8 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     if (cmds.length === 0) return;
     const pixMap = generateLabelPixmap(next);
     if (pixMap !== from.pixMap) {
-      cmds.push({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: from.pixMap, to: pixMap });
+      // The reader already shows the preview, so the session's origin is what the old pixmap belongs to.
+      cmds.push({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: pixmapRefFor(from.pixMap, from), to: PIXMAP_REGEN });
     }
     pushBatch(cmds, scene);
     scene.refresh();
@@ -384,7 +387,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     if (!scene || !cur) return;
     const to = generateLabelPixmap(cur);
     if (to === cur.pixMap) return;
-    pushCommand({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: cur.pixMap, to }, scene);
+    pushCommand({ kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: pixmapRefFor(cur.pixMap, cur), to: PIXMAP_REGEN }, scene);
     scene.refresh();
     store.bumpData();
   };
@@ -408,7 +411,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           const h = Math.max(0.1, Math.round((img.naturalHeight / PX_PER_UNIT) * 100) / 100);
           const cmds: Command[] = [
             { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: cur.imageSrc, to: dataUrl },
-            { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: cur.pixMap, to: dataUrl },
+            { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: pixmapRefFor(cur.pixMap, cur), to: poolPixmap(dataUrl) },
             { kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: cur.size, to: [w, h] },
           ];
           pushBatch(cmds, scene);
@@ -427,10 +430,9 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     const scene = sceneRef.current;
     const cur = current();
     if (!scene || !cur || !cur.imageSrc) return;
-    const regenerated = generateLabelPixmap(cur);
     const cmds: Command[] = [
       { kind: 'setLabelImageSrc', areaId: selection.areaId, id: selection.id, from: cur.imageSrc, to: undefined },
-      { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: cur.pixMap, to: regenerated },
+      { kind: 'setLabelPixmap', areaId: selection.areaId, id: selection.id, from: pixmapRefFor(cur.pixMap, cur), to: PIXMAP_REGEN },
     ];
     pushBatch(cmds, scene);
     scene.refresh();

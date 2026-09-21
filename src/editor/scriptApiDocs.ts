@@ -1,12 +1,13 @@
 /**
- * Metadata for script API symbols — consumed by the CodeMirror completion
- * source in ScriptPanel. Keep in sync with the `api` object in `script.ts`.
+ * Metadata for script API symbols — consumed by the script help modal and the
+ * "Copy for AI" prompt. Editor autocomplete comes from `scriptTypes.ts`
+ * instead. Keep both in sync with the `api` object in `script.ts`.
  */
 
 export type ApiKind = 'function' | 'variable' | 'namespace';
 
 /** Simplified return-type tag used to pick member completions after `x.` or `fn().`. */
-export type ApiReturnType = 'Room' | 'RoomArray' | 'Area' | 'AreaArray' | 'Env' | 'EnvArray' | 'Direction' | 'DirectionArray' | 'void' | 'number' | 'string' | 'boolean' | 'unknown';
+export type ApiReturnType = 'Room' | 'RoomArray' | 'Label' | 'LabelArray' | 'Area' | 'AreaArray' | 'Env' | 'EnvArray' | 'Direction' | 'DirectionArray' | 'void' | 'number' | 'string' | 'boolean' | 'unknown';
 
 export interface ApiEntry {
   name: string;
@@ -45,6 +46,18 @@ export const SCRIPT_API: ApiEntry[] = [
     info: "Full Direction name → short key used to index room.exitWeights / room.doors / room.customLines (e.g. 'north' → 'n', 'northeast' → 'ne'). 'up'/'down'/'in'/'out' map to themselves." },
   { name: 'getSelection', kind: 'function', signature: 'getSelection(): number[]',
     detail: 'Read', info: 'Ids of rooms currently selected in the editor. Empty array if no rooms are selected (including when the selection is an exit, label, etc.).', returns: 'unknown' },
+  { name: 'labels', kind: 'function', signature: 'labels(): Label[]',
+    detail: 'Read', info: 'Return a fresh snapshot array of every label on the map, across all areas.', returns: 'LabelArray' },
+  { name: 'findLabels', kind: 'function', signature: 'findLabels(pred: (l: Label) => boolean): Label[]',
+    detail: 'Read', info: "Return labels matching the predicate, e.g. findLabels(l => l.font.family === 'Arial' && l.font.size === 30).", returns: 'LabelArray' },
+  { name: 'label', kind: 'function', signature: 'label(areaId: number, id: number): Label | undefined',
+    detail: 'Read', info: 'Return a snapshot of one label, or undefined. Label ids are only unique within their area.', returns: 'Label' },
+  { name: 'getSelectedLabel', kind: 'function', signature: 'getSelectedLabel(): { areaId, id } | null',
+    detail: 'Read', info: 'The label selected in the editor, or null when the selection is not a label.', returns: 'unknown' },
+  { name: 'labelStyles', kind: 'function', signature: 'labelStyles(): { id, name }[]',
+    detail: 'Read', info: "Label styles available to updateLabel({ style }). 'plain' is the unstyled default.", returns: 'unknown' },
+  { name: 'labelPresets', kind: 'function', signature: 'labelPresets(): { id, name }[]',
+    detail: 'Read', info: 'Label presets available to applyLabelPreset().', returns: 'unknown' },
   { name: 'log', kind: 'function', signature: 'log(...args): void',
     detail: 'I/O', info: 'Append to the script Log panel.', returns: 'void' },
   { name: 'console', kind: 'namespace', detail: '{ log }',
@@ -97,11 +110,41 @@ export const SCRIPT_API: ApiEntry[] = [
     detail: 'Write',
     info: 'Remove a custom line from a room exit.',
     returns: 'void' },
+  { name: 'updateLabel', kind: 'function',
+    signature: 'updateLabel(areaId, id, patch: { text?, font?, x?, y?, width?, height?, fgColor?, bgColor?, outlineColor?, border?, padding?, textAlign?, style?, noScaling?, showOnTop?, fitToText? }): boolean',
+    detail: 'Write',
+    info: "Change any label properties at once; omitted fields are kept. font merges ({ font: { size: 24 } } keeps the family). Colours: '#rrggbb', '#rrggbbaa' or { r, g, b, alpha }. outlineColor / border / padding: null removes. border: { width, color? } — no colour follows the text colour. textAlign: 'left' | 'center' | 'right'. style: an id from labelStyles(). fitToText: true | 'width' | 'height' resizes the box to the text afterwards. The pixmap is re-rendered like a label-panel edit; image labels keep their picture. Returns true if anything changed.",
+    returns: 'boolean' },
+  { name: 'applyLabelPreset', kind: 'function', signature: 'applyLabelPreset(areaId, id, preset: string): boolean',
+    detail: 'Write', info: 'Apply a label preset by id or name (see labelPresets()) exactly as the preset buttons in the label panel do.', returns: 'boolean' },
   { name: 'directionBetween', kind: 'function',
     signature: 'directionBetween(fromId, toId): Direction | null',
     detail: 'Read',
     info: 'Cardinal direction between two rooms based on their map coordinates.',
     returns: 'Direction' },
+];
+
+/** Fields available on a Label snapshot, used as completions after `.` on a label variable. */
+export const LABEL_FIELDS: ApiEntry[] = [
+  { name: 'id', kind: 'variable', detail: 'number', info: 'Label id — unique within its area only.' },
+  { name: 'areaId', kind: 'variable', detail: 'number', info: 'Area the label belongs to.' },
+  { name: 'x', kind: 'variable', detail: 'number', info: 'X of the top-left corner (raw).' },
+  { name: 'y', kind: 'variable', detail: 'number', info: 'Y of the top-left corner (raw Mudlet, +y = north).' },
+  { name: 'z', kind: 'variable', detail: 'number', info: 'Z level.' },
+  { name: 'width', kind: 'variable', detail: 'number', info: 'Box width in map units.' },
+  { name: 'height', kind: 'variable', detail: 'number', info: 'Box height in map units.' },
+  { name: 'text', kind: 'variable', detail: 'string', info: 'Label text; one string, lines separated by newlines.' },
+  { name: 'font', kind: 'variable', detail: '{ family, size, bold, italic, underline, strikeout }', info: 'Font. size is in pixmap px.' },
+  { name: 'fgColor', kind: 'variable', detail: '{ r, g, b, alpha, hex, hexa }', info: "Text colour. hex is '#rrggbb', hexa '#rrggbbaa'." },
+  { name: 'bgColor', kind: 'variable', detail: '{ r, g, b, alpha, hex, hexa }', info: 'Background colour; alpha 0 is transparent.' },
+  { name: 'outlineColor', kind: 'variable', detail: '{ r, g, b, alpha, hex, hexa } | null', info: 'Text outline colour, or null.' },
+  { name: 'border', kind: 'variable', detail: '{ width, color } | null', info: 'Frame drawn around the box, or null.' },
+  { name: 'padding', kind: 'variable', detail: 'number | [h, v] | null', info: 'Inner padding in pixmap px; null means the default for the alignment.' },
+  { name: 'textAlign', kind: 'variable', detail: "'left' | 'center' | 'right'", info: 'Horizontal text alignment.' },
+  { name: 'style', kind: 'variable', detail: 'string', info: "Label style id; 'plain' when none." },
+  { name: 'noScaling', kind: 'variable', detail: 'boolean', info: 'Mudlet draws the label at a fixed pixel size instead of scaling it with the map.' },
+  { name: 'showOnTop', kind: 'variable', detail: 'boolean', info: 'Drawn above rooms rather than below.' },
+  { name: 'isImage', kind: 'variable', detail: 'boolean', info: 'The label shows an uploaded picture, not text.' },
 ];
 
 /** Fields available on an Area, used as completions after `.` on an area variable. */

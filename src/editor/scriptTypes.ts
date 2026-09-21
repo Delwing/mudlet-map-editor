@@ -78,6 +78,94 @@ declare interface Env {
   readonly rgb: string;
 }
 
+/** A label colour as scripts read it. */
+declare interface LabelColor {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  /** 0 = fully transparent, 255 = opaque. */
+  readonly alpha: number;
+  /** '#rrggbb'. */
+  readonly hex: string;
+  /** '#rrggbbaa'. */
+  readonly hexa: string;
+}
+
+declare interface LabelFont {
+  readonly family: string;
+  /** Font size in pixmap px. */
+  readonly size: number;
+  readonly bold: boolean;
+  readonly italic: boolean;
+  readonly underline: boolean;
+  readonly strikeout: boolean;
+}
+
+/** Frozen read-only snapshot of a label. Re-query via label() / findLabels() after mutations to see updates. */
+declare interface Label {
+  /** Label id — unique within its area only. */
+  readonly id: number;
+  readonly areaId: number;
+  /** X of the top-left corner (raw). */
+  readonly x: number;
+  /** Y of the top-left corner (raw Mudlet, +y = north). */
+  readonly y: number;
+  readonly z: number;
+  /** Box width in map units. */
+  readonly width: number;
+  /** Box height in map units. */
+  readonly height: number;
+  /** Label text; lines separated by newlines. */
+  readonly text: string;
+  readonly font: LabelFont;
+  readonly fgColor: LabelColor;
+  /** Background; alpha 0 is transparent. */
+  readonly bgColor: LabelColor;
+  readonly outlineColor: LabelColor | null;
+  /** Frame drawn around the box, or null. */
+  readonly border: { readonly width: number; readonly color: LabelColor } | null;
+  /** Inner padding in pixmap px; null means the default for the alignment. */
+  readonly padding: number | readonly [number, number] | null;
+  readonly textAlign: 'left' | 'center' | 'right';
+  /** Label style id; 'plain' when none. See labelStyles(). */
+  readonly style: string;
+  /** Mudlet draws the label at a fixed pixel size instead of scaling it with the map. */
+  readonly noScaling: boolean;
+  /** Drawn above rooms rather than below. */
+  readonly showOnTop: boolean;
+  /** The label shows an uploaded picture, not text. */
+  readonly isImage: boolean;
+}
+
+/** '#rrggbb', '#rrggbbaa' or { r, g, b, alpha? }. */
+declare type LabelColorInput = string | { r: number; g: number; b: number; alpha?: number };
+
+/** Properties updateLabel() can change. Omitted fields are kept. */
+declare interface LabelPatch {
+  text?: string;
+  /** Merged into the current font — { size: 24 } keeps the family. */
+  font?: Partial<{ family: string; size: number; bold: boolean; italic: boolean; underline: boolean; strikeout: boolean }>;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fgColor?: LabelColorInput;
+  bgColor?: LabelColorInput;
+  /** null removes the outline. */
+  outlineColor?: LabelColorInput | null;
+  /** null removes the border; without a colour it follows the text colour. */
+  border?: { width?: number; color?: LabelColorInput } | null;
+  /** Pixmap px: one value, [horizontal, vertical], or null for the default. */
+  padding?: number | [number, number] | null;
+  textAlign?: 'left' | 'center' | 'right';
+  /** A style id from labelStyles(), or 'plain'. */
+  style?: string;
+  noScaling?: boolean;
+  showOnTop?: boolean;
+  /** Resize the box to the (new) text afterwards: both axes, or just one. */
+  fitToText?: boolean | 'width' | 'height';
+}
+
 declare interface CustomLineColor {
   r: number; g: number; b: number; alpha?: number;
 }
@@ -126,6 +214,18 @@ declare const DIRS: readonly Direction[];
 declare const DIR_SHORT: Readonly<Record<Direction, string>>;
 /** Ids of rooms currently selected in the editor. Empty array if no rooms are selected. */
 declare function getSelection(): number[];
+/** Every label on the map, across all areas. */
+declare function labels(): Label[];
+/** Labels matching the predicate, e.g. findLabels(l => l.font.family === 'Arial' && l.font.size === 30). */
+declare function findLabels(pred: (l: Label) => boolean): Label[];
+/** One label, or undefined. Label ids are only unique within their area. */
+declare function label(areaId: number, id: number): Label | undefined;
+/** The label selected in the editor, or null when the selection is not a label. */
+declare function getSelectedLabel(): { areaId: number; id: number } | null;
+/** Label styles available to updateLabel({ style }). 'plain' is the unstyled default. */
+declare function labelStyles(): { id: string; name: string }[];
+/** Label presets (templates) available to applyLabelPreset(). */
+declare function labelPresets(): { id: string; name: string }[];
 
 // ── I/O ────────────────────────────────────────────────────────────────
 
@@ -173,4 +273,12 @@ declare function disconnect(fromId: number, dir: Direction, options?: { oneWay?:
 declare function setCustomLine(roomId: number, exitName: string, points: Array<[number, number]>, options?: CustomLineOptions): void;
 /** Remove a custom line from a room exit. */
 declare function removeCustomLine(roomId: number, exitName: string): void;
+/**
+ * Change any of a label's properties at once; omitted fields are kept. The
+ * pixmap is re-rendered like a label-panel edit; image labels keep their
+ * picture. Returns true if anything changed.
+ */
+declare function updateLabel(areaId: number, id: number, patch: LabelPatch): boolean;
+/** Apply a label preset (template) by id or name — see labelPresets(). Returns true if anything changed. */
+declare function applyLabelPreset(areaId: number, id: number, preset: string): boolean;
 `.trim();

@@ -7,6 +7,7 @@
 import {
   SCRIPT_API,
   ROOM_FIELDS,
+  LABEL_FIELDS,
   AREA_FIELDS,
   ENV_FIELDS,
   type ApiEntry,
@@ -68,6 +69,10 @@ ${writes.map(formatEntry).join('\n')}
 
 ${ROOM_FIELDS.map(formatField).join('\n')}
 
+## Label snapshot fields
+
+${LABEL_FIELDS.map(formatField).join('\n')}
+
 ## Area snapshot fields
 
 ${AREA_FIELDS.map(formatField).join('\n')}
@@ -82,6 +87,7 @@ ${ENV_FIELDS.map(formatField).join('\n')}
 - **Dry-run / preview:** return the candidate list *before* doing writes, so the user can confirm.
 - **Report results:** \`return hits.map(r => ({ id: r.id, name: r.name }))\` — shows as JSON.
 - **Operate on current view:** filter by \`r.area === currentAreaId && r.z === currentZ\`.
+- **Restyle labels:** \`for (const l of findLabels(l => l.font.family === 'Arial' && l.font.size === 30)) updateLabel(l.areaId, l.id, { font: { size: 24, bold: true }, fitToText: true });\`
 - **Infer a direction:** \`directionBetween(fromId, toId)\` or inspect \`r.x\` / \`r.y\` deltas.
 - **Iterate exits:** \`for (const d of DIRS) { if (r[d] >= 0) { ... } }\`.
 

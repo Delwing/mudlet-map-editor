@@ -1,10 +1,15 @@
 import type { MudletRoom, MudletColor } from '../mapIO';
-import { applyCommand, revertCommand } from './commands';
+import { applyCommand, commandGroup, labelDiffCommands, revertCommand } from './commands';
 import { store } from './store';
 import type { SceneHandle } from './scene';
-import type { Command, CustomLineSnapshot, Direction } from './types';
+import type { Command, CustomLineSnapshot, Direction, LabelBorder, LabelPadding, LabelSnapshot, LabelTextAlign } from './types';
 import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, OPPOSITE, normalizeCustomLineKey } from './types';
 import { inferDirection, is2DCardinal, getExit } from './mapHelpers';
+import { snapshotFromRawLabel } from './reader/EditorMapReader';
+import { labelSizeForText } from './labelPixmap';
+import { applyLabelPreset, getLabelPresets } from './labelPresets';
+import { getLabelStyles } from './labelStyles';
+import { PIXMAP_REGEN, pixmapRefFor } from './pixmapRefs';
 
 const MAX_COMMANDS = 1_000_000;
 
@@ -75,6 +80,55 @@ function stringifyReturn(value: unknown): string | undefined {
   } catch (err: any) {
     return `[unserialisable: ${err?.message ?? String(err)}]`;
   }
+}
+
+const LABEL_HEX = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+/** Label colours accept '#rrggbb', '#rrggbbaa' or { r, g, b, alpha? }; unlike rooms, alpha matters here. */
+function normalizeLabelColor(color: unknown, what: string): MudletColor {
+  if (typeof color === 'string') {
+    const m = LABEL_HEX.exec(color.trim());
+    if (!m) throw new Error(`${what}: invalid color '${color}' — expected '#rrggbb', '#rrggbbaa' or { r, g, b, alpha }`);
+    const hex = m[1];
+    return {
+      spec: 1,
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+      alpha: hex.length === 8 ? parseInt(hex.slice(6, 8), 16) : 255,
+    };
+  }
+  return normalizeColor(color);
+}
+
+const hex2 = (v: number) => v.toString(16).padStart(2, '0');
+
+/** A label colour as scripts see it: channels plus ready-to-compare hex strings. */
+function labelColorOut(c: MudletColor) {
+  const hex = `#${hex2(c.r)}${hex2(c.g)}${hex2(c.b)}`;
+  return Object.freeze({ r: c.r, g: c.g, b: c.b, alpha: c.alpha, hex, hexa: hex + hex2(c.alpha) });
+}
+
+/** Read-only snapshot of a label exposed to user scripts. Coordinates are raw Mudlet (+y = north). */
+function snapshotLabelForScript(s: LabelSnapshot, areaId: number): Readonly<Record<string, any>> {
+  return Object.freeze({
+    id: s.id,
+    areaId,
+    x: s.pos[0], y: s.pos[1], z: s.pos[2],
+    width: s.size[0], height: s.size[1],
+    text: s.text,
+    font: Object.freeze({ ...s.font }),
+    fgColor: labelColorOut(s.fgColor),
+    bgColor: labelColorOut(s.bgColor),
+    outlineColor: s.outlineColor ? labelColorOut(s.outlineColor) : null,
+    border: s.border ? Object.freeze({ width: s.border.width, color: labelColorOut(s.border.color) }) : null,
+    padding: s.padding ?? null,
+    textAlign: s.textAlign ?? 'center',
+    style: s.styleId ?? 'plain',
+    noScaling: s.noScaling,
+    showOnTop: s.showOnTop,
+    isImage: !!s.imageSrc,
+  });
 }
 
 /**
@@ -161,6 +215,42 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
     });
   };
 
+  const allLabels = () =>
+    Object.entries(map.labels).flatMap(([areaId, list]) =>
+      (list as any[]).map((raw) => ({ areaId: Number(areaId), snap: snapshotFromRawLabel(raw) })));
+
+  const assertLabel = (areaId: number, id: number, what: string): LabelSnapshot => {
+    const raw = map.labels[areaId]?.find((l: any) => l.id === id);
+    if (!raw) throw new Error(`${what}: label ${id} not found in area ${areaId}`);
+    return snapshotFromRawLabel(raw);
+  };
+
+  const fitSize = (label: LabelSnapshot, fit: unknown): [number, number] => {
+    if (!fit) return label.size;
+    const fitted = labelSizeForText(label);
+    if (fit === 'width') return [fitted[0], label.size[1]];
+    if (fit === 'height') return [label.size[0], fitted[1]];
+    return fitted;
+  };
+
+  /**
+   * Record the commands that turn `cur` into `next` — the same ones the label
+   * panel records — with the pixmap re-rendered last, once every property it
+   * depends on is in place. Image labels keep their picture.
+   */
+  const commitLabel = (areaId: number, cur: LabelSnapshot, next: LabelSnapshot): boolean => {
+    const cmds = labelDiffCommands(areaId, cur.id, cur, next);
+    const moved = next.pos[0] !== cur.pos[0] || next.pos[1] !== cur.pos[1];
+    if (moved) push({ kind: 'moveLabel', areaId, id: cur.id, from: [...cur.pos] as [number, number, number], to: [...next.pos] as [number, number, number] });
+    for (const c of cmds) push(c);
+    if (cmds.length > 0 && !cur.imageSrc) {
+      push({ kind: 'setLabelPixmap', areaId, id: cur.id, from: pixmapRefFor(cur.pixMap, cur), to: PIXMAP_REGEN });
+    }
+    return moved || cmds.length > 0;
+  };
+
+  const TEXT_ALIGNS: LabelTextAlign[] = ['left', 'center', 'right'];
+
   const fmt = (v: any): string => {
     if (v === undefined) return 'undefined';
     if (v === null) return 'null';
@@ -211,6 +301,19 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
       const sel = store.getState().selection;
       return sel && sel.kind === 'room' ? [...sel.ids] : [];
     },
+    labels: () => allLabels().map(({ areaId, snap }) => snapshotLabelForScript(snap, areaId)),
+    findLabels: (pred: (l: any) => boolean) =>
+      allLabels().map(({ areaId, snap }) => snapshotLabelForScript(snap, areaId)).filter(pred),
+    label: (areaId: number, id: number) => {
+      const raw = map.labels[areaId]?.find((l: any) => l.id === id);
+      return raw ? snapshotLabelForScript(snapshotFromRawLabel(raw), areaId) : undefined;
+    },
+    getSelectedLabel: (): { areaId: number; id: number } | null => {
+      const sel = store.getState().selection;
+      return sel && sel.kind === 'label' ? { areaId: sel.areaId, id: sel.id } : null;
+    },
+    labelStyles: () => getLabelStyles().map((s) => ({ id: s.id, name: s.name })),
+    labelPresets: () => getLabelPresets().map((p) => ({ id: p.id, name: p.name })),
     log,
     console: { log },
 
@@ -440,6 +543,75 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
         },
       });
     },
+
+    /**
+     * Change any of a label's properties in one go; fields left out stay as
+     * they are. `font` merges, so `{ font: { size: 24 } }` keeps the family.
+     * `fitToText` resizes the box to the (new) text afterwards. The pixmap is
+     * re-rendered to match, exactly as an edit in the label panel would.
+     * Returns true when anything changed.
+     */
+    updateLabel: (areaId: number, id: number, patch: Record<string, any>): boolean => {
+      const what = 'updateLabel';
+      const cur = assertLabel(areaId, id, what);
+      if (!patch || typeof patch !== 'object') throw new Error(`${what}: patch must be an object`);
+      const next: LabelSnapshot = { ...cur, pos: [...cur.pos] as [number, number, number], size: [...cur.size] as [number, number], font: { ...cur.font } };
+
+      if (patch.text !== undefined) next.text = String(patch.text);
+      if (patch.font !== undefined) {
+        if (typeof patch.font !== 'object' || patch.font === null) throw new Error(`${what}: font must be an object`);
+        for (const k of Object.keys(patch.font)) if (!(k in next.font)) throw new Error(`${what}: unknown font field '${k}'`);
+        next.font = { ...next.font, ...patch.font };
+      }
+      if (patch.x !== undefined) next.pos[0] = Number(patch.x);
+      if (patch.y !== undefined) next.pos[1] = Number(patch.y);
+      if (patch.width !== undefined) next.size[0] = Math.max(0.1, Number(patch.width));
+      if (patch.height !== undefined) next.size[1] = Math.max(0.1, Number(patch.height));
+      if (patch.fgColor !== undefined) next.fgColor = normalizeLabelColor(patch.fgColor, what);
+      if (patch.bgColor !== undefined) next.bgColor = normalizeLabelColor(patch.bgColor, what);
+      if (patch.outlineColor !== undefined) {
+        next.outlineColor = patch.outlineColor === null ? undefined : normalizeLabelColor(patch.outlineColor, what);
+      }
+      if (patch.border !== undefined) {
+        const b = patch.border;
+        next.border = b === null ? undefined : {
+          width: Number(b.width ?? cur.border?.width ?? 1),
+          // A border with no colour of its own follows the text colour, as in presets.
+          color: b.color !== undefined ? normalizeLabelColor(b.color, what) : { ...next.fgColor },
+        } satisfies LabelBorder;
+      }
+      if (patch.padding !== undefined) {
+        const p = patch.padding;
+        const ok = p === null || typeof p === 'number' || (Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number'));
+        if (!ok) throw new Error(`${what}: padding must be a number, [horizontal, vertical] or null`);
+        next.padding = p === null ? undefined : (p as LabelPadding);
+      }
+      if (patch.textAlign !== undefined) {
+        if (!TEXT_ALIGNS.includes(patch.textAlign)) throw new Error(`${what}: textAlign must be 'left', 'center' or 'right'`);
+        next.textAlign = patch.textAlign === 'center' ? undefined : patch.textAlign;
+      }
+      if (patch.style !== undefined) {
+        const style = String(patch.style);
+        if (style !== 'plain' && !getLabelStyles().some((s) => s.id === style)) {
+          throw new Error(`${what}: unknown style '${style}' — see labelStyles()`);
+        }
+        next.styleId = style === 'plain' ? undefined : style;
+      }
+      if (patch.noScaling !== undefined) next.noScaling = !!patch.noScaling;
+      if (patch.showOnTop !== undefined) next.showOnTop = !!patch.showOnTop;
+      next.size = fitSize(next, patch.fitToText);
+
+      return commitLabel(areaId, cur, next);
+    },
+
+    /** Apply a label preset (by id or name, see labelPresets()) the way the label panel's preset buttons do. */
+    applyLabelPreset: (areaId: number, id: number, preset: string): boolean => {
+      const what = 'applyLabelPreset';
+      const cur = assertLabel(areaId, id, what);
+      const p = getLabelPresets().find((x) => x.id === preset) ?? getLabelPresets().find((x) => x.name === preset);
+      if (!p) throw new Error(`${what}: unknown preset '${preset}' — see labelPresets()`);
+      return commitLabel(areaId, cur, applyLabelPreset(cur, p));
+    },
   };
 
   let returnValue: unknown;
@@ -449,9 +621,11 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
     const fn = new Function(...names, `"use strict";\n${code}`);
     returnValue = fn(...values);
   } catch (err: any) {
-    for (let i = cmds.length - 1; i >= 0; i--) {
-      try { revertCommand(map, cmds[i], scene); } catch {}
-    }
+    commandGroup(() => {
+      for (let i = cmds.length - 1; i >= 0; i--) {
+        try { revertCommand(map, cmds[i], scene); } catch {}
+      }
+    });
     scene.refresh();
     return {
       commandCount: 0,

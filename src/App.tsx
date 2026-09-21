@@ -22,7 +22,8 @@ import { initPeers, announceSelf } from './editor/peers';
 import { finishCustomLine, restorePendingCustomLine } from './editor/tools';
 import { snap } from './editor/coords';
 import type { Command, ToolId } from './editor/types';
-import { saveSessionAsync } from './editor/sessionSaver';
+import { flushSessionSave, scheduleSessionSave } from './editor/sessionSaver';
+import { collectPooledPixmaps } from './editor/pixmapRefs';
 import { loadFileIntoStore } from './editor/loadFile';
 import { builtInFormats, setMapFormats, matchFormatForFile, type MapFormat } from './editor/formats';
 import type { EditorPlugin, RoomPanelSection, ToolbarAction } from './editor/plugin';
@@ -282,17 +283,25 @@ export default function App({ plugins = [], title = 'Mudlet Map Editor' }: { plu
     el.style.cursor = cursorByTool[activeTool];
   }, [activeTool, hover, spaceHeld, pending]);
 
-  // Auto-save session to IndexedDB whenever the map changes (debounced).
+  // Auto-save session to IndexedDB whenever the map changes (throttled — see sessionSaver).
   useEffect(() => {
-    const { map, loaded, undo, currentAreaId, currentZ, sessionId } = store.getState();
+    const { map, loaded } = store.getState();
     if (!map || !loaded) return;
-    const timer = setTimeout(() => {
-      saveSessionAsync({ fileName: loaded.fileName, map, undoStack: undo, currentAreaId, currentZ, existingId: sessionId ?? undefined })
-        .then((id) => { if (!sessionId) store.setState({ sessionId: id }); })
-        .catch(console.error);
-    }, 1500);
-    return () => clearTimeout(timer);
+    scheduleSessionSave(() => {
+      const { map, loaded, undo, currentAreaId, currentZ, sessionId } = store.getState();
+      if (!map || !loaded) return null;
+      return {
+        fileName: loaded.fileName, map, undoStack: undo, pixmapPool: collectPooledPixmaps([undo]),
+        currentAreaId, currentZ, existingId: sessionId ?? undefined,
+      };
+    }, (id) => { if (!store.getState().sessionId) store.setState({ sessionId: id }); });
   }, [undoStack, redoStack]);
+
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flushSessionSave(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   // Keyboard accelerators.
   useEffect(() => {

@@ -14,6 +14,7 @@ import {
 } from './mapHelpers';
 import { store } from './store';
 import { canRepaintLive, generateLabelPixmap } from './labelPixmap';
+import { PIXMAP_REGEN, pixmapRefFor } from './pixmapRefs';
 import { applyLabelPreset, getLabelPreset } from './labelPresets';
 import {
   ROOM_SYMBOL_COLOR,
@@ -659,7 +660,8 @@ export const selectTool: Tool = {
           if (to !== pending.originPixMap) {
             ctx.scene.reader.setLabelPixmap(pending.areaId, pending.labelId, to);
             ctx.scene.refresh();
-            cmds.push({ kind: 'setLabelPixmap', areaId: pending.areaId, id: pending.labelId, from: pending.originPixMap, to });
+            const origin = { ...snap, pos: pending.originPos, size: pending.originSize };
+            cmds.push({ kind: 'setLabelPixmap', areaId: pending.areaId, id: pending.labelId, from: pixmapRefFor(pending.originPixMap, origin), to: PIXMAP_REGEN });
           }
         }
         store.setState((st) => ({

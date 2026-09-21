@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SCRIPT_API, ROOM_FIELDS, AREA_FIELDS, ENV_FIELDS, type ApiEntry } from '../../editor/scriptApiDocs';
+import { SCRIPT_API, ROOM_FIELDS, LABEL_FIELDS, AREA_FIELDS, ENV_FIELDS, type ApiEntry } from '../../editor/scriptApiDocs';
 import { buildAiPrompt } from '../../editor/scriptAiPrompt';
 
 interface Props {
@@ -91,6 +91,14 @@ export function ScriptHelpModal({ onClose }: Props) {
             snapshots don't auto-update.
           </p>
           <ApiTable entries={ROOM_FIELDS} />
+
+          <h3 className="help-section-title">Label snapshot fields</h3>
+          <p className="help-desc">
+            <code>labels()</code>, <code>findLabels(pred)</code>, and <code>label(areaId, id)</code> return
+            frozen snapshots with these fields. Change a label with <code>updateLabel</code> or{' '}
+            <code>applyLabelPreset</code>, then query it again to see the result.
+          </p>
+          <ApiTable entries={LABEL_FIELDS} />
 
           <h3 className="help-section-title">Area snapshot fields</h3>
           <p className="help-desc">

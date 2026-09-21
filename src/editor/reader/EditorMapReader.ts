@@ -395,7 +395,7 @@ function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, str
   }
 }
 
-function snapshotFromRawLabel(raw: any): LabelSnapshot {
+export function snapshotFromRawLabel(raw: any): LabelSnapshot {
   return {
     id: raw.id,
     pos: [...raw.pos] as [number, number, number],

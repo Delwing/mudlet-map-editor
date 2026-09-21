@@ -4,7 +4,9 @@ import { findNeighborsPointingAt, getExit } from './mapHelpers';
 import type { Command, NeighborEdit, Direction, LabelSnapshot } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
-import { dataUrlToBuffer, labelPaddingEq } from './labelPixmap';
+import { dataUrlToBuffer, generateLabelPixmap, labelPaddingEq } from './labelPixmap';
+import { resolvePixmapRef } from './pixmapRefs';
+import { snapshotFromRawLabel } from './reader/EditorMapReader';
 
 /**
  * Apply a pixmap data URL to a raw label, keeping `pixMap` (Buffer) and
@@ -15,6 +17,52 @@ import { dataUrlToBuffer, labelPaddingEq } from './labelPixmap';
 function applyRawLabelPixmap(l: any, dataUrl: string): void {
   l.pixMap = dataUrlToBuffer(dataUrl);
   l.pixMapBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+}
+
+/**
+ * Labels whose pixmap a command asked to re-render (`PIXMAP_REGEN`), held until
+ * the outermost apply/revert returns. Inside a batch the pixmap command is not
+ * the last to run on revert — the text or size it depends on reverts after it —
+ * so rendering on the spot would draw the half-reverted label.
+ */
+let commandDepth = 0;
+const pendingRegen: { map: MudletMap; scene?: SceneHandle | null; areaId: number; id: number }[] = [];
+
+function setLabelPixmapRef(map: MudletMap, scene: SceneHandle | null | undefined, areaId: number, id: number, ref: string): void {
+  const dataUrl = resolvePixmapRef(ref);
+  if (dataUrl === null) { pendingRegen.push({ map, scene, areaId, id }); return; }
+  if (scene?.reader) scene.reader.setLabelPixmap(areaId, id, dataUrl);
+  else { const l: any = map.labels[areaId]?.find((l: any) => l.id === id); if (l) applyRawLabelPixmap(l, dataUrl); }
+}
+
+function flushPendingRegen(): void {
+  const jobs = pendingRegen.splice(0);
+  const done = new Set<string>();
+  for (const { map, scene, areaId, id } of jobs) {
+    const key = `${areaId}:${id}`;
+    if (done.has(key)) continue;
+    done.add(key);
+    const raw: any = map.labels[areaId]?.find((l: any) => l.id === id);
+    if (!raw) continue;
+    const dataUrl = generateLabelPixmap(scene?.reader?.getLabelSnapshot(areaId, id) ?? snapshotFromRawLabel(raw));
+    if (scene?.reader) scene.reader.setLabelPixmap(areaId, id, dataUrl);
+    else applyRawLabelPixmap(raw, dataUrl);
+  }
+}
+
+/**
+ * Run several applies/reverts as one unit for pixmap purposes: re-renders wait
+ * until `run` returns. For callers that revert a list of commands one by one
+ * (e.g. rolling back a failed script) rather than as a single batch.
+ */
+export function commandGroup<T>(run: () => T): T {
+  return outermost(run);
+}
+
+function outermost<T>(run: () => T): T {
+  commandDepth++;
+  try { return run(); }
+  finally { if (--commandDepth === 0) flushPendingRegen(); }
 }
 
 function renameRoomIdInMap(map: MudletMap, fromId: number, toId: number): void {
@@ -159,6 +207,10 @@ function remapRoomIdInStore(fromId: number, toId: number): void {
  * responsible for triggering a rebuild.
  */
 export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle | null): { structural: boolean } {
+  return outermost(() => applyCommandInner(map, cmd, scene));
+}
+
+function applyCommandInner(map: MudletMap, cmd: Command, scene?: SceneHandle | null): { structural: boolean } {
   const reader = scene?.reader;
   switch (cmd.kind) {
     case 'moveRoom': {
@@ -476,8 +528,7 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
       return { structural: false };
     }
     case 'setLabelPixmap': {
-      if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.to);
-      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.to); }
+      setLabelPixmapRef(map, scene, cmd.areaId, cmd.id, cmd.to);
       return { structural: false };
     }
     case 'setLabelImageSrc': {
@@ -553,6 +604,10 @@ export function applyCommand(map: MudletMap, cmd: Command, scene?: SceneHandle |
 }
 
 export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle | null): { structural: boolean } {
+  return outermost(() => revertCommandInner(map, cmd, scene));
+}
+
+function revertCommandInner(map: MudletMap, cmd: Command, scene?: SceneHandle | null): { structural: boolean } {
   const reader = scene?.reader;
   switch (cmd.kind) {
     case 'moveRoom': {
@@ -873,8 +928,7 @@ export function revertCommand(map: MudletMap, cmd: Command, scene?: SceneHandle 
       return { structural: false };
     }
     case 'setLabelPixmap': {
-      if (reader) reader.setLabelPixmap(cmd.areaId, cmd.id, cmd.from);
-      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) applyRawLabelPixmap(l, cmd.from); }
+      setLabelPixmapRef(map, scene, cmd.areaId, cmd.id, cmd.from);
       return { structural: false };
     }
     case 'setLabelImageSrc': {

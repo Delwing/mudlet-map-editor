@@ -18,6 +18,7 @@ export interface SaveSessionRequest {
   currentAreaId: number | null;
   currentZ: number;
   existingId?: string;
+  pixmapPool?: Record<string, Uint8Array>;
 }
 
 export type SaveSessionResponse =
@@ -31,9 +32,9 @@ const ctx = self as unknown as {
 };
 
 ctx.onmessage = async (ev) => {
-  const { reqId, fileName, map, undoStack, currentAreaId, currentZ, existingId } = ev.data;
+  const { reqId, fileName, map, undoStack, currentAreaId, currentZ, existingId, pixmapPool } = ev.data;
   try {
-    const id = await saveSession(fileName, map, undoStack, currentAreaId, currentZ, existingId);
+    const id = await saveSession(fileName, map, undoStack, currentAreaId, currentZ, existingId, pixmapPool);
     ctx.postMessage({ reqId, id });
   } catch (err) {
     ctx.postMessage({ reqId, error: err instanceof Error ? err.message : String(err) });
