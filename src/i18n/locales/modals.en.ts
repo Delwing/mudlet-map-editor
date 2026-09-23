@@ -13,6 +13,7 @@ export const modalsEn = {
     width: 'Width',
     color: 'Color',
     areaName: 'Area name',
+    areaExitLabels: 'Area exit names',
     showOnMap: 'Show on map',
     rectangle: 'Rectangle',
     rounded: 'Rounded',

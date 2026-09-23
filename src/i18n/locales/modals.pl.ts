@@ -15,6 +15,7 @@ export const modalsPl: ModalsLocale = {
     width: 'Szerokość',
     color: 'Kolor',
     areaName: 'Nazwa obszaru',
+    areaExitLabels: 'Nazwy sąsiednich obszarów',
     showOnMap: 'Pokaż na mapie',
     rectangle: 'Prostokąt',
     rounded: 'Zaokrąglony',

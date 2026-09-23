@@ -13,6 +13,7 @@ import {
   is2DCardinal,
 } from './mapHelpers';
 import { store } from './store';
+import { revealRoom } from './navigate';
 import { canRepaintLive, generateLabelPixmap } from './labelPixmap';
 import { PIXMAP_REGEN, pixmapRefFor } from './pixmapRefs';
 import { applyLabelPreset, getLabelPreset } from './labelPresets';
@@ -92,6 +93,21 @@ function roomUnder(ctx: ToolContext, ev: { clientX: number; clientY: number }) {
   const hit = ctx.renderer.hitTester.pick(pt.x, pt.y);
   if (!hit || hit.kind !== 'room') return null;
   return ctx.scene.getRenderRoom(hit.id as number) ?? null;
+}
+
+/**
+ * The room an area-exit label under the pointer leads to, or null. The renderer
+ * draws one such label per cluster of exits into the same area (settings
+ * `areaExitLabels`) and tags it as an `areaExit` hit; its own click handler
+ * never sees the click, since the pointer controller keeps mouse events from it.
+ */
+function areaExitUnder(ctx: ToolContext, ev: { clientX: number; clientY: number }): number | null {
+  if (!ctx.settings.areaExitLabels) return null;
+  const c = mapCoord(ctx, ev);
+  const hit = ctx.renderer.hitTester.pick(c.x, c.y);
+  if (hit?.kind !== 'areaExit') return null;
+  const target = (hit.payload as { targetRoomId?: number } | undefined)?.targetRoomId ?? hit.id;
+  return typeof target === 'number' ? target : null;
 }
 
 /** Minimum render-space travel before an empty-space drag becomes a marquee (not a click). */
@@ -245,6 +261,13 @@ export const selectTool: Tool = {
         }
       }
       store.setState({ pending: null });
+      return true;
+    }
+
+    // An area-exit label: go to the room on the other side and select it there.
+    const areaExitTarget = areaExitUnder(ctx, ev);
+    if (areaExitTarget != null) {
+      revealRoom(areaExitTarget, { selection: { kind: 'room', ids: [areaExitTarget] }, hover: null });
       return true;
     }
 
@@ -1754,8 +1777,11 @@ function updateHover(ctx: ToolContext, ev: PointerEvent) {
   if (!ac) return;
   const c = mapCoord(ctx, ev);
   const room = roomUnder(ctx, ev);
+  const areaExitTarget = room ? null : areaExitUnder(ctx, ev);
   let target: HoverTarget = null;
-  if (room) {
+  if (areaExitTarget != null) {
+    target = { kind: 'areaExit', targetRoomId: areaExitTarget };
+  } else if (room) {
     const handleDir = handleDirFor(c, { x: room.x, y: room.y }, ctx.settings.roomSize);
     target = { kind: 'room', id: room.id, handleDir };
   } else {
@@ -1797,5 +1823,6 @@ function hoverEquals(a: HoverTarget, b: HoverTarget): boolean {
     return a.roomId === b.roomId && a.dir === b.dir;
   if (a.kind === 'label' && b.kind === 'label')
     return a.id === b.id && a.areaId === b.areaId;
+  if (a.kind === 'areaExit' && b.kind === 'areaExit') return a.targetRoomId === b.targetRoomId;
   return false;
 }

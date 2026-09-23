@@ -138,6 +138,7 @@ function remapRoomIdInStore(fromId: number, toId: number): void {
         case 'exit': return { ...hover, fromId: remapId(hover.fromId), toId: remapId(hover.toId) };
         case 'customLine': return { ...hover, roomId: remapId(hover.roomId) };
         case 'stub': return { ...hover, roomId: remapId(hover.roomId) };
+        case 'areaExit': return { ...hover, targetRoomId: remapId(hover.targetRoomId) };
         case 'label':
         case undefined:
           return hover;

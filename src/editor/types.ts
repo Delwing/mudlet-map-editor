@@ -171,6 +171,8 @@ export type HoverTarget =
   | { kind: 'customLine'; roomId: number; exitName: string }
   | { kind: 'stub'; roomId: number; dir: Direction }
   | { kind: 'label'; id: number; areaId: number }
+  /** The renderer's label naming the area a cluster of exits leads to; clicking it goes there. */
+  | { kind: 'areaExit'; targetRoomId: number }
   | null;
 
 export type PendingDrag = {

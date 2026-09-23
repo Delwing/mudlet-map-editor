@@ -25,6 +25,7 @@ export type PersistedRendererSettings = {
   emboss: boolean;
   backgroundColor: string;
   areaName: boolean;
+  areaExitLabels: boolean;
   hiddenRooms: HiddenRoomMode;
   /** Level-of-detail fallbacks for dense levels — see scene.ts. */
   lodEnabled: boolean;
@@ -44,6 +45,7 @@ const DEFAULTS: PersistedRendererSettings = {
   emboss: false,
   backgroundColor: '#000000',
   areaName: false,
+  areaExitLabels: true,
   hiddenRooms: 'dashed',
   lodEnabled: true,
   lodRoomBudget: 16000,
@@ -78,6 +80,7 @@ export function applyRendererSettings(scene: SceneHandle, settings: Partial<Pers
   if (settings.emboss !== undefined) s.emboss = settings.emboss;
   if (settings.backgroundColor !== undefined) s.backgroundColor = settings.backgroundColor;
   if (settings.areaName !== undefined) s.areaName = settings.areaName;
+  if (settings.areaExitLabels !== undefined) s.areaExitLabels = settings.areaExitLabels;
   if (settings.hiddenRooms !== undefined) s.hiddenRooms = settings.hiddenRooms;
   if (settings.lodEnabled !== undefined) {
     s.lodEnabled = settings.lodEnabled;
@@ -120,6 +123,7 @@ export function RendererSettingsModal({
   const [lineColor, setLineColor] = useState(toHex(s?.lineColor ?? DEFAULTS.lineColor));
   const [backgroundColor, setBackgroundColor] = useState(toHex(s?.backgroundColor ?? DEFAULTS.backgroundColor));
   const [areaName, setAreaName] = useState(s?.areaName ?? DEFAULTS.areaName);
+  const [areaExitLabels, setAreaExitLabels] = useState(s?.areaExitLabels ?? DEFAULTS.areaExitLabels);
   const [hiddenRooms, setHiddenRooms] = useState<HiddenRoomMode>(s?.hiddenRooms ?? DEFAULTS.hiddenRooms);
   const [lodEnabled, setLodEnabled] = useState(s?.lodEnabled ?? DEFAULTS.lodEnabled);
   const [lodRoomBudget, setLodRoomBudget] = useState(s?.lodRoomBudget ?? DEFAULTS.lodRoomBudget);
@@ -144,6 +148,7 @@ export function RendererSettingsModal({
     setLineColor(DEFAULTS.lineColor);
     setBackgroundColor(DEFAULTS.backgroundColor);
     setAreaName(DEFAULTS.areaName);
+    setAreaExitLabels(DEFAULTS.areaExitLabels);
     setHiddenRooms(DEFAULTS.hiddenRooms);
     setLodEnabled(DEFAULTS.lodEnabled);
     setLodRoomBudget(DEFAULTS.lodRoomBudget);
@@ -315,6 +320,14 @@ export function RendererSettingsModal({
               <span className="settings-label">{t('renderer.areaName')}</span>
               <label className="settings-checkbox">
                 <input type="checkbox" checked={areaName} onChange={(e) => { setAreaName(e.target.checked); applyLive({ areaName: e.target.checked }); }} />
+                {t('renderer.showOnMap')}
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <span className="settings-label">{t('renderer.areaExitLabels')}</span>
+              <label className="settings-checkbox">
+                <input type="checkbox" checked={areaExitLabels} onChange={(e) => { setAreaExitLabels(e.target.checked); applyLive({ areaExitLabels: e.target.checked }); }} />
                 {t('renderer.showOnMap')}
               </label>
             </div>

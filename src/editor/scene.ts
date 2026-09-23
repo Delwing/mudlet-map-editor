@@ -38,6 +38,9 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   settings.highlightCurrentRoom = false;
   settings.areaName = false;
   settings.labelRenderMode = 'image'
+  // Name the area each cluster of cross-area exits leads to; the select tool
+  // makes those labels clickable (see areaExitUnder in tools.ts).
+  settings.areaExitLabels = true;
   // Keep hidden rooms on-screen so they stay selectable/editable — the renderer's
   // default "hide" mode would drop them (and their exits) from the scene entirely.
   settings.hiddenRooms = 'dashed';
