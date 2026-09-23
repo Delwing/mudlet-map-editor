@@ -200,6 +200,7 @@ export const panelsEn = {
       setLabelFont: 'Set font on label #{{id}}',
       setLabelOutlineColor: 'Set outline color on label #{{id}}',
       setLabelStyle: 'Set style on label #{{id}}',
+      setLabelStyleParams: 'Set style settings on label #{{id}}',
       setLabelAlign: 'Set alignment on label #{{id}}',
       setLabelPadding: 'Set padding on label #{{id}}',
       setLabelBorder: 'Set border on label #{{id}}',

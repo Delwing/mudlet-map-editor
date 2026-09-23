@@ -2,13 +2,13 @@ import type { MudletRoom, MudletColor } from '../mapIO';
 import { applyCommand, commandGroup, labelDiffCommands, revertCommand } from './commands';
 import { store } from './store';
 import type { SceneHandle } from './scene';
-import type { Command, CustomLineSnapshot, Direction, LabelBorder, LabelPadding, LabelSnapshot, LabelTextAlign } from './types';
+import type { Command, CustomLineSnapshot, Direction, LabelBorder, LabelPadding, LabelSnapshot, LabelStyleParams, LabelTextAlign } from './types';
 import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, OPPOSITE, normalizeCustomLineKey } from './types';
 import { inferDirection, is2DCardinal, getExit } from './mapHelpers';
 import { snapshotFromRawLabel } from './reader/EditorMapReader';
 import { labelSizeForText } from './labelPixmap';
 import { applyLabelPreset, getLabelPresets } from './labelPresets';
-import { getLabelStyles } from './labelStyles';
+import { getLabelStyle, getLabelStyles, resolveStyleParams } from './labelStyles';
 import { PIXMAP_REGEN, pixmapRefFor } from './pixmapRefs';
 
 const MAX_COMMANDS = 1_000_000;
@@ -125,6 +125,7 @@ function snapshotLabelForScript(s: LabelSnapshot, areaId: number): Readonly<Reco
     padding: s.padding ?? null,
     textAlign: s.textAlign ?? 'center',
     style: s.styleId ?? 'plain',
+    styleParams: Object.freeze({ ...resolveStyleParams(getLabelStyle(s.styleId), s) }),
     noScaling: s.noScaling,
     showOnTop: s.showOnTop,
     isImage: !!s.imageSrc,
@@ -312,7 +313,7 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
       const sel = store.getState().selection;
       return sel && sel.kind === 'label' ? { areaId: sel.areaId, id: sel.id } : null;
     },
-    labelStyles: () => getLabelStyles().map((s) => ({ id: s.id, name: s.name })),
+    labelStyles: () => getLabelStyles().map((s) => ({ id: s.id, name: s.name, params: (s.params ?? []).map((p) => ({ ...p })) })),
     labelPresets: () => getLabelPresets().map((p) => ({ id: p.id, name: p.name })),
     log,
     console: { log },
@@ -595,7 +596,21 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
         if (style !== 'plain' && !getLabelStyles().some((s) => s.id === style)) {
           throw new Error(`${what}: unknown style '${style}' — see labelStyles()`);
         }
-        next.styleId = style === 'plain' ? undefined : style;
+        const styleId = style === 'plain' ? undefined : style;
+        // Settings belong to a style; switching it starts the new one from its defaults.
+        if (styleId !== cur.styleId) next.styleParams = undefined;
+        next.styleId = styleId;
+      }
+      if (patch.styleParams !== undefined) {
+        const p = patch.styleParams;
+        if (p !== null && (typeof p !== 'object' || Array.isArray(p))) throw new Error(`${what}: styleParams must be an object or null`);
+        if (p === null) next.styleParams = undefined;
+        else {
+          for (const [k, v] of Object.entries(p)) {
+            if (typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'boolean') throw new Error(`${what}: styleParams.${k} must be a string, number or boolean`);
+          }
+          next.styleParams = { ...next.styleParams, ...(p as LabelStyleParams) };
+        }
       }
       if (patch.noScaling !== undefined) next.noScaling = !!patch.noScaling;
       if (patch.showOnTop !== undefined) next.showOnTop = !!patch.showOnTop;

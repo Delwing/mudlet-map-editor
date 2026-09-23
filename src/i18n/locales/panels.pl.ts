@@ -202,6 +202,7 @@ export const panelsPl: PanelsLocale = {
       setLabelFont: 'Ustaw czcionkę etykiety #{{id}}',
       setLabelOutlineColor: 'Ustaw kolor obrysu etykiety #{{id}}',
       setLabelStyle: 'Ustaw styl etykiety #{{id}}',
+      setLabelStyleParams: 'Ustaw opcje stylu etykiety #{{id}}',
       setLabelAlign: 'Ustaw wyrównanie etykiety #{{id}}',
       setLabelPadding: 'Ustaw margines etykiety #{{id}}',
       setLabelBorder: 'Ustaw ramkę etykiety #{{id}}',

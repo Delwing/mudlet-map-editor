@@ -1,7 +1,7 @@
 import type { MudletMap, MudletRoom, MudletColor } from '../../mapIO';
 import type { LabelSnapshot } from '../types';
 import { buildRendererInput } from '../../mapIO';
-import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelBorder, type LabelFont, type LabelPadding } from '../types';
+import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, DEFAULT_LABEL_FONT, type Direction, type LabelBorder, type LabelFont, type LabelPadding, type LabelStyleParams } from '../types';
 import { getLabelPolicy } from '../labelPolicy';
 import { generateLabelPixmap, dataUrlToBuffer, normaliseLabelPadding, PX_PER_UNIT } from '../labelPixmap';
 import { PlaneRoomIndex, INFINITE_BOUNDS, type Bounds } from './PlaneRoomIndex';
@@ -246,6 +246,18 @@ function ensurePixMapBase64(l: any): void {
   }
 }
 
+/** A stored `editor.labelStyleParams_N`: a flat JSON object of strings, numbers and booleans. Anything else is dropped. */
+function parseStyleParams(raw: string): LabelStyleParams | null {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const out: LabelStyleParams = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /**
  * Label font and text-outline colour have no slot in the binary format, so
  * they live in area userData:
@@ -299,6 +311,11 @@ function hydrateLabelFromAreaUserData(rawLabel: any, areaUserData: Record<string
     rawLabel.border = { width: Math.max(2, Math.round(shortSide * 0.04)), color: { ...rawLabel.fgColor } };
   } else if (styleValue) {
     rawLabel.styleId = styleValue;
+  }
+  const paramsRaw = areaUserData[`editor.labelStyleParams_${id}`];
+  if (paramsRaw) {
+    const params = parseStyleParams(paramsRaw);
+    if (params) rawLabel.styleParams = params;
   }
   const alignValue = areaUserData[`editor.labelAlign_${id}`];
   if (alignValue === 'left' || alignValue === 'right' || alignValue === 'center') rawLabel.textAlign = alignValue;
@@ -375,6 +392,11 @@ function syncLabelToAreaUserData(rawLabel: any, areaUserData: Record<string, str
   } else {
     delete areaUserData[`editor.labelStyle_${id}`];
   }
+  if (rawLabel.styleParams && Object.keys(rawLabel.styleParams).length > 0) {
+    areaUserData[`editor.labelStyleParams_${id}`] = JSON.stringify(rawLabel.styleParams);
+  } else {
+    delete areaUserData[`editor.labelStyleParams_${id}`];
+  }
   if (rawLabel.textAlign && rawLabel.textAlign !== 'center') {
     areaUserData[`editor.labelAlign_${id}`] = rawLabel.textAlign;
   } else {
@@ -408,6 +430,7 @@ export function snapshotFromRawLabel(raw: any): LabelSnapshot {
     font: raw.font ? { ...raw.font } : { ...DEFAULT_LABEL_FONT },
     outlineColor: raw.outlineColor ? { ...raw.outlineColor } : undefined,
     styleId: raw.styleId,
+    styleParams: raw.styleParams ? { ...raw.styleParams } : undefined,
     textAlign: raw.textAlign,
     padding: raw.padding,
     border: raw.border ? { width: raw.border.width, color: { ...raw.border.color } } : undefined,
@@ -1137,6 +1160,7 @@ export class EditorMapReader {
       font: { ...snapshot.font },
       outlineColor: snapshot.outlineColor ? { ...snapshot.outlineColor } : undefined,
       styleId: snapshot.styleId,
+      styleParams: snapshot.styleParams ? { ...snapshot.styleParams } : undefined,
       textAlign: snapshot.textAlign,
       padding: snapshot.padding,
       border: snapshot.border ? { width: snapshot.border.width, color: { ...snapshot.border.color } } : undefined,
@@ -1157,6 +1181,7 @@ export class EditorMapReader {
       delete areaUserData[`system.labelFont_${labelId}`];
       delete areaUserData[`system.labelOutlineColor_${labelId}`];
       delete areaUserData[`editor.labelStyle_${labelId}`];
+      delete areaUserData[`editor.labelStyleParams_${labelId}`];
       delete areaUserData[`editor.labelAlign_${labelId}`];
       delete areaUserData[`editor.labelPadding_${labelId}`];
       delete areaUserData[`editor.labelBorder_${labelId}`];
@@ -1226,6 +1251,15 @@ export class EditorMapReader {
     const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
     if (!raw) return;
     raw.styleId = styleId;
+    const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
+    if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
+    this.syncRendererLabels(areaId);
+  }
+
+  setLabelStyleParams(areaId: number, labelId: number, params: LabelStyleParams | undefined): void {
+    const raw: any = this.raw.labels[areaId]?.find(l => l.id === labelId);
+    if (!raw) return;
+    raw.styleParams = params ? { ...params } : undefined;
     const areaUserData = this.raw.areas[areaId]?.userData as Record<string, string> | undefined;
     if (areaUserData) syncLabelToAreaUserData(raw, areaUserData);
     this.syncRendererLabels(areaId);

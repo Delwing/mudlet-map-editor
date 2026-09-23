@@ -1,5 +1,5 @@
 import type { MudletColor } from '../mapIO';
-import { DEFAULT_LABEL_FONT, type LabelFont, type LabelPadding, type LabelSnapshot, type LabelTextAlign } from './types';
+import { DEFAULT_LABEL_FONT, type LabelFont, type LabelPadding, type LabelSnapshot, type LabelStyleParams, type LabelTextAlign } from './types';
 import { generateLabelPixmap, labelSizeForText } from './labelPixmap';
 
 /** A colour in a preset: `#rrggbb`, `#rrggbbaa`, or a raw Mudlet colour. */
@@ -29,6 +29,9 @@ export interface LabelPreset {
   font?: Partial<LabelFont>;
   /** Registered {@link import('./labelStyles').LabelStyle} id, or 'plain'. */
   styleId?: string;
+  /** Values for the style's own settings (see `LabelStyle.params`). A preset that sets
+   *  `styleId` replaces the label's settings with these; params left out take their defaults. */
+  styleParams?: LabelStyleParams;
   textAlign?: LabelTextAlign;
   /** Inner padding in pixmap px — one value for all sides, or `[horizontal, vertical]`. */
   padding?: LabelPadding;
@@ -73,7 +76,13 @@ export function applyLabelPreset(label: LabelSnapshot, preset: LabelPreset): Lab
     next.outlineColor = preset.outlineColor === null ? undefined : toMudletColor(preset.outlineColor);
   }
   if (preset.font) next.font = { ...next.font, ...preset.font };
-  if (preset.styleId !== undefined) next.styleId = preset.styleId === 'plain' ? undefined : preset.styleId;
+  if (preset.styleId !== undefined) {
+    next.styleId = preset.styleId === 'plain' ? undefined : preset.styleId;
+    // Settings belong to a style, so a preset naming one brings its own.
+    next.styleParams = preset.styleParams ? { ...preset.styleParams } : undefined;
+  } else if (preset.styleParams) {
+    next.styleParams = { ...next.styleParams, ...preset.styleParams };
+  }
   if (preset.textAlign !== undefined) next.textAlign = preset.textAlign === 'center' ? undefined : preset.textAlign;
   if (preset.padding !== undefined) next.padding = preset.padding;
   if (preset.noScaling !== undefined) next.noScaling = preset.noScaling;

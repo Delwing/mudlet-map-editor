@@ -71,6 +71,7 @@ export function commandLabel(cmd: Command, t: CmdT): string {
     case 'setLabelFont': return t('history.cmd.setLabelFont', { id: cmd.id });
     case 'setLabelOutlineColor': return t('history.cmd.setLabelOutlineColor', { id: cmd.id });
     case 'setLabelStyle': return t('history.cmd.setLabelStyle', { id: cmd.id });
+    case 'setLabelStyleParams': return t('history.cmd.setLabelStyleParams', { id: cmd.id });
     case 'setLabelAlign': return t('history.cmd.setLabelAlign', { id: cmd.id });
     case 'setLabelPadding': return t('history.cmd.setLabelPadding', { id: cmd.id });
     case 'setLabelBorder': return t('history.cmd.setLabelBorder', { id: cmd.id });

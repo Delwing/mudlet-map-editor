@@ -38,6 +38,12 @@ export const DEFAULT_LABEL_PADDING = 8;
  */
 export type LabelPadding = number | [number, number];
 
+/** A value of one of a label style's own settings (see `LabelStyle.params`). */
+export type LabelStyleParamValue = string | number | boolean;
+
+/** A label's values for its style's own settings, keyed by param id. */
+export type LabelStyleParams = Record<string, LabelStyleParamValue>;
+
 export type LabelSnapshot = {
   id: number;
   pos: [number, number, number];
@@ -52,6 +58,8 @@ export type LabelSnapshot = {
   outlineColor?: MudletColor;
   /** Registered label style id (see labelStyles.ts); undefined / 'plain' = default rendering. Persisted to area userData as editor.labelStyle_N. */
   styleId?: string;
+  /** Values for the style's own settings; a param left out takes its default. Persisted as editor.labelStyleParams_N (JSON). */
+  styleParams?: LabelStyleParams;
   /** Horizontal text alignment; undefined = 'center' (default). Persisted to area userData as editor.labelAlign_N. */
   textAlign?: LabelTextAlign;
   /** Inner padding kept free of text; undefined = {@link DEFAULT_LABEL_PADDING}. Persisted as editor.labelPadding_N ("8", or "8|4" for split axes). */
@@ -384,6 +392,7 @@ export type Command =
   | { kind: 'setLabelFont'; areaId: number; id: number; from: LabelFont; to: LabelFont }
   | { kind: 'setLabelOutlineColor'; areaId: number; id: number; from: MudletColor | undefined; to: MudletColor | undefined }
   | { kind: 'setLabelStyle'; areaId: number; id: number; from: string | undefined; to: string | undefined }
+  | { kind: 'setLabelStyleParams'; areaId: number; id: number; from: LabelStyleParams | undefined; to: LabelStyleParams | undefined }
   | { kind: 'setLabelAlign'; areaId: number; id: number; from: LabelTextAlign | undefined; to: LabelTextAlign | undefined }
   | { kind: 'setLabelPadding'; areaId: number; id: number; from: LabelPadding | undefined; to: LabelPadding | undefined }
   | { kind: 'setLabelBorder'; areaId: number; id: number; from: LabelBorder | undefined; to: LabelBorder | undefined }

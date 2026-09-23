@@ -117,7 +117,9 @@ export interface EditorPlugin {
   swatchSets?(): SwatchSet[];
   /** Contribute label appearance styles selectable per-label in the label panel.
    *  Each style hooks into the pixmap draw pipeline (transformText →
-   *  drawBackground → drawText → decorate); see {@link LabelStyle}. */
+   *  drawBackground → drawText → decorate → drawBorder), may declare its own
+   *  settings for the panel to edit, and can reuse the built-in stages via
+   *  `c.default`; see {@link LabelStyle}. */
   labelStyles?(): LabelStyle[];
   /** Contribute label presets — named bundles of font/colour/border/style settings
    *  offered in the label panel and used as the starting point for new labels.

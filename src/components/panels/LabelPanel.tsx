@@ -4,7 +4,7 @@ import { labelDiffCommands, pushBatch, pushCommand } from '../../editor/commands
 import { store, useEditorState, saveUserSettings } from '../../editor/store';
 import type { SceneHandle } from '../../editor/scene';
 import type { MudletColor } from '../../mapIO';
-import type { Command, LabelPadding, LabelBorder, LabelFont, LabelSnapshot, LabelTextAlign } from '../../editor/types';
+import type { Command, LabelPadding, LabelBorder, LabelFont, LabelSnapshot, LabelStyleParamValue, LabelTextAlign } from '../../editor/types';
 import {
   PX_PER_UNIT,
   fontSizeToFit,
@@ -14,7 +14,7 @@ import {
   labelSizeForText,
   resolveLabelPadding,
 } from '../../editor/labelPixmap';
-import { getLabelStyles } from '../../editor/labelStyles';
+import { getLabelStyle, getLabelStyles, resolveStyleParams, styleUses, type LabelStyleParam } from '../../editor/labelStyles';
 import { applyLabelPreset, getLabelPresets, renderLabelPresetPreview, type LabelPreset } from '../../editor/labelPresets';
 import { CheckboxField, Field, ColorSwatch, mudletColorToHex, hexToMudletColor } from '../panelShared';
 import { warningKey } from './MapPanel';
@@ -99,6 +99,55 @@ function PresetRow({ presets, activeId, onApply, onClear }: {
   );
 }
 
+/** Short stand-in for the label's text in option previews: its first word, so the shape stays readable at thumbnail size. */
+const WHITESPACE = /\s+/;
+
+function previewText(text: string): string {
+  const word = text.trim().split(WHITESPACE)[0] ?? '';
+  return word ? word.slice(0, 10) : 'Abc';
+}
+
+/**
+ * A choice setting shown as pictures: each option is the label itself, drawn
+ * by its style with that option, around a short sample of its text. Easier to
+ * spot and to choose from than a list of names when the options are looks.
+ */
+function EnumParamPicker({ label, param, value, onPick }: {
+  label: LabelSnapshot;
+  param: Extract<LabelStyleParam, { type: 'enum' }>;
+  value: string;
+  onPick: (value: string) => void;
+}) {
+  // Everything that shows in a preview, and nothing that doesn't — the pixmap
+  // itself changes on every edit and would re-render them all for nothing.
+  const key = JSON.stringify([label.styleId, label.styleParams, label.font, label.fgColor, label.bgColor,
+    label.outlineColor, label.border, label.padding, label.textAlign, previewText(label.text)]);
+  const previews = useMemo(() => param.options.map((o) => {
+    const sample: LabelSnapshot = { ...label, text: previewText(label.text), noScaling: false, styleParams: { ...label.styleParams, [param.id]: o.value } };
+    return generateLabelPixmap({ ...sample, size: labelSizeForText(sample) });
+  }), [key, param]);
+
+  return (
+    <div className="field label-style-param">
+      <span className="label">{param.name}</span>
+      <div className="label-preset-strip">
+        {param.options.map((o, i) => (
+          <button
+            key={o.value}
+            type="button"
+            className={`label-preset${o.value === value ? ' active' : ''}`}
+            title={o.name}
+            onClick={() => onPick(o.value)}
+          >
+            <img src={previews[i]} alt="" />
+            <span>{o.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const { t } = useTranslation('panels');
   const dataVersion = useEditorState((s) => s.dataVersion);
@@ -142,6 +191,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const colorSessionRef = useRef<LabelSnapshot | null>(null);
   const outlineSessionRef = useRef<LabelSnapshot | null>(null);
   const borderSessionRef = useRef<LabelSnapshot | null>(null);
+  const paramSessionRef = useRef<LabelSnapshot | null>(null);
 
   // A session normally commits on the picker's blur — but the click that ends
   // one is usually a click on the map, which changes the selection and unmounts
@@ -189,6 +239,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     scene.reader.setLabelColors(selection.areaId, selection.id, next.fgColor, next.bgColor);
     scene.reader.setLabelOutlineColor(selection.areaId, selection.id, next.outlineColor);
     scene.reader.setLabelBorder(selection.areaId, selection.id, next.border);
+    scene.reader.setLabelStyleParams(selection.areaId, selection.id, next.styleParams);
     scene.reader.setLabelPixmap(selection.areaId, selection.id, generateLabelPixmap(next));
     scene.refresh();
   };
@@ -214,7 +265,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   flushSessionsRef.current = () => {
     const cur = current();
     if (!cur) return;
-    for (const ref of [colorSessionRef, outlineSessionRef, borderSessionRef]) {
+    for (const ref of [colorSessionRef, outlineSessionRef, borderSessionRef, paramSessionRef]) {
       if (ref.current) commitSession(ref, cur);
     }
   };
@@ -255,6 +306,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   const startColorSession = () => { if (!colorSessionRef.current) colorSessionRef.current = snap; };
   const startOutlineSession = () => { if (!outlineSessionRef.current) outlineSessionRef.current = snap; };
   const startBorderSession = () => { if (!borderSessionRef.current) borderSessionRef.current = snap; };
+  const startParamSession = () => { if (!paramSessionRef.current) paramSessionRef.current = snap; };
 
   const commitNoScaling = (val: boolean) => {
     const scene = sceneRef.current;
@@ -280,8 +332,35 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
     if (!scene || !cur) return;
     const to = styleId === 'plain' ? undefined : styleId;
     if ((cur.styleId ?? undefined) === to) return;
-    const next = { ...cur, styleId: to };
-    pushBatch([{ kind: 'setLabelStyle', areaId: selection.areaId, id: selection.id, from: cur.styleId, to }, ...pixmapCmd(next)], scene);
+    // Settings belong to the style they were made for, so they go with it.
+    const next = { ...cur, styleId: to, styleParams: undefined };
+    const cmds: Command[] = [{ kind: 'setLabelStyle', areaId: selection.areaId, id: selection.id, from: cur.styleId, to }];
+    if (cur.styleParams) cmds.push({ kind: 'setLabelStyleParams', areaId: selection.areaId, id: selection.id, from: cur.styleParams, to: undefined });
+    pushBatch([...cmds, ...pixmapCmd(next)], scene);
+    scene.refresh();
+    store.bumpData();
+  };
+
+  const withParam = (label: LabelSnapshot, id: string, value: LabelStyleParamValue): LabelSnapshot =>
+    ({ ...label, styleParams: { ...label.styleParams, [id]: value } });
+
+  const commitStyleParam = (id: string, value: LabelStyleParamValue) => {
+    const scene = sceneRef.current;
+    const cur = current();
+    if (!scene || !cur || cur.styleParams?.[id] === value) return;
+    let next = withParam(cur, id, value);
+    const cmds: Command[] = [{ kind: 'setLabelStyleParams', areaId: selection.areaId, id: selection.id, from: cur.styleParams, to: next.styleParams }];
+    // A setting can move the text's insets (a slope, an arrow end). A box that
+    // was fitted to its text stays fitted; one sized by hand is left alone.
+    const fitted = labelSizeForText(cur);
+    if (cur.text && fitted[0] === cur.size[0] && fitted[1] === cur.size[1]) {
+      const size = labelSizeForText(next);
+      if (size[0] !== cur.size[0] || size[1] !== cur.size[1]) {
+        next = { ...next, size };
+        cmds.push({ kind: 'setLabelSize', areaId: selection.areaId, id: selection.id, from: cur.size, to: size });
+      }
+    }
+    pushBatch([...cmds, ...pixmapCmd(next)], scene);
     scene.refresh();
     store.bumpData();
   };
@@ -441,6 +520,59 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
   };
 
   const isImageMode = !!snap.imageSrc;
+  const style = getLabelStyle(snap.styleId);
+  const styleParams = resolveStyleParams(style, snap);
+  const uses = (control: Parameters<typeof styleUses>[1]) => styleUses(style, control);
+
+  /** One control per setting the style declares, built from the declaration. */
+  const renderStyleParam = (p: LabelStyleParam) => {
+    const value = styleParams[p.id];
+    switch (p.type) {
+      case 'enum':
+        return <EnumParamPicker key={p.id} label={snap} param={p} value={String(value)} onPick={(v) => commitStyleParam(p.id, v)} />;
+      case 'number':
+        return (
+          <Field key={p.id} label={p.name}>
+            <input
+              type="number"
+              min={p.min}
+              max={p.max}
+              step={p.step ?? 1}
+              defaultValue={Number(value)}
+              key={`param-${p.id}-${selection.id}-${String(value)}`}
+              onBlur={(e) => {
+                const v = parseFloat(e.target.value);
+                if (Number.isFinite(v)) commitStyleParam(p.id, Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, v)));
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              style={{ width: 70 }}
+            />
+          </Field>
+        );
+      case 'bool':
+        return <CheckboxField key={p.id} checked={value === true} onChange={(v) => commitStyleParam(p.id, v)} description={p.name} />;
+      case 'color': {
+        const hex = String(value);
+        return (
+          <Field key={p.id} label={p.name} as="div">
+            <ColorSwatch
+              color={hex}
+              onActivate={startParamSession}
+              inputKey={`param-${p.id}-${selection.id}-${hex}`}
+              inputProps={{
+                defaultValue: hex,
+                onChange: (e) => { startParamSession(); preview(withParam(snap, p.id, (e.target as HTMLInputElement).value)); },
+                onBlur: (e) => {
+                  const cur = current();
+                  if (cur) commitSession(paramSessionRef, withParam(cur, p.id, (e.target as HTMLInputElement).value));
+                },
+              }}
+            />
+          </Field>
+        );
+      }
+    }
+  };
   const resolvedPadding = resolveLabelPadding(snap);
   const paddingKey = `${resolvedPadding.x}-${resolvedPadding.y}`;
   const fgHex = mudletColorToHex(snap.fgColor);
@@ -510,6 +642,23 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
         />
       )}
 
+      {!isImageMode && (
+        <div className="label-style-box">
+          <Field label={t('label.style')}>
+            <select
+              value={snap.styleId ?? 'plain'}
+              onChange={(e) => commitStyle(e.target.value)}
+              style={{ flex: 1 }}
+            >
+              {getLabelStyles().map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </Field>
+          {style.params?.map(renderStyleParam)}
+        </div>
+      )}
+
       <div className="field-row">
         <Field label={t('label.width')}>
           <input
@@ -551,6 +700,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
 
       {!isImageMode && (
         <div className="field-row">
+          {uses('padding') && <>
           <Field label={t('label.paddingX')}>
             <input
               type="number"
@@ -577,6 +727,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               style={{ width: 70 }}
             />
           </Field>
+          </>}
           <button title={t('label.fitToTextTitle')} onClick={handleFitToText} disabled={!snap.text}>
             {t('label.fitToText')}
           </button>
@@ -621,18 +772,6 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
           />
         </Field>
 
-        <Field label={t('label.style')}>
-          <select
-            value={snap.styleId ?? 'plain'}
-            onChange={(e) => commitStyle(e.target.value)}
-            style={{ flex: 1 }}
-          >
-            {getLabelStyles().map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </Field>
-
         <div style={{ display: 'flex', gap: 8 }}>
           <Field label={t('label.textColor')} as="div">
             <ColorSwatch
@@ -650,7 +789,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               }}
             />
           </Field>
-          <Field label={t('label.bgColor')} as="div">
+          {uses('background') && <Field label={t('label.bgColor')} as="div">
             <ColorSwatch
               color={bgHex}
               onActivate={startColorSession}
@@ -667,10 +806,10 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
                 },
               }}
             />
-          </Field>
+          </Field>}
         </div>
 
-        <Field label={t('label.bgAlpha')}>
+        {uses('background') && <Field label={t('label.bgAlpha')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
             <input
               type="range"
@@ -699,7 +838,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
               {bgAlphaDraft}
             </span>
           </div>
-        </Field>
+        </Field>}
 
         <Field label={t('label.font')} as="div">
           <FontPicker
@@ -753,7 +892,7 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 4, borderLeft: '1px solid var(--border, #444)', paddingLeft: 8 }}>
+            {uses('align') && <div style={{ display: 'flex', gap: 4, borderLeft: '1px solid var(--border, #444)', paddingLeft: 8 }}>
               {(['left', 'center', 'right'] as const).map((value) => {
                 const active = (snap.textAlign ?? 'center') === value;
                 const title = value === 'left' ? t('label.alignLeft') : value === 'right' ? t('label.alignRight') : t('label.alignCenter');
@@ -775,10 +914,11 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
                   </button>
                 );
               })}
-            </div>
+            </div>}
           </div>
         </Field>
 
+        {uses('outline') && <>
         <Field label={t('label.outlineColor')} as="div">
           <ColorSwatch
             color={outlineHex}
@@ -830,14 +970,15 @@ export function LabelPanel({ selection, sceneRef }: LabelPanelProps) {
             </span>
           </div>
         </Field>
+        </>}
 
-        <CheckboxField
+        {uses('border') && <CheckboxField
           checked={!!snap.border}
           onChange={(on) => commitBorder(on ? { width: defaultBorderWidth(snap), color: { ...snap.fgColor } } : undefined)}
           description={t('label.border')}
-        />
+        />}
 
-        {snap.border && <>
+        {uses('border') && snap.border && <>
           <div className="field-row">
             <Field label={t('label.borderWidth')}>
               <input

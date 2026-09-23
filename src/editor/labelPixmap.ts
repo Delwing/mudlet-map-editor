@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
-import type { LabelPadding, LabelSnapshot } from './types';
-import { getLabelStyle, type LabelDrawContext, type LabelMeasureContext } from './labelStyles';
+import type { LabelPadding, LabelSnapshot, LabelStyleParams } from './types';
+import { getLabelStyle, resolveStyleParams, type LabelDrawContext, type LabelInsets, type LabelMeasureContext, type LabelStyle } from './labelStyles';
 import { resolveSupersample } from './labelPolicy';
 
 export const PX_PER_UNIT = 64;
@@ -112,11 +112,28 @@ function visibleBorderWidth(label: LabelSnapshot): number {
 }
 
 /**
+ * Where text may go in a `width` × `height` px box: padding and border on
+ * every edge, plus whatever the style's `contentInsets` keeps clear.
+ */
+function labelTextBox(label: LabelSnapshot, style: LabelStyle, params: LabelStyleParams, width: number, height: number): LabelInsets {
+  const pad = resolveLabelPadding(label);
+  const b = visibleBorderWidth(label);
+  const extra = style.contentInsets?.({ label, params, width, height }) ?? {};
+  const side = (v: number | undefined) => (Number.isFinite(v) ? Math.max(0, v as number) : 0);
+  return {
+    left: pad.x + b + side(extra.left),
+    right: pad.x + b + side(extra.right),
+    top: pad.y + b + side(extra.top),
+    bottom: pad.y + b + side(extra.bottom),
+  };
+}
+
+/**
  * Built-in text layout: centered horizontally and vertically, multi-line split
  * on '\n', with manual underline/strikeout so they work across all browsers.
  * Exposed to styles via `LabelDrawContext.defaultDrawText`.
  */
-function drawDefaultText(ctx: CanvasRenderingContext2D, label: LabelSnapshot, text: string, pw: number, ph: number): void {
+function drawDefaultText(ctx: CanvasRenderingContext2D, label: LabelSnapshot, text: string, pw: number, ph: number, box: LabelInsets): void {
   if (!text) return;
   const { font } = label;
   ctx.font = labelFontString(font);
@@ -124,15 +141,14 @@ function drawDefaultText(ctx: CanvasRenderingContext2D, label: LabelSnapshot, te
   ctx.textBaseline = 'middle';
 
   const align = label.textAlign ?? 'center';
-  const pad = resolveLabelPadding(label).x + visibleBorderWidth(label);
-  const maxW = Math.max(1, pw - pad * 2);
-  const anchorX = align === 'left' ? pad : align === 'right' ? pw - pad : pw / 2;
+  const maxW = Math.max(1, pw - box.left - box.right);
+  const anchorX = align === 'left' ? box.left : align === 'right' ? pw - box.right : box.left + maxW / 2;
   ctx.textAlign = align;
 
   const lines = text.split('\n');
   const lineHeight = font.size * LINE_HEIGHT_FACTOR;
   const totalTextH = lines.length * lineHeight;
-  const startY = (ph - totalTextH) / 2 + lineHeight / 2
+  const startY = box.top + (ph - box.top - box.bottom - totalTextH) / 2 + lineHeight / 2
     + middleBaselineInkOffset(ctx, lines[0], lines[lines.length - 1]);
 
   for (let i = 0; i < lines.length; i++) {
@@ -178,11 +194,11 @@ function drawBorder(ctx: CanvasRenderingContext2D, label: LabelSnapshot, pw: num
  * × PX_PER_UNIT) and return a PNG data URL.
  *
  * The label's registered style (looked up by `label.styleId`) hooks into the
- * draw pipeline: transformText → drawBackground → drawText → decorate. Any
- * stage a style doesn't override falls back to the built-in behavior, so the
- * default ('plain' / no style) is byte-identical to the un-styled render.
- * The border is a label property rather than part of a style, so it is stroked
- * last and every style can carry one.
+ * draw pipeline: transformText → drawBackground → drawText → decorate →
+ * drawBorder. Any stage a style doesn't override falls back to the built-in
+ * behavior, so the default ('plain' / no style) is byte-identical to the
+ * un-styled render. Each stage runs between a save and a restore, so a clip or
+ * transform one stage sets can't leak into the next.
  */
 export function generateLabelPixmap(label: LabelSnapshot): string {
   const canvas = document.createElement('canvas');
@@ -199,36 +215,47 @@ export function generateLabelPixmap(label: LabelSnapshot): string {
   ctx.scale(ss, ss);
 
   const style = getLabelStyle(label.styleId);
-  const text = style.transformText ? style.transformText(label.text, label) : label.text;
+  const params = resolveStyleParams(style, label);
+  const text = style.transformText ? style.transformText(label.text, label, params) : label.text;
+  const box = labelTextBox(label, style, params, pw, ph);
 
+  const defaults = {
+    background: () => {
+      ctx.fillStyle = mudletColorToCss(label.bgColor);
+      ctx.fillRect(0, 0, pw, ph);
+    },
+    text: () => drawDefaultText(ctx, label, text, pw, ph, box),
+    border: () => drawBorder(ctx, label, pw, ph),
+  };
   const drawCtx: LabelDrawContext = {
     ctx,
     width: pw,
     height: ph,
     label,
     text,
+    params,
+    box,
     padding: (() => { const p = resolveLabelPadding(label), b = visibleBorderWidth(label); return { x: p.x + b, y: p.y + b }; })(),
-    defaultDrawText: () => drawDefaultText(ctx, label, text, pw, ph),
+    borderWidth: visibleBorderWidth(label),
+    default: defaults,
+    defaultDrawText: defaults.text,
     colorToCss: mudletColorToCss,
   };
+  const stage = (draw: () => void) => { ctx.save(); try { draw(); } finally { ctx.restore(); } };
 
-  // Background — default fills the whole rect with the label bg color.
-  if (style.drawBackground) {
-    style.drawBackground(drawCtx);
-  } else {
-    ctx.fillStyle = mudletColorToCss(label.bgColor);
-    ctx.fillRect(0, 0, pw, ph);
-  }
+  stage(() => (style.drawBackground ? style.drawBackground(drawCtx) : defaults.background()));
 
   // Text — a style may fully take over by returning true from drawText.
   if (text) {
-    const handled = style.drawText ? style.drawText(drawCtx) === true : false;
-    if (!handled) drawDefaultText(ctx, label, text, pw, ph);
+    stage(() => {
+      const handled = style.drawText ? style.drawText(drawCtx) === true : false;
+      if (!handled) defaults.text();
+    });
   }
 
-  // Decoration runs last, even for empty text (e.g. a glow on a blank label).
-  style.decorate?.(drawCtx);
-  drawBorder(ctx, label, pw, ph);
+  // Decoration runs even for empty text (e.g. a glow on a blank label).
+  if (style.decorate) stage(() => style.decorate!(drawCtx));
+  stage(() => (style.drawBorder ? style.drawBorder(drawCtx) : defaults.border()));
 
   return canvas.toDataURL('image/png');
 }
@@ -259,7 +286,8 @@ export function measureLabelText(label: LabelSnapshot): { width: number; height:
   const ctx = getMeasureContext();
   if (!ctx) return { width: 0, height: 0 };
   const style = getLabelStyle(label.styleId);
-  const text = style.transformText ? style.transformText(label.text, label) : label.text;
+  const params = resolveStyleParams(style, label);
+  const text = style.transformText ? style.transformText(label.text, label, params) : label.text;
 
   const defaultMeasure = () => {
     if (!text) return { width: 0, height: 0 };
@@ -272,33 +300,50 @@ export function measureLabelText(label: LabelSnapshot): { width: number; height:
   };
 
   if (!style.measureText) return defaultMeasure();
-  const c: LabelMeasureContext = { ctx, label, text, fontString: labelFontString, defaultMeasure };
+  const c: LabelMeasureContext = { ctx, label, text, params, fontString: labelFontString, defaultMeasure };
   return style.measureText(c);
 }
 
 /**
  * Label box size (in map units) that exactly holds the current text plus its
- * padding and border — what the panel's "fit to text" writes.
+ * padding, border and the style's content insets — what the panel's "fit to
+ * text" writes.
  */
 export function labelSizeForText(label: LabelSnapshot): [number, number] {
-  const pad = resolveLabelPadding(label);
-  const border = visibleBorderWidth(label);
-  const { width, height } = measureLabelText(label);
+  const style = getLabelStyle(label.styleId);
+  const params = resolveStyleParams(style, label);
+  const text = measureLabelText(label);
+  let box = labelTextBox(label, style, params, 0, 0);
+  let w = text.width + box.left + box.right;
+  let h = text.height + box.top + box.bottom;
+  // Insets may follow the box they sit in (a slant runs with the height), so
+  // settle the height, then the width at that height. A few rounds converge
+  // for any inset that grows slower than the box does.
+  if (style.contentInsets) {
+    for (let i = 0; i < 8; i++) {
+      box = labelTextBox(label, style, params, w, h);
+      h = text.height + box.top + box.bottom;
+      box = labelTextBox(label, style, params, w, h);
+      w = text.width + box.left + box.right;
+    }
+  }
   const toUnits = (px: number) => Math.max(0.1, Math.round((px / PX_PER_UNIT) * 100) / 100);
-  return [toUnits(width + (pad.x + border) * 2), toUnits(height + (pad.y + border) * 2)];
+  return [toUnits(w), toUnits(h)];
 }
 
 /**
- * Largest font size whose text still fits the label's box, padding and border
- * included — what the panel's "auto-fit" writes.
+ * Largest font size whose text still fits the label's box, padding, border and
+ * content insets included — what the panel's "auto-fit" writes.
  */
 export function fontSizeToFit(label: LabelSnapshot): number {
   const ctx = getMeasureContext();
   if (!ctx || !label.text) return label.font.size;
-  const pad = resolveLabelPadding(label);
-  const border = visibleBorderWidth(label);
-  const availW = Math.round(label.size[0] * PX_PER_UNIT) - (pad.x + border) * 2;
-  const availH = Math.round(label.size[1] * PX_PER_UNIT) - (pad.y + border) * 2;
+  const pw = Math.round(label.size[0] * PX_PER_UNIT);
+  const ph = Math.round(label.size[1] * PX_PER_UNIT);
+  const style = getLabelStyle(label.styleId);
+  const box = labelTextBox(label, style, resolveStyleParams(style, label), pw, ph);
+  const availW = pw - box.left - box.right;
+  const availH = ph - box.top - box.bottom;
   if (availW <= 0 || availH <= 0) return label.font.size;
 
   const lineCount = label.text.split('\n').length;

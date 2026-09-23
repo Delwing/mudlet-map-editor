@@ -129,6 +129,8 @@ declare interface Label {
   readonly textAlign: 'left' | 'center' | 'right';
   /** Label style id; 'plain' when none. See labelStyles(). */
   readonly style: string;
+  /** The style's own settings, defaults filled in. See labelStyles() for what each style has. */
+  readonly styleParams: Readonly<Record<string, string | number | boolean>>;
   /** Mudlet draws the label at a fixed pixel size instead of scaling it with the map. */
   readonly noScaling: boolean;
   /** Drawn above rooms rather than below. */
@@ -158,8 +160,10 @@ declare interface LabelPatch {
   /** Pixmap px: one value, [horizontal, vertical], or null for the default. */
   padding?: number | [number, number] | null;
   textAlign?: 'left' | 'center' | 'right';
-  /** A style id from labelStyles(), or 'plain'. */
+  /** A style id from labelStyles(), or 'plain'. Switching style resets its settings. */
   style?: string;
+  /** Merged into the style's settings; null resets them to the defaults. */
+  styleParams?: Record<string, string | number | boolean> | null;
   noScaling?: boolean;
   showOnTop?: boolean;
   /** Resize the box to the (new) text afterwards: both axes, or just one. */
@@ -223,7 +227,12 @@ declare function label(areaId: number, id: number): Label | undefined;
 /** The label selected in the editor, or null when the selection is not a label. */
 declare function getSelectedLabel(): { areaId: number; id: number } | null;
 /** Label styles available to updateLabel({ style }). 'plain' is the unstyled default. */
-declare function labelStyles(): { id: string; name: string }[];
+declare function labelStyles(): {
+  id: string;
+  name: string;
+  /** The style's own settings, for updateLabel({ styleParams }). */
+  params: { id: string; name: string; type: 'enum' | 'number' | 'bool' | 'color'; default: string | number | boolean; options?: { value: string; name: string }[]; min?: number; max?: number; step?: number }[];
+}[];
 /** Label presets (templates) available to applyLabelPreset(). */
 declare function labelPresets(): { id: string; name: string }[];
 

@@ -1,12 +1,20 @@
 import type { MudletColor } from '../mapIO';
-import type { LabelFont, LabelSnapshot } from './types';
+import type { LabelFont, LabelSnapshot, LabelStyleParamValue, LabelStyleParams } from './types';
 import { inkBlockHeight, middleBaselineInkOffset } from './labelPixmap';
+
+/** Distance in pixmap px from each edge of the label box. */
+export interface LabelInsets {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
 
 /**
  * Drawing context handed to a {@link LabelStyle} hook. It exposes the live
  * 2D canvas context (already DPR-scaled, so draw in logical px), the label
- * rect, the label snapshot, the (possibly transformed) text, and helpers for
- * reusing the built-in rendering.
+ * rect, the label snapshot, the (possibly transformed) text, the style's own
+ * settings, and the built-in rendering of every stage for a style to reuse.
  */
 export interface LabelDrawContext {
   /** DPR-scaled 2D context. Draw in logical pixels (0..width, 0..height). */
@@ -19,12 +27,38 @@ export interface LabelDrawContext {
   label: LabelSnapshot;
   /** Text after `transformText` has run (defaults to `label.text`). */
   text: string;
-  /** Inset to keep text clear of, per axis — the label's padding plus any border. */
+  /** The style's settings for this label, every declared param filled in (defaults included). */
+  params: Readonly<LabelStyleParams>;
+  /** Where text may go: padding, border and the style's `contentInsets`, per edge. */
+  box: LabelInsets;
+  /** Inset to keep text clear of, per axis — padding plus border. Kept for older
+   *  styles; `box` also carries `contentInsets` and differs per edge. */
   padding: { x: number; y: number };
-  /** Run the built-in centered multi-line text layout (font, outline, underline/strikeout). */
+  /** Border stroke width that actually paints, 0 when the label has none. */
+  borderWidth: number;
+  /** The built-in rendering of each stage, to call before, after or instead of your own. */
+  default: {
+    /** Fill the whole rect with the label's background colour. */
+    background(): void;
+    /** The built-in multi-line text layout inside `box` (font, outline, underline/strikeout). */
+    text(): void;
+    /** Stroke the label's border flush inside the rect. */
+    border(): void;
+  };
+  /** Same as `default.text()`. */
   defaultDrawText(): void;
   /** Convert a Mudlet color to a CSS `rgba()` string. */
   colorToCss(c: MudletColor): string;
+}
+
+/** Context for {@link LabelStyle.contentInsets}: the box, not yet drawn. */
+export interface LabelLayoutContext {
+  label: LabelSnapshot;
+  params: Readonly<LabelStyleParams>;
+  /** Box width in pixmap px. */
+  width: number;
+  /** Box height in pixmap px. */
+  height: number;
 }
 
 /**
@@ -38,6 +72,8 @@ export interface LabelMeasureContext {
   label: LabelSnapshot;
   /** Text after `transformText` has run. */
   text: string;
+  /** The style's settings for this label, defaults included. */
+  params: Readonly<LabelStyleParams>;
   /** CSS `font` shorthand for the label's font at a given size. */
   fontString(font: LabelFont, size?: number): string;
   /** Size of the text under the built-in layout. */
@@ -45,31 +81,89 @@ export interface LabelMeasureContext {
 }
 
 /**
+ * One setting a style declares for itself. The label panel builds a control
+ * for each, the label stores the values (`LabelSnapshot.styleParams`), and the
+ * draw hooks read them back, defaults filled in, as `c.params`.
+ */
+export type LabelStyleParam = { id: string; name: string } & (
+  | { type: 'enum'; options: { value: string; name: string }[]; default: string }
+  | { type: 'number'; default: number; min?: number; max?: number; step?: number }
+  | { type: 'bool'; default: boolean }
+  /** '#rrggbb'. */
+  | { type: 'color'; default: string }
+);
+
+/** Label-panel controls a style can switch off when it draws that part its own way. */
+export type LabelStyleControl = 'background' | 'outline' | 'border' | 'padding' | 'align';
+
+/**
  * A registered label appearance. Plugins contribute these via the
  * `labelStyles()` plugin hook; the label stores the chosen style by `id`.
  *
- * Every hook is optional — omitted stages fall back to the default rendering,
- * so a style only overrides what it cares about. The draw order is:
- *   transformText → drawBackground → drawText → decorate
- * The label's border, being a label property rather than part of a style, is
- * stroked after all of them.
+ * A style can own the whole label: every stage is a hook, and the built-in
+ * rendering of each is on `c.default`, so a style decides stage by stage
+ * whether to reuse it, wrap it or skip it. Every hook is optional — an omitted
+ * stage renders the default way. The draw order is:
+ *   transformText → drawBackground → drawText → decorate → drawBorder
  */
 export interface LabelStyle {
   /** Stable id persisted on the label and in area userData. */
   id: string;
   /** Human-readable name shown in the label panel's style dropdown. */
   name: string;
+  /** The style's own settings, shown in the label panel under the style. */
+  params?: LabelStyleParam[];
+  /** Panel controls this style has no use for; `false` hides one. Everything shows by default. */
+  uses?: Partial<Record<LabelStyleControl, boolean>>;
   /** Transform the raw text before layout (e.g. UPPERCASE). */
-  transformText?(text: string, label: LabelSnapshot): string;
+  transformText?(text: string, label: LabelSnapshot, params: Readonly<LabelStyleParams>): string;
+  /** Extra room text keeps off each edge, on top of padding and border — the
+   *  run of a slanted side, a ribbon's notch. Honoured by the built-in text
+   *  layout, by "fit to text" and by "auto-fit". Fitting sizes the height first,
+   *  so side insets may follow the height; keep top/bottom independent of the
+   *  width, or fitting only approximates them. */
+  contentInsets?(c: LabelLayoutContext): Partial<LabelInsets>;
   /** Replace the default background fill. When omitted, the label bg color fills the rect. */
   drawBackground?(c: LabelDrawContext): void;
   /** Draw the text. Return `true` to fully replace the built-in layout; otherwise the default runs. */
   drawText?(c: LabelDrawContext): boolean | void;
   /** Final pass drawn on top of background + text — glow, shadow, ornaments, etc. */
   decorate?(c: LabelDrawContext): void;
+  /** Replace the border stroke — e.g. to follow a shape the background drew. Runs
+   *  whether or not the label has a border; `c.borderWidth` is 0 when it has none. */
+  drawBorder?(c: LabelDrawContext): void;
   /** Measure the laid-out text. Needed only by styles whose `drawText` lays text
    *  out differently from the built-in, so sizing to the text stays accurate. */
   measureText?(c: LabelMeasureContext): { width: number; height: number };
+}
+
+function paramValueFits(param: LabelStyleParam, value: LabelStyleParamValue | undefined): boolean {
+  switch (param.type) {
+    case 'enum': return typeof value === 'string' && param.options.some((o) => o.value === value);
+    case 'number': return typeof value === 'number' && Number.isFinite(value);
+    case 'bool': return typeof value === 'boolean';
+    case 'color': return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+  }
+}
+
+/**
+ * A label's settings for its style, every declared param present: the label's
+ * own value where it holds a usable one, the param's default otherwise. Values
+ * for params the style doesn't declare are passed through untouched.
+ */
+export function resolveStyleParams(style: LabelStyle, label: LabelSnapshot): LabelStyleParams {
+  const out: LabelStyleParams = { ...label.styleParams };
+  for (const p of style.params ?? []) {
+    const v = out[p.id];
+    if (!paramValueFits(p, v)) { out[p.id] = p.default; continue; }
+    if (p.type === 'number') out[p.id] = Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, v as number));
+  }
+  return out;
+}
+
+/** Whether a style shows a given label-panel control. */
+export function styleUses(style: LabelStyle, control: LabelStyleControl): boolean {
+  return style.uses?.[control] !== false;
 }
 
 /** The built-in default: plain text, no extra styling. Equivalent to no style. */
@@ -123,7 +217,7 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
   name: 'Caps + Big Initials',
   transformText: (text) => text.toUpperCase(),
   drawText(c) {
-    const { ctx, width, height, label, text } = c;
+    const { ctx, width, height, label, text, box } = c;
     const { font } = label;
     const bigSize = font.size;
     const smallSize = capsSmallSize(font.size);
@@ -142,13 +236,12 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
     ctx.textAlign = 'left';
 
     const align = label.textAlign ?? 'center';
-    const pad = c.padding.x;
 
     const lines = text.split('\n');
     const lineHeight = bigSize * 1.25;
     // Measured against the largest glyph on the line, which is what sets its ascent.
     ctx.font = fontStr(capsLineMaxSize(lines[0], bigSize, smallSize));
-    const startY = (height - lines.length * lineHeight) / 2 + lineHeight / 2
+    const startY = box.top + (height - box.top - box.bottom - lines.length * lineHeight) / 2 + lineHeight / 2
       + middleBaselineInkOffset(ctx, lines[0], lines[lines.length - 1]);
 
     for (let i = 0; i < lines.length; i++) {
@@ -157,7 +250,7 @@ const CAPS_BIG_INITIALS_STYLE: LabelStyle = {
       let lineW = 0;
       for (const s of segs) { ctx.font = fontStr(s.size); lineW += ctx.measureText(s.ch).width; }
 
-      let x = align === 'left' ? pad : align === 'right' ? width - pad - lineW : (width - lineW) / 2;
+      let x = align === 'left' ? box.left : align === 'right' ? width - box.right - lineW : box.left + (width - box.left - box.right - lineW) / 2;
       const lineCenter = startY + i * lineHeight;
       for (const s of segs) {
         ctx.font = fontStr(s.size);
@@ -226,4 +319,10 @@ export function getLabelStyle(id: string | undefined): LabelStyle {
     if (registry[i].id === id) return registry[i];
   }
   return PLAIN_STYLE;
+}
+
+/** Whether two labels' style settings match; no settings and an empty set are the same. */
+export function styleParamsEq(a: LabelStyleParams | undefined, b: LabelStyleParams | undefined): boolean {
+  const ka = Object.keys(a ?? {}), kb = Object.keys(b ?? {});
+  return ka.length === kb.length && ka.every((k) => b !== undefined && a![k] === b[k]);
 }

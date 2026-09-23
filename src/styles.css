@@ -5724,3 +5724,13 @@ kbd {
   font-size: 14px; line-height: 1; padding: 0 3px; cursor: pointer;
 }
 .label-preset-clear:hover { opacity: 1; }
+
+/* A label style's own settings, framed and placed right under the presets so
+   they read as part of the label's look rather than one more field. */
+.label-style-box {
+  margin-bottom: 10px; padding: 8px 8px 2px;
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 4px;
+  background: rgba(255,255,255,0.03);
+}
+.side-panel .label-style-box > .field:first-child { margin-top: 0; }
+.label-style-param .label-preset { min-width: 0; }

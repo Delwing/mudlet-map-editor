@@ -5,6 +5,7 @@ import type { Command, NeighborEdit, Direction, LabelSnapshot } from './types';
 import { DIR_SHORT, DIR_INDEX, CARDINAL_DIRECTIONS } from './types';
 import type { SceneHandle } from './scene';
 import { dataUrlToBuffer, generateLabelPixmap, labelPaddingEq } from './labelPixmap';
+import { styleParamsEq } from './labelStyles';
 import { resolvePixmapRef } from './pixmapRefs';
 import { snapshotFromRawLabel } from './reader/EditorMapReader';
 
@@ -512,6 +513,11 @@ function applyCommandInner(map: MudletMap, cmd: Command, scene?: SceneHandle | n
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.styleId = cmd.to; }
       return { structural: false };
     }
+    case 'setLabelStyleParams': {
+      if (reader) reader.setLabelStyleParams(cmd.areaId, cmd.id, cmd.to);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.styleParams = cmd.to ? { ...cmd.to } : undefined; }
+      return { structural: false };
+    }
     case 'setLabelAlign': {
       if (reader) reader.setLabelAlign(cmd.areaId, cmd.id, cmd.to);
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.textAlign = cmd.to; }
@@ -912,6 +918,11 @@ function revertCommandInner(map: MudletMap, cmd: Command, scene?: SceneHandle | 
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.styleId = cmd.from; }
       return { structural: false };
     }
+    case 'setLabelStyleParams': {
+      if (reader) reader.setLabelStyleParams(cmd.areaId, cmd.id, cmd.from);
+      else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.styleParams = cmd.from ? { ...cmd.from } : undefined; }
+      return { structural: false };
+    }
     case 'setLabelAlign': {
       if (reader) reader.setLabelAlign(cmd.areaId, cmd.id, cmd.from);
       else { const l: any = map.labels[cmd.areaId]?.find((l: any) => l.id === cmd.id); if (l) l.textAlign = cmd.from; }
@@ -1038,6 +1049,9 @@ export function labelDiffCommands(areaId: number, id: number, from: LabelSnapsho
   }
   if ((from.styleId ?? undefined) !== (to.styleId ?? undefined)) {
     cmds.push({ kind: 'setLabelStyle', areaId, id, from: from.styleId, to: to.styleId });
+  }
+  if (!styleParamsEq(from.styleParams, to.styleParams)) {
+    cmds.push({ kind: 'setLabelStyleParams', areaId, id, from: from.styleParams, to: to.styleParams });
   }
   if ((from.textAlign ?? undefined) !== (to.textAlign ?? undefined)) {
     cmds.push({ kind: 'setLabelAlign', areaId, id, from: from.textAlign, to: to.textAlign });
