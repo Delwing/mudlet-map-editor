@@ -106,13 +106,35 @@ export type LodState = {
   hitTestActive: boolean;
 };
 
-/** Route-finder (speedwalk) panel state. `summary.path` is what RouteEffect draws. */
-export type RouteState = {
+/** Colours handed to routes in turn, the first being the route finder's original green. */
+export const ROUTE_COLORS = ['#66E64D', '#4DC3FF', '#FF6BD6', '#FFD24D', '#B58CFF', '#FF8A4D'] as const;
+
+/** `idle` = never searched (or cleared) and so not tracked; anything else is
+ *  re-evaluated after every map edit (see editor/routes.ts). */
+export type RouteStatus = 'idle' | 'found' | 'noPath' | 'sameRoom' | 'missing';
+
+/** One route in the route finder. Every visible one's `summary.path` is drawn by RouteEffect. */
+export type TrackedRoute = {
+  id: number;
   fromId: number | null;
   toId: number | null;
-  algorithm: PathFindingAlgorithm;
+  /** Line colour on the map and swatch in the route list. */
+  color: string;
+  visible: boolean;
   summary: RouteSummary | null;
-  status: 'idle' | 'found' | 'noPath' | 'sameRoom' | 'missing';
+  status: RouteStatus;
+  /** The result before the last edit that changed this route, kept so the panel
+   *  can show the difference and the map can ghost the old path. Null until an
+   *  edit changes the route, and again once the user dismisses the comparison. */
+  previous: RouteSummary | null;
+};
+
+/** Route-finder (speedwalk) panel state. Always holds at least one route. */
+export type RouteState = {
+  routes: TrackedRoute[];
+  /** The route the panel is showing and the map highlights. */
+  activeId: number;
+  algorithm: PathFindingAlgorithm;
 };
 
 export interface EditorState {
@@ -254,7 +276,11 @@ const initial: EditorState = {
   swatchPaletteOpen: false,
   sessionId: null,
   spreadShrink: null,
-  route: { fromId: null, toId: null, algorithm: 'astar', summary: null, status: 'idle' },
+  route: {
+    routes: [{ id: 1, fromId: null, toId: null, color: ROUTE_COLORS[0], visible: true, summary: null, status: 'idle', previous: null }],
+    activeId: 1,
+    algorithm: 'astar',
+  },
   warningAckVersion: 0,
   warnings: [],
   peers: [],

@@ -3,15 +3,20 @@ import { computePathData, type CoordinateTransform, type LiveEffect, type Viewpo
 import { store, type EditorState } from '../store';
 import type { SceneHandle } from '../scene';
 
-const ROUTE_COLOR = '#66E64D';
-const START_COLOR = '#66E64D';
 const END_COLOR = '#ffb000';
+/** The active route's path from before the last edit that changed it. */
+const PREVIOUS_COLOR = '#ff5c5c';
+
+/** How a path is stroked: width multiplier over the zoom-tracking core width. */
+type Stroke = { color: string; mult: number; alpha: number; dashed?: boolean };
 
 /**
- * Draws the active route (store.route.summary.path) on top of the map: a glowing
- * poly-line following the same geometry the renderer uses for paths (via
- * computePathData), plus start/end rings and dots for up/down/in/out
- * transitions. Only the portion of the path on the current area/z is drawn —
+ * Draws the route finder's routes on top of the map: a glowing poly-line per
+ * visible route, following the same geometry the renderer uses for paths (via
+ * computePathData), plus dots for up/down/in/out transitions. The active route
+ * is drawn last and widest, with start/end rings, and — when an edit changed
+ * it — its old path dashed underneath, so a weight tweak shows where the route
+ * used to go. Only the portion of a path on the current area/z is drawn —
  * computePathData filters by area/z and stubs cross-boundary hops, so a
  * multi-area route still shows correctly as you switch areas.
  */
@@ -19,12 +24,12 @@ export class RouteEffect implements LiveEffect {
   private layer?: Konva.Layer;
   private unsubscribe?: () => void;
   private nodes: Konva.Shape[] = [];
-  /** Lines whose width must track zoom (node + width multiplier). */
-  private widthLines: { node: Konva.Line; mult: number }[] = [];
+  /** Lines whose width (and dash) must track zoom. */
+  private widthLines: { node: Konva.Line; mult: number; dashed: boolean }[] = [];
   private rings: Konva.Circle[] = [];
   private scale = 1;
-  /** Last-drawn signature, so pointer-move store churn doesn't rebuild the path. */
-  private lastSummary: unknown = undefined;
+  /** Last-drawn signature, so pointer-move store churn doesn't rebuild the paths. */
+  private lastRoute: unknown = undefined;
   private lastArea: number | null = null;
   private lastZ = 0;
   private lastDataVersion = -1;
@@ -39,8 +44,11 @@ export class RouteEffect implements LiveEffect {
 
   updateViewport(_bounds: ViewportBounds, scale: number, _transform: CoordinateTransform): void {
     this.scale = scale || 1;
-    const core = Math.max(0.04, 4 / this.scale);
-    for (const { node, mult } of this.widthLines) node.strokeWidth(core * mult);
+    const core = this.coreWidth();
+    for (const { node, mult, dashed } of this.widthLines) {
+      node.strokeWidth(core * mult);
+      if (dashed) node.dash(this.dash());
+    }
     for (const ring of this.rings) ring.strokeWidth(Math.max(0.04, 3 / this.scale));
     this.layer?.batchDraw();
   }
@@ -56,6 +64,14 @@ export class RouteEffect implements LiveEffect {
     this.clear();
   }
 
+  private coreWidth(): number {
+    return Math.max(0.04, 4 / this.scale);
+  }
+
+  private dash(): number[] {
+    return [Math.max(0.12, 10 / this.scale), Math.max(0.08, 7 / this.scale)];
+  }
+
   private clear(): void {
     for (const n of this.nodes) n.destroy();
     this.nodes = [];
@@ -63,22 +79,22 @@ export class RouteEffect implements LiveEffect {
     this.rings = [];
   }
 
-  private addLine(points: number[], color: string, mult: number, alpha: number): void {
+  private addLine(points: number[], { color, mult, alpha, dashed = false }: Stroke): void {
     if (points.length < 4 || !this.layer) return;
-    const core = Math.max(0.04, 4 / this.scale);
     const line = new Konva.Line({
       points,
       stroke: color,
-      strokeWidth: core * mult,
+      strokeWidth: this.coreWidth() * mult,
       opacity: alpha,
-      lineCap: 'round',
+      lineCap: dashed ? 'butt' : 'round',
       lineJoin: 'round',
+      dash: dashed ? this.dash() : undefined,
       listening: false,
       perfectDrawEnabled: false,
     });
     this.layer.add(line);
     this.nodes.push(line);
-    this.widthLines.push({ node: line, mult });
+    this.widthLines.push({ node: line, mult, dashed });
   }
 
   private addRing(x: number, y: number, color: string): void {
@@ -97,21 +113,47 @@ export class RouteEffect implements LiveEffect {
     this.rings.push(ring);
   }
 
+  /** Draw the on-plane part of one path with the given strokes (drawn in order). */
+  private drawPath(scene: SceneHandle, path: number[], areaId: number, z: number, strokes: Stroke[], markerColor: string | null): void {
+    if (!this.layer || path.length < 1) return;
+    const data = computePathData(scene.reader as never, scene.settings, path, areaId, z);
+    for (const stroke of strokes) {
+      for (const seg of data.segments) this.addLine(seg.points, stroke);
+      for (const cl of data.customLines) this.addLine(cl.points, stroke);
+    }
+    if (!markerColor) return;
+
+    // Up/down/in/out transition markers: a dot on the room that changes level.
+    for (const marker of data.innerMarkers) {
+      const room = scene.getRenderRoom(marker.room.id);
+      if (!room || room.area !== areaId || room.z !== z) continue;
+      const dot = new Konva.Circle({
+        x: room.x, y: room.y,
+        radius: Math.max(0.08, 5 / this.scale),
+        fill: markerColor,
+        listening: false,
+        perfectDrawEnabled: false,
+      });
+      this.layer.add(dot);
+      this.nodes.push(dot);
+    }
+  }
+
   private sync(state: EditorState): void {
     if (!this.layer) return;
 
-    // Skip when nothing the route depends on changed (route identity, area/z,
-    // or any map mutation). Pointer-move only touches cursorMap, so this keeps
-    // the path stable instead of rebuilding it on every mouse event.
+    // Skip when nothing the routes depend on changed (route state identity,
+    // area/z, or any map mutation). Pointer-move only touches cursorMap, so this
+    // keeps the paths stable instead of rebuilding them on every mouse event.
     if (
-      state.route.summary === this.lastSummary &&
+      state.route === this.lastRoute &&
       state.currentAreaId === this.lastArea &&
       state.currentZ === this.lastZ &&
       state.dataVersion === this.lastDataVersion
     ) {
       return;
     }
-    this.lastSummary = state.route.summary;
+    this.lastRoute = state.route;
     this.lastArea = state.currentAreaId;
     this.lastZ = state.currentZ;
     this.lastDataVersion = state.dataVersion;
@@ -119,48 +161,51 @@ export class RouteEffect implements LiveEffect {
     this.clear();
 
     const scene = this.sceneRef.current;
-    const path = state.route.summary?.path;
     const areaId = state.currentAreaId;
-    if (!scene || !path || path.length < 1 || areaId == null) {
+    if (!scene || areaId == null) {
+      this.layer.batchDraw();
+      return;
+    }
+    const z = state.currentZ;
+    const { routes, activeId } = state.route;
+    const active = routes.find((r) => r.id === activeId && r.visible);
+
+    // Other routes first and thinner, so the active one reads on top where they share rooms.
+    for (const r of routes) {
+      if (r === active || !r.visible || !r.summary) continue;
+      this.drawPath(scene, r.summary.path, areaId, z, [
+        { color: r.color, mult: 2, alpha: 0.18 },
+        { color: r.color, mult: 0.7, alpha: 0.8 },
+      ], r.color);
+    }
+    if (!active) {
       this.layer.batchDraw();
       return;
     }
 
-    const data = computePathData(scene.reader as never, scene.settings, path, areaId, state.currentZ);
-
-    // Glow halo first (wide, faint), then the bright core on top.
-    for (const seg of data.segments) {
-      this.addLine(seg.points, ROUTE_COLOR, 2.6, 0.25);
-      this.addLine(seg.points, ROUTE_COLOR, 1, 0.95);
-    }
-    for (const cl of data.customLines) {
-      this.addLine(cl.points, ROUTE_COLOR, 2.6, 0.25);
-      this.addLine(cl.points, ROUTE_COLOR, 1, 0.95);
+    if (active.previous) {
+      this.drawPath(scene, active.previous.path, areaId, z, [
+        { color: PREVIOUS_COLOR, mult: 0.8, alpha: 0.85, dashed: true },
+      ], null);
     }
 
-    // Up/down/in/out transition markers: a dot on the room that changes level.
-    for (const marker of data.innerMarkers) {
-      const room = scene.getRenderRoom(marker.room.id);
-      if (!room || room.area !== areaId || room.z !== state.currentZ) continue;
-      const dot = new Konva.Circle({
-        x: room.x, y: room.y,
-        radius: Math.max(0.08, 5 / this.scale),
-        fill: ROUTE_COLOR,
-        listening: false,
-        perfectDrawEnabled: false,
-      });
-      this.layer.add(dot);
-      this.nodes.push(dot);
-    }
+    const path = active.summary?.path;
+    if (path && path.length > 0) {
+      // Glow halo first (wide, faint), then the bright core on top.
+      this.drawPath(scene, path, areaId, z, [
+        { color: active.color, mult: 2.6, alpha: 0.25 },
+        { color: active.color, mult: 1, alpha: 0.95 },
+      ], active.color);
 
-    // Start / end rings (only when the endpoint is on the current plane).
-    const startRoom = scene.getRenderRoom(path[0]);
-    if (startRoom && startRoom.area === areaId && startRoom.z === state.currentZ) {
-      this.addRing(startRoom.x, startRoom.y, START_COLOR);
-    }
-    const endRoom = scene.getRenderRoom(path[path.length - 1]);
-    if (endRoom && endRoom.area === areaId && endRoom.z === state.currentZ) {
-      this.addRing(endRoom.x, endRoom.y, END_COLOR);
+      // Start / end rings (only when the endpoint is on the current plane).
+      const startRoom = scene.getRenderRoom(path[0]);
+      if (startRoom && startRoom.area === areaId && startRoom.z === z) {
+        this.addRing(startRoom.x, startRoom.y, active.color);
+      }
+      const endRoom = scene.getRenderRoom(path[path.length - 1]);
+      if (endRoom && endRoom.area === areaId && endRoom.z === z) {
+        this.addRing(endRoom.x, endRoom.y, END_COLOR);
+      }
     }
 
     this.layer.batchDraw();

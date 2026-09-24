@@ -59,14 +59,21 @@ function resolveStep(map: MudletMap, fromId: number, toId: number): RouteStep | 
   return null;
 }
 
+/** A pathfinder over the map as it stands now. It snapshots the graph when built,
+ *  so build one per question, or per batch of questions about the same map. */
+export function createPathFinder(reader: EditorMapReader, algorithm: PathFindingAlgorithm = 'astar'): PathFinder {
+  return new PathFinder(reader as never, algorithm);
+}
+
 /**
  * Find the lowest-cost route between two rooms using the renderer's pathfinder
  * (respects exit/room weights, locked exits, and locked special exits) and
  * summarise it into a speedwalk string + per-hop steps. Returns null when either
  * endpoint is missing or no route exists.
  *
- * A fresh PathFinder is built per call: it snapshots the graph in its constructor,
- * and the editor mutates the map constantly, so reusing one would go stale.
+ * Without `finder` a fresh one is built for the call: it snapshots the graph in
+ * its constructor, and the editor mutates the map constantly, so one kept across
+ * edits would go stale. Pass one to answer several routes off a single snapshot.
  */
 export function findRoute(
   reader: EditorMapReader,
@@ -74,8 +81,8 @@ export function findRoute(
   fromId: number,
   toId: number,
   algorithm: PathFindingAlgorithm = 'astar',
+  finder: PathFinder = createPathFinder(reader, algorithm),
 ): RouteSummary | null {
-  const finder = new PathFinder(reader as never, algorithm);
   const path = finder.findPath(fromId, toId);
   if (!path || path.length === 0) return null;
 
@@ -95,4 +102,14 @@ export function findRoute(
     totalWeight,
     speedwalk: steps.map((s) => s.token).join(';'),
   };
+}
+
+/** Whether two results read the same to the user: same rooms, commands and cost. */
+export function sameRouteSummary(a: RouteSummary | null, b: RouteSummary | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.totalWeight === b.totalWeight
+    && a.speedwalk === b.speedwalk
+    && a.path.length === b.path.length
+    && a.path.every((id, i) => id === b.path[i]);
 }

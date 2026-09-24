@@ -5691,6 +5691,42 @@ kbd {
 .route-panel .route-btn--primary { background: #2f7d20; border-color: #3da028; color: #eaffe4; }
 .route-panel .route-btn--primary:hover { background: #389626; }
 .route-panel .route-btn--primary:disabled { opacity: 0.45; }
+.route-panel .route-list {
+  list-style: none; margin: 0; padding: 0;
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;
+}
+.route-panel .route-item {
+  display: flex; gap: 8px; align-items: center; padding: 4px 6px; cursor: pointer;
+  font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.route-panel .route-item:last-child { border-bottom: none; }
+.route-panel .route-item:hover { background: rgba(255,255,255,0.05); }
+.route-panel .route-item.active { background: rgba(255,255,255,0.1); }
+.route-panel .route-item.idle .route-item-result { opacity: 0.55; font-style: italic; }
+.route-panel .route-item-swatch {
+  width: 12px; height: 12px; flex: none; padding: 0; border-radius: 50%;
+  border: 2px solid; cursor: pointer;
+}
+.route-panel .route-item-ends { font-family: monospace; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-panel .route-item-result { white-space: nowrap; font-size: 12px; }
+.route-panel .route-item-remove {
+  background: none; border: none; color: inherit; opacity: 0.5; cursor: pointer; padding: 0 2px; font-size: 15px; line-height: 1;
+}
+.route-panel .route-item-remove:hover { opacity: 1; }
+.route-panel .route-delta {
+  font-family: monospace; font-size: 12px; white-space: nowrap; border-radius: 4px; padding: 0 5px;
+  background: rgba(255,255,255,0.1);
+}
+.route-panel .route-delta--down { background: rgba(102, 230, 77, 0.18); color: #b8f5ab; }
+.route-panel .route-delta--up { background: rgba(255, 176, 0, 0.18); color: #ffd27a; }
+.route-panel .route-delta--lost { background: rgba(255, 92, 92, 0.2); color: #ff9a8c; }
+.route-panel .route-change {
+  margin-top: 10px; padding: 6px 8px; font-size: 13px;
+  border: 1px dashed rgba(255, 92, 92, 0.6); border-radius: 4px;
+}
+.route-panel .route-change-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.route-panel .route-change-was { opacity: 0.75; margin-top: 2px; }
+.route-panel .route-step--new { background: rgba(102, 230, 77, 0.08); }
 
 /* Label presets: one button per preset, previewing itself. */
 .label-presets { margin-bottom: 10px; }

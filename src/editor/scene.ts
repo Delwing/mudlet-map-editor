@@ -15,6 +15,7 @@ import { SelectionCenterEffect } from './effects/SelectionCenterEffect';
 import { GhostRoomsEffect } from './effects/GhostRoomsEffect';
 import { PlacePreviewEffect } from './effects/PlacePreviewEffect';
 import { RouteEffect } from './effects/RouteEffect';
+import { attachRouteTracker } from './routes';
 import { attachPointerController } from './pointerController';
 import { store } from './store';
 
@@ -182,6 +183,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
       renderer.removeLiveEffect('editor.ghostRooms');
       placePreview.destroy();
       renderer.removeLiveEffect('editor.placePreview');
+      detachRouteTracker();
       route.destroy();
       renderer.removeLiveEffect('editor.route');
       gridOverlay.destroy();
@@ -191,6 +193,7 @@ export function createScene(map: MudletMap, container: HTMLDivElement): SceneHan
   };
 
   sceneRef.current = handle;
+  const detachRouteTracker = attachRouteTracker(sceneRef);
 
   const detach = attachPointerController({
     renderer,
