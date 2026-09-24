@@ -264,13 +264,6 @@ export const selectTool: Tool = {
       return true;
     }
 
-    // An area-exit label: go to the room on the other side and select it there.
-    const areaExitTarget = areaExitUnder(ctx, ev);
-    if (areaExitTarget != null) {
-      revealRoom(areaExitTarget, { selection: { kind: 'room', ids: [areaExitTarget] }, hover: null });
-      return true;
-    }
-
     const c = mapCoord(ctx, ev);
     const ac = activeContext();
 
@@ -319,6 +312,15 @@ export const selectTool: Tool = {
         ctx.container.setPointerCapture(ev.pointerId);
         return true;
       }
+    }
+
+    // An area-exit label: go to the room on the other side and select it there.
+    // Checked after the selected line's waypoint handles — an exit label sits
+    // right at the line's end, and would otherwise swallow the last handle.
+    const areaExitTarget = areaExitUnder(ctx, ev);
+    if (areaExitTarget != null) {
+      revealRoom(areaExitTarget, { selection: { kind: 'room', ids: [areaExitTarget] }, hover: null });
+      return true;
     }
 
     // Label hit test — resize handles first, then body, checked before rooms.
@@ -1777,7 +1779,11 @@ function updateHover(ctx: ToolContext, ev: PointerEvent) {
   if (!ac) return;
   const c = mapCoord(ctx, ev);
   const room = roomUnder(ctx, ev);
-  const areaExitTarget = room ? null : areaExitUnder(ctx, ev);
+  // The selected line's waypoint handles win over an exit label, as on click.
+  const sel = store.getState().selection;
+  const onLineHandle = sel?.kind === 'customLine'
+    && customLinePointAt(ctx.renderer, sel.roomId, sel.exitName, c.x, c.y, ctx.settings.roomSize) !== null;
+  const areaExitTarget = room || onLineHandle ? null : areaExitUnder(ctx, ev);
   let target: HoverTarget = null;
   if (areaExitTarget != null) {
     target = { kind: 'areaExit', targetRoomId: areaExitTarget };
