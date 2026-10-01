@@ -55,3 +55,4 @@ coverage/
 *.pid.lock
 
 .claude
+/.vscode/settings.json

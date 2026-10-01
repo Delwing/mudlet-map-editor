@@ -1,5 +1,7 @@
 # Mudlet Map Editor
 
+**English** | [한국어](README.ko.md)
+
 A browser-based visual editor for [Mudlet](https://www.mudlet.org/) `.dat` binary map files. Load, edit, and save MUD maps directly in your browser — no installation required.
 
 ## Features

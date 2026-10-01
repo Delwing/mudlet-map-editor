@@ -2,22 +2,31 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { en } from './locales/en';
 import { pl } from './locales/pl';
+import { ko } from './locales/ko';
 import { panelsEn } from './locales/panels.en';
 import { panelsPl } from './locales/panels.pl';
+import { panelsKo } from './locales/panels.ko';
 import { areasEn } from './locales/areas.en';
 import { areasPl } from './locales/areas.pl';
+import { areasKo } from './locales/areas.ko';
 import { envsEn } from './locales/envs.en';
 import { envsPl } from './locales/envs.pl';
+import { envsKo } from './locales/envs.ko';
 import { modalsEn } from './locales/modals.en';
 import { modalsPl } from './locales/modals.pl';
+import { modalsKo } from './locales/modals.ko';
 import { sessionsEn } from './locales/sessions.en';
 import { sessionsPl } from './locales/sessions.pl';
+import { sessionsKo } from './locales/sessions.ko';
 import { searchEn } from './locales/search.en';
 import { searchPl } from './locales/search.pl';
+import { searchKo } from './locales/search.ko';
 import { contextEn } from './locales/context.en';
 import { contextPl } from './locales/context.pl';
+import { contextKo } from './locales/context.ko';
 import { swatchesEn } from './locales/swatches.en';
 import { swatchesPl } from './locales/swatches.pl';
+import { swatchesKo } from './locales/swatches.ko';
 import type { EditorLocale, EditorLocaleComplete } from './locales/en';
 
 export { type EditorLocale, type EditorLocaleComplete };
@@ -54,6 +63,17 @@ if (!i18n.isInitialized) {
         search: searchPl,
         context: contextPl,
         swatches: swatchesPl,
+      },
+      ko: {
+        editor: ko,
+        panels: panelsKo,
+        areas: areasKo,
+        envs: envsKo,
+        modals: modalsKo,
+        sessions: sessionsKo,
+        search: searchKo,
+        context: contextKo,
+        swatches: swatchesKo,
       },
     },
     lng: readStoredLang(),

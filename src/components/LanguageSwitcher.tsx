@@ -5,6 +5,7 @@ import i18n from '../i18n';
 const LANGUAGES: { code: string; label: string }[] = [
   { code: 'en', label: 'EN' },
   { code: 'pl', label: 'PL' },
+  { code: 'ko', label: 'KO' },
 ];
 
 export function LanguageSwitcher() {
