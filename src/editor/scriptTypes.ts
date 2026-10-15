@@ -260,10 +260,19 @@ declare function setRoomWeight(id: number, weight: number): void;
 declare function setRoomLock(id: number, locked: boolean): void;
 /** Move a room. Coords are raw Mudlet (y = north is +). */
 declare function moveRoom(id: number, x: number, y: number, z: number): void;
+/**
+ * Add a room at raw Mudlet coords (y = north is +), like the Add Room tool.
+ * area defaults to the area shown; throws if the cell is taken. Returns the new id.
+ */
+declare function addRoom(x: number, y: number, z: number, options?: { area?: number; name?: string; env?: number }): number;
+/** Delete a room, like the Delete tool. Exits of other rooms leading to it are removed too, special exits included. */
+declare function deleteRoom(id: number): void;
 /** Set a cardinal exit. toId < 0 removes it. */
 declare function setExit(fromId: number, dir: Direction, toId: number): void;
 /** Set door state: 0=none, 1=open, 2=closed, 3=locked. */
 declare function setDoor(roomId: number, dir: Direction, value: number): void;
+/** Set the door on a special (named) exit: 0=none, 1=open, 2=closed, 3=locked. Throws if the room has no such special exit. */
+declare function setSpecialExitDoor(roomId: number, name: string, value: number): void;
 /** Set exit traversal weight. */
 declare function setExitWeight(roomId: number, dir: Direction, value: number): void;
 /** Lock / unlock an exit. */

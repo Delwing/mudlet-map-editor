@@ -1,10 +1,11 @@
 import type { MudletRoom, MudletColor } from '../mapIO';
-import { applyCommand, commandGroup, labelDiffCommands, revertCommand } from './commands';
+import { applyCommand, buildDeleteNeighborEdits, commandGroup, labelDiffCommands, revertCommand } from './commands';
 import { store } from './store';
 import type { SceneHandle } from './scene';
 import type { Command, CustomLineSnapshot, Direction, LabelBorder, LabelPadding, LabelSnapshot, LabelStyleParams, LabelTextAlign } from './types';
 import { CARDINAL_DIRECTIONS, DIR_SHORT, DIR_INDEX, OPPOSITE, normalizeCustomLineKey } from './types';
-import { inferDirection, is2DCardinal, getExit } from './mapHelpers';
+import { inferDirection, is2DCardinal, getExit, nextRoomId, createDefaultRoom } from './mapHelpers';
+import { roomAtCell } from './hitTest';
 import { snapshotFromRawLabel } from './reader/EditorMapReader';
 import { labelSizeForText } from './labelPixmap';
 import { applyLabelPreset, getLabelPresets, labelPresetAppliedCommands } from './labelPresets';
@@ -352,6 +353,48 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
       if (r.x === x && r.y === y && r.z === z) return;
       push({ kind: 'moveRoom', id, from: { x: r.x, y: r.y, z: r.z }, to: { x, y, z } });
     },
+    /**
+     * Add a room at raw Mudlet coords, like the Add Room tool. Defaults to the
+     * area shown in the editor; throws if the cell is taken. Returns the new id.
+     */
+    addRoom: (
+      x: number,
+      y: number,
+      z: number,
+      options?: { area?: number; name?: string; env?: number },
+    ): number => {
+      const areaId = options?.area ?? store.getState().currentAreaId;
+      if (areaId == null || !map.areas[areaId]) throw new Error(`addRoom: area ${areaId} not found`);
+      const taken = roomAtCell(map, areaId, x, y, z);
+      if (taken) {
+        const takenId = map.areas[areaId].rooms.find((rid) => map.rooms[rid] === taken);
+        throw new Error(`addRoom: (${x}, ${y}, ${z}) in area ${areaId} is taken by room ${takenId}`);
+      }
+      const id = nextRoomId(map);
+      const room = createDefaultRoom(id, areaId, x, y, z);
+      if (options?.name != null) room.name = options.name;
+      if (options?.env != null) room.environment = options.env;
+      push({ kind: 'addRoom', id, room, areaId });
+      return id;
+    },
+    /**
+     * Delete a room, like the Delete tool: exits of other rooms that lead to it
+     * are removed too, special exits included.
+     */
+    deleteRoom: (id: number) => {
+      const r = assertRoom(id);
+      for (const [idStr, other] of Object.entries(map.rooms)) {
+        for (const [name, to] of Object.entries(other.mSpecialExits ?? {})) {
+          if (to === id && Number(idStr) !== id) push({ kind: 'removeSpecialExit', roomId: Number(idStr), name, toId: id });
+        }
+      }
+      push({ kind: 'deleteRoom', id, room: { ...r }, areaId: r.area, neighborEdits: buildDeleteNeighborEdits(map, id) });
+      const sel = store.getState().selection;
+      if (sel?.kind === 'room' && sel.ids.includes(id)) {
+        const ids = sel.ids.filter((x) => x !== id);
+        store.setState({ selection: ids.length ? { kind: 'room', ids } : null });
+      }
+    },
     setExit: (fromId: number, dir: Direction, toId: number) => {
       const r = assertRoom(fromId);
       const current = ((r as any)[dir] as number) ?? -1;
@@ -368,6 +411,15 @@ export function runScript(code: string, scene: SceneHandle): ScriptResult {
       const from = r.doors?.[key] ?? 0;
       if (from === value) return;
       push({ kind: 'setDoor', roomId, dir, from, to: value });
+    },
+    /** Door on a special exit, like the room panel: 0=none, 1=open, 2=closed, 3=locked. */
+    setSpecialExitDoor: (roomId: number, name: string, value: number) => {
+      const r = assertRoom(roomId);
+      if (r.mSpecialExits?.[name] == null) throw new Error(`setSpecialExitDoor: room ${roomId} has no special exit "${name}"`);
+      if (![0, 1, 2, 3].includes(value)) throw new Error(`setSpecialExitDoor: door value must be 0-3, got ${value}`);
+      const from = r.doors?.[name] ?? 0;
+      if (from === value) return;
+      push({ kind: 'setSpecialExitDoor', roomId, name, from, to: value });
     },
     setExitWeight: (roomId: number, dir: Direction, value: number) => {
       const r = assertRoom(roomId);

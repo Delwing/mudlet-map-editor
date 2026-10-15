@@ -46,9 +46,9 @@ function persistLibrary(lib: ScriptLibrary) {
 const DEFAULT_CODE = `// JavaScript. Whole run = one undo step.
 // Read:  rooms() / findRooms(pred) / room(id) / areas() / area(id)
 //        currentAreaId, currentZ, DIRS, log(...)
-// Write: setRoomName/Env/Symbol/Weight/Lock, moveRoom,
+// Write: addRoom, deleteRoom, setRoomName/Env/Symbol/Weight/Lock, moveRoom,
 //        setExit, setDoor, setExitWeight, setExitLock, setStub,
-//        setUserData, setSpecialExit
+//        setUserData, setSpecialExit, setSpecialExitDoor
 // Return anything (array, object…) to display it as JSON below.
 
 // Example: repaint rooms whose name contains "Office" to env 5,
