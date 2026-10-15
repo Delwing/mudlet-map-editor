@@ -49,6 +49,7 @@ import { modKey } from '../platform';
 import { store, useEditorState, saveUserSettings } from '../editor/store';
 import { createEmptyMap } from '../mapIO';
 import { loadFileIntoStore } from '../editor/loadFile';
+import { revealRoom } from '../editor/navigate';
 import { combinedAccept, defaultMapFormat, getMapFormats, getMapFormat, type MapFormat } from '../editor/formats';
 import { SaveSplitButton } from './SaveSplitButton';
 import { DropdownSelect } from './DropdownSelect';
@@ -116,14 +117,7 @@ export function Toolbar({ title = 'Mudlet Map Editor', logo, transformActions, o
       store.setState({ status: t('status.roomNotFound', { id }) });
       return;
     }
-    store.setState({
-      currentAreaId: room.area,
-      currentZ: room.z,
-      navigateTo: { mapX: room.x, mapY: -room.y },
-      selection: { kind: 'room', ids: [id] },
-      pending: null,
-    });
-    store.bumpStructure();
+    revealRoom(id, { selection: { kind: 'room', ids: [id] }, pending: null });
     setGotoInput('');
   };
 
