@@ -35,7 +35,7 @@ function deepCompare(obj1: unknown, obj2: unknown): any {
     return bytesEqual(obj1, obj2) ? {} : obj2;
   }
   if (typeof obj2 !== 'object' || obj2 === null) {
-    return obj1 === obj2 ? {} : obj2;
+    return Object.is(obj1, obj2) ? {} : obj2;
   }
 
   // Primitive arrays (e.g. room ID lists) are treated as sets to avoid
@@ -67,7 +67,7 @@ function deepCompare(obj1: unknown, obj2: unknown): any {
       if (Object.getOwnPropertyNames(res).length > 0) {
         diffObj[prop] = res;
       }
-    } else if (val1 !== val2) {
+    } else if (!Object.is(val1, val2)) {
       diffObj[prop] = val2;
     }
   });
